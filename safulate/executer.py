@@ -14,6 +14,7 @@ from .tokens import (
     UndefinedToken,
     NotToken,
     IntToken,
+    ContainerToken,
 )
 from .libs.builtins import exporter as builtins
 from typing import Any
@@ -22,7 +23,14 @@ from typing import Sequence
 
 
 class Executer:
-    def __init__(self, variables: dict[str, Token] | None = None) -> None:
+    def __init__(
+        self,
+        variables: dict[str, Token] | None = None,
+        *,
+        additional_imports: list[ContainerToken] | None = None,
+    ) -> None:
+        self.additional_imports = {tkn.value: tkn for tkn in (additional_imports or [])}
+
         self.variables: dict[str, Token] = {} | builtins.exports
         if variables:
             self.variables.update(variables)

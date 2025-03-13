@@ -1,6 +1,13 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
-from safulate.tokens import NullToken, StringToken, ContainerToken, Token, ListToken, IntToken
+from safulate.tokens import (
+    NullToken,
+    StringToken,
+    ContainerToken,
+    Token,
+    ListToken,
+    IntToken,
+)
 import msgspec
 import runpy
 from pathlib import Path
@@ -35,6 +42,9 @@ def dump_vars(exe: Executer) -> NullToken:
 
 @exporter("import")
 def import_lib(exe: Executer, location: StringToken) -> ContainerToken:
+    if location.value in exe.additional_imports:
+        return exe.additional_imports[location.value]
+
     for module in libs_folder.glob("*.py"):
         if module.name.removesuffix(".py") == location.value:
             globals = runpy.run_path(str(module.absolute()))
@@ -58,8 +68,9 @@ def dir_func(exe: Executer, obj: Token) -> ListToken:
         value=[StringToken(name) for name in obj.public_attrs.keys()],
     )
 
+
 @exporter("assert")
 def assert_func(exe: Executer, value: IntToken, message: StringToken) -> NullToken:
-    if value.value is 0:
+    if value.value == 0:
         raise RuntimeError(f"Assertion: {message.value}")
     return NullToken()
