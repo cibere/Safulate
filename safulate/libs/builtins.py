@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
-from safulate.tokens import NullToken, StringToken, ContainerToken, Token, ListToken
+from safulate.tokens import NullToken, StringToken, ContainerToken, Token, ListToken, IntToken
 import msgspec
 import runpy
 from pathlib import Path
@@ -57,3 +57,9 @@ def dir_func(exe: Executer, obj: Token) -> ListToken:
     return ListToken(
         value=[StringToken(name) for name in obj.public_attrs.keys()],
     )
+
+@exporter("assert")
+def assert_func(exe: Executer, value: IntToken, message: StringToken) -> NullToken:
+    if value.value is 0:
+        raise RuntimeError(f"Assertion: {message.value}")
+    return NullToken()
