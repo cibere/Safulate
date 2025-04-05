@@ -375,6 +375,10 @@ class StrValue(Value):
 
     @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
+        return StrValue(repr(self.value))
+
+    @special_method("str")
+    def str(self, ctx: NativeContext) -> StrValue:
         return StrValue(self.value)
 
 
