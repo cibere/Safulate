@@ -9,6 +9,7 @@ from dataclasses import field as _field
 from typing import TYPE_CHECKING, Any, Concatenate, cast, final
 
 from .errors import (
+    ErrorManager,
     SafulateAttributeError,
     SafulateInvalidReturn,
     SafulateTypeError,
@@ -496,7 +497,8 @@ class NativeFunc(Value):
                 f"Built-in function '{self.name}' requires {self.required_arg_count} arguments, but got {len(args)}",
             )
 
-        return self.callback(ctx, *args)
+        with ErrorManager(token=lambda: ctx.token):
+            return self.callback(ctx, *args)
 
     @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
