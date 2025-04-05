@@ -26,4 +26,6 @@ def load_json(ctx: NativeContext, content: StrValue) -> Value:
 def dump_json(
     ctx: NativeContext, content: Value, indent: NumValue = NumValue(2.0)
 ) -> StrValue:
-    return StrValue(json.dumps(ctx.value_to_python(content), indent=int(indent.value))) # seems to be returning the repr of the dumped content for some reason
+    return StrValue(
+        json.dumps(ctx.value_to_python(content), indent=int(indent.value))
+    )  # seems to be returning the repr of the dumped content for some reason``
