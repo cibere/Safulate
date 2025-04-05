@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import runpy
 from contextlib import contextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from packaging.version import Version
@@ -43,10 +45,11 @@ from .errors import (
     SafulateValueError,
     SafulateVersionConflict,
 )
+from .lib_exporter import LibraryExporter
+from .libs.builtins import exporter as builtins
 from .native_context import NativeContext
 from .tokens import TokenType
 from .values import (
-    ContainerValue,
     FuncValue,
     ListValue,
     NativeFunc,
@@ -63,6 +66,8 @@ if TYPE_CHECKING:
 
 __all__ = ("TreeWalker",)
 
+libs_path = Path(__file__).parent / "libs"
+
 
 class TreeWalker(ASTVisitor):
     __slots__ = ("env",)
@@ -70,11 +75,7 @@ class TreeWalker(ASTVisitor):
     def __init__(self) -> None:
         self.version = Version("v0.0.1")
         self.env = Environment()
-        self.env.add_builtins()
-        self.builtin_imports: dict[str, ContainerValue] = {
-            "hello": ContainerValue("hello", {"test": StrValue("Booya!")}),
-            "test": ContainerValue("test", {"hello": StrValue("world!")}),
-        }
+        self.env.values.update(builtins.exports)
 
     @contextmanager
     def scope(self, source: Value | None = None) -> Iterator[Environment]:
@@ -330,10 +331,17 @@ class TreeWalker(ASTVisitor):
 
             match node.source.type:
                 case TokenType.ID:
-                    try:
-                        value = self.builtin_imports[node.source.lexeme]
-                    except KeyError:
-                        pass
+                    path = libs_path / f"{node.source.lexeme}.py"
+                    if path.exists():
+                        globals = runpy.run_path(str(path.absolute()))
+                        exporter = globals.get("exporter")
+                        if exporter is None:
+                            raise SafulateImportError(
+                                "Module does not have an exporter"
+                            )
+                        if not isinstance(exporter, LibraryExporter):
+                            raise RuntimeError("Module does not have a valid exporter")
+                        value = exporter.to_container()
                 case TokenType.STR:
                     raise SafulateImportError("Url imports are not allowed yet")
                 case other:

@@ -25,10 +25,10 @@ if TYPE_CHECKING:
 
 def __method_deco[T: Callable[Concatenate[Any, NativeContext, ...], "Value"]](
     char: str,
-) -> Callable[[str, int | None], Callable[[T], T]]:
-    def deco(name: str, arity: int | None) -> Callable[[T], T]:
+) -> Callable[[str], Callable[[T], T]]:
+    def deco(name: str) -> Callable[[T], T]:
         def decorator(func: T) -> T:
-            setattr(func, "__safulate_native_method__", (char, name, arity))
+            setattr(func, "__safulate_native_method__", (char, name))
             return func
 
         return decorator
@@ -58,10 +58,9 @@ class Value(ABC):
         ):
             value = getattr(self, name)
 
-            type_, func_name, arity = getattr(value, "__safulate_native_method__")
+            type_, func_name = getattr(value, "__safulate_native_method__")
             data[type_][func_name] = NativeFunc(
                 func_name,
-                arity,
                 value,
             )
         return data
@@ -99,77 +98,77 @@ class Value(ABC):
     def __setitem__(self, key: str, value: Value) -> None:
         self.public_attrs[key] = value
 
-    @private_method("$get_specs", 0)
+    @private_method("$get_specs")
     def get_specs(self, ctx: NativeContext) -> Value:
         return ContainerValue(f"{self}'s specs", self.specs.copy())
 
-    @special_method("add", 1)
+    @special_method("add")
     def add(self, ctx: NativeContext, _other: Value) -> Value:
         raise SafulateValueError("Add is not defined for this type")
 
-    @special_method("sub", 1)
+    @special_method("sub")
     def sub(self, ctx: NativeContext, _other: Value) -> Value:
         raise SafulateValueError("Subtract is not defined for this type")
 
-    @special_method("mul", 1)
+    @special_method("mul")
     def mul(self, ctx: NativeContext, _other: Value) -> Value:
         raise SafulateValueError("Multiply is not defined for this type")
 
-    @special_method("div", 1)
+    @special_method("div")
     def div(self, ctx: NativeContext, _other: Value) -> Value:
         raise SafulateValueError("Divide is not defined for this type")
 
-    @special_method("pow", 1)
+    @special_method("pow")
     def pow(self, ctx: NativeContext, _other: Value) -> Value:
         raise SafulateValueError("Exponentiation is not defined for this type")
 
-    @special_method("uadd", 0)
+    @special_method("uadd")
     def uadd(self, ctx: NativeContext) -> Value:
         raise SafulateValueError("Unary add is not defined for this type")
 
-    @special_method("neg", 0)
+    @special_method("neg")
     def neg(self, ctx: NativeContext) -> Value:
         raise SafulateValueError("Unary minus is not defined for this type")
 
-    @special_method("eq", 1)
+    @special_method("eq")
     def eq(self, ctx: NativeContext, _other: Value) -> Value:
         raise SafulateValueError("Equality is not defined for this type")
 
-    @special_method("neq", 1)
+    @special_method("neq")
     def neq(self, ctx: NativeContext, _other: Value) -> Value:
         raise SafulateValueError("Non-equality is not defined for this type")
 
-    @special_method("less", 1)
+    @special_method("less")
     def less(self, ctx: NativeContext, _other: Value) -> Value:
         raise SafulateValueError("Less than is not defined for this type")
 
-    @special_method("grtr", 1)
+    @special_method("grtr")
     def grtr(self, ctx: NativeContext, _other: Value) -> Value:
         raise SafulateValueError("Greater than is not defined for this type")
 
-    @special_method("lesseq", 1)
+    @special_method("lesseq")
     def lesseq(self, ctx: NativeContext, _other: Value) -> Value:
         raise SafulateValueError("Less than or equal to is not defined for this type")
 
-    @special_method("grtreq", 1)
+    @special_method("grtreq")
     def grtreq(self, ctx: NativeContext, _other: Value) -> Value:
         raise SafulateValueError(
             "Greater than or equal to is not defined for this type"
         )
 
-    @special_method("call", None)
+    @special_method("call")
     def call(self, ctx: NativeContext, *args: Value) -> Value:
         raise SafulateValueError("Cannot call this type")
 
-    @special_method("iter", 0)
+    @special_method("iter")
     def iter(self, ctx: NativeContext) -> ListValue:
         raise SafulateValueError("This type is not iterable")
 
-    @special_method("repr", 0)
+    @special_method("repr")
     @abstractmethod
     def repr(self, ctx: NativeContext) -> Value: ...
 
-    @special_method("str", 0)
+    @special_method("str")
     def str(self, ctx: NativeContext) -> Value:
         return self.specs["repr"].call(ctx)
 
@@ -209,7 +208,7 @@ class ContainerValue(Value):
     def __post_init__(self) -> None:
         self.public_attrs.update(self.attrs)
 
-    @special_method("repr", 0)
+    @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
         return StrValue(f"<Container {self.name!r}>")
 
@@ -219,7 +218,7 @@ class ObjValue(Value):
         self.token = token
         super().__init__()
 
-    @special_method("repr", 0)
+    @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
         return StrValue(f"<Custom Object @{self.token.start}>")
 
@@ -228,7 +227,7 @@ class NullValue(Value):
     def truthy(self) -> bool:
         return False
 
-    @special_method("repr", 0)
+    @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
         return StrValue("null")
 
@@ -237,34 +236,34 @@ class NullValue(Value):
 class NumValue(Value):
     value: float
 
-    @special_method("add", 1)
+    @special_method("add")
     def add(self, ctx: NativeContext, other: Value) -> NumValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError("Add is not defined for number and this type")
 
         return NumValue(self.value + other.value)
 
-    @special_method("sub", 1)
+    @special_method("sub")
     def sub(self, ctx: NativeContext, other: Value) -> NumValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError("Subtract is not defined for number and this type")
 
         return NumValue(self.value - other.value)
 
-    @special_method("mul", 1)
+    @special_method("mul")
     def mul(self, ctx: NativeContext, other: Value) -> NumValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError("Multiply is not defined for number and this type")
 
         return NumValue(self.value * other.value)
 
-    @special_method("div", 1)
+    @special_method("div")
     def div(self, ctx: NativeContext, other: Value) -> NumValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError("Divide is not defined for number and this type")
         return NumValue(self.value / other.value)
 
-    @special_method("pow", 1)
+    @special_method("pow")
     def pow(self, ctx: NativeContext, other: Value) -> NumValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError(
@@ -273,22 +272,22 @@ class NumValue(Value):
 
         return NumValue(self.value**other.value)
 
-    @special_method("uadd", 0)
+    @special_method("uadd")
     def uadd(self, ctx: NativeContext) -> NumValue:
         return NumValue(self.value)
 
-    @special_method("neg", 0)
+    @special_method("neg")
     def neg(self, ctx: NativeContext) -> NumValue:
         return NumValue(-self.value)
 
-    @special_method("eq", 1)
+    @special_method("eq")
     def eq(self, ctx: NativeContext, other: Value) -> NumValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError("Equality is not defined for number and this type")
 
         return NumValue(self.value == other.value)
 
-    @special_method("neq", 1)
+    @special_method("neq")
     def neq(self, ctx: NativeContext, other: Value) -> NumValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError(
@@ -297,7 +296,7 @@ class NumValue(Value):
 
         return NumValue(self.value != other.value)
 
-    @special_method("less", 1)
+    @special_method("less")
     def less(self, ctx: NativeContext, other: Value) -> NumValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError(
@@ -306,7 +305,7 @@ class NumValue(Value):
 
         return NumValue(self.value < other.value)
 
-    @special_method("grtr", 1)
+    @special_method("grtr")
     def grtr(self, ctx: NativeContext, other: Value) -> NumValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError(
@@ -315,7 +314,7 @@ class NumValue(Value):
 
         return NumValue(self.value > other.value)
 
-    @special_method("lesseq", 1)
+    @special_method("lesseq")
     def lesseq(self, ctx: NativeContext, other: Value) -> NumValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError(
@@ -324,7 +323,7 @@ class NumValue(Value):
 
         return NumValue(self.value <= other.value)
 
-    @special_method("grtreq", 1)
+    @special_method("grtreq")
     def grtreq(self, ctx: NativeContext, other: Value) -> NumValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError(
@@ -336,7 +335,7 @@ class NumValue(Value):
     def truthy(self) -> bool:
         return self.value != 0
 
-    @special_method("repr", 0)
+    @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
         if self.value % 1 == 0 and "e" not in str(self.value):
             return StrValue(str(int(self.value)))
@@ -348,14 +347,14 @@ class NumValue(Value):
 class StrValue(Value):
     value: str
 
-    @special_method("add", 1)
+    @special_method("add")
     def add(self, ctx: NativeContext, other: Value) -> StrValue:
         if isinstance(other, StrValue):
             return StrValue(self.value + other.value)
 
         raise SafulateValueError("Add is not defined for string and this type")
 
-    @special_method("mul", 1)
+    @special_method("mul")
     def mul(self, ctx: NativeContext, other: Value) -> StrValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError("Multiply is not defined for string and this type")
@@ -367,14 +366,14 @@ class StrValue(Value):
 
         return StrValue(self.value * int(other.value))
 
-    @special_method("iter", 0)
+    @special_method("iter")
     def iter(self, ctx: NativeContext) -> ListValue:
         return ListValue([StrValue(char) for char in self.value])
 
     def truthy(self) -> bool:
         return len(self.value) != 0
 
-    @special_method("repr", 0)
+    @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
         return StrValue(self.value)
 
@@ -383,17 +382,17 @@ class StrValue(Value):
 class ListValue(Value):
     value: list[Value]
 
-    @public_method("append", 1)
+    @public_method("append")
     def append(self, ctx: NativeContext, item: Value) -> Value:
         self.value.append(item)
         return NullValue()
 
-    @public_method("remove", 1)
+    @public_method("remove")
     def remove(self, ctx: NativeContext, item: Value) -> Value:
         self.value.remove(item)
         return NullValue()
 
-    @public_method("pop", 1)
+    @public_method("pop")
     def pop(self, ctx: NativeContext, index: Value) -> Value:
         if not isinstance(index, NumValue):
             raise SafulateTypeError(f"expected num, got {index!r} instead")
@@ -405,7 +404,7 @@ class ListValue(Value):
     def truthy(self) -> bool:
         return len(self.value) != 0
 
-    @special_method("repr", 0)
+    @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
         return StrValue(
             "["
@@ -426,7 +425,7 @@ class FuncValue(Value):
     body: ASTNode
     parent: Value = _field(default_factory=NullValue)
 
-    @special_method("call", None)
+    @special_method("call")
     def call(self, ctx: NativeContext, *args: Value) -> Value:
         ret_value = NullValue()
 
@@ -459,7 +458,7 @@ class FuncValue(Value):
 
         return ret_value
 
-    @special_method("repr", 0)
+    @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
         return StrValue(f"<func {self.name.lexeme!r}>")
 
@@ -467,19 +466,35 @@ class FuncValue(Value):
 @dataclass
 class NativeFunc(Value):
     name: str
-    arity: int | None
     callback: Callable[Concatenate[NativeContext, ...], Value]
 
-    @special_method("call", None)
+    @cached_property
+    def args(self) -> list[inspect.Parameter]:
+        """[(name, type, required), ...]"""
+
+        return list(inspect.signature(self.callback).parameters.values())[1:]
+
+    @cached_property
+    def required_arg_count(self) -> int:
+        tally = 0
+        for param in self.args:
+            # rework this to allow for something like: (test1, test2, *other)
+            if param.kind is param.VAR_POSITIONAL:
+                return 0
+            if param.default == param.empty:
+                tally += 1
+        return tally
+
+    @special_method("call")
     def call(self, ctx: NativeContext, *args: Value) -> Value:
-        if self.arity is not None and self.arity != len(args):
+        if len(args) < self.required_arg_count:
             raise SafulateValueError(
-                f"Built-in function '{self.name}' requires {self.arity} arguments, but got {len(args)}",
+                f"Built-in function '{self.name}' requires {self.required_arg_count} arguments, but got {len(args)}",
             )
 
         return self.callback(ctx, *args)
 
-    @special_method("repr", 0)
+    @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
         return StrValue(f"<built-in func {self.name!r}>")
 
@@ -504,19 +519,19 @@ class VersionValue(Value):
             f"{constraint!r} operation is not defined for version and this type"
         )
 
-    @special_method("sub", 1)
+    @special_method("sub")
     def sub(self, ctx: NativeContext, other: Value) -> Value:
         return self._handle_constraint(other, "-")
 
-    @special_method("uadd", 0)
+    @special_method("uadd")
     def uadd(self, ctx: NativeContext) -> Value:
         return self._handle_constraint(NullValue(), "+")
 
-    @special_method("neg", 0)
+    @special_method("neg")
     def neg(self, ctx: NativeContext) -> Value:
         return self._handle_constraint(NullValue(), "-")
 
-    @special_method("repr", 0)
+    @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
         return StrValue(
             f"v{self.major}{f'.{self.minor}' if isinstance(self.minor, NumValue) else ''}{f'.{self.micro}' if isinstance(self.micro, NumValue) else ''}"
@@ -529,7 +544,7 @@ class VersionConstraintValue(Value):
     right: VersionValue
     constraint: str
 
-    @special_method("repr", 0)
+    @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
         return StrValue(
             f"{self.left if isinstance(self.left, VersionValue) else ''}{self.constraint}{self.right}"

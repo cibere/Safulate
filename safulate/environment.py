@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 from .errors import SafulateNameError
-from .natives import natives
 from .tokens import Token
 from .values import FuncValue, NullValue, Value
 
@@ -22,10 +21,6 @@ class Environment:
 
         if scope:
             self.values = scope.public_attrs
-
-    def add_builtins(self) -> None:
-        for n in natives:
-            self.values[n.name] = n
 
     def __getitem__(self, token: Token) -> Value:
         name = token.lexeme

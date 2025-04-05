@@ -1,44 +1,34 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Concatenate, Never
+from typing import TYPE_CHECKING, Never
 
-from .values import ListValue, NativeFunc, NullValue, ObjValue, Value
+from safulate.lib_exporter import LibraryExporter
+from safulate.values import ListValue, NullValue, ObjValue, Value
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
-    from .native_context import NativeContext
-
-natives: list[NativeFunc] = []
+    from safulate.native_context import NativeContext
 
 
-def native_func(
-    name: str, arity: int | None
-) -> Callable[[Callable[Concatenate[NativeContext, ...], Value]], Callable[..., Value]]:
-    def inner(func: Callable[..., Value]) -> Callable[..., Value]:
-        natives.append(NativeFunc(name, arity, func))
-        return func
-
-    return inner
+exporter = LibraryExporter("builtins")
 
 
-@native_func("print", None)
+@exporter("print")
 def print_(_: NativeContext, *args: Value) -> Value:
     print(*[str(arg) for arg in args])
     return NullValue()
 
 
-@native_func("quit", 0)
+@exporter("quit")
 def quit_(_: NativeContext) -> Never:
     quit(1)
 
 
-@native_func("list", None)
+@exporter("list")
 def list_(_: NativeContext, *values: Value) -> ListValue:
     return ListValue(list(values))
 
 
-@native_func("print_globals", 0)
+@exporter("print_globals")
 def print_globals(ctx: NativeContext) -> Value:
     env = ctx.interpreter.env
     while env.parent is not None:
@@ -48,18 +38,18 @@ def print_globals(ctx: NativeContext) -> Value:
     return NullValue()
 
 
-@native_func("print_privates", 1)
+@exporter("print_privates")
 def print_privates(ctx: NativeContext, obj: Value) -> Value:
     print(obj.private_attrs.keys())
     return NullValue()
 
 
-@native_func("print_specs", 1)
+@exporter("print_specs")
 def print_specs(ctx: NativeContext, obj: Value) -> Value:
     print(obj.specs.keys())
     return NullValue()
 
 
-@native_func("object", 0)
+@exporter("object")
 def create_object(ctx: NativeContext) -> Value:
     return ObjValue(ctx.token)
