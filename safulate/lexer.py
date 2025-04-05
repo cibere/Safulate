@@ -1,102 +1,193 @@
-from typing import List, Callable
-import logging
-from .tokens import Token, TokenType
-from ._types import Loc
-from .errors import EOF
+from __future__ import annotations
 
-log = logging.getLogger(__name__)
+from .errors import ErrorManager, SafulateSyntaxError
+from .tokens import Token, TokenType
+
+__all__ = ("Lexer",)
+
+_querty = "qwertyuiopasdfghjklzxcvbnm"
+id_first_char_characters = f"_{_querty}{_querty.upper()}"
+id_other_char_characters = f"1234567890{id_first_char_characters}"
 
 
 class Lexer:
-    char_tokens = {
-        "+": TokenType.plus,
-        ";": TokenType.eos,
+    __slots__ = (
+        "tokens",
+        "start",
+        "current",
+        "source",
+    )
+    symbol_tokens: dict[str, TokenType] = {
+        "(": TokenType.LPAR,
+        ")": TokenType.RPAR,
+        "[": TokenType.LSQB,
+        "]": TokenType.RSQB,
+        "{": TokenType.LBRC,
+        "}": TokenType.RBRC,
+        "+": TokenType.PLUS,
+        "-": TokenType.MINUS,
+        "*": TokenType.STAR,
+        "**": TokenType.STARSTAR,
+        "/": TokenType.SLASH,
+        "=": TokenType.EQ,
+        "==": TokenType.EQEQ,
+        "!=": TokenType.NEQ,
+        "<": TokenType.LESS,
+        ">": TokenType.GRTR,
+        "<=": TokenType.LESSEQ,
+        ">=": TokenType.GRTREQ,
+        ";": TokenType.SEMI,
+        "+=": TokenType.PLUSEQ,
+        "-=": TokenType.MINUSEQ,
+        "*=": TokenType.STAREQ,
+        "**=": TokenType.STARSTAREQ,
+        "/=": TokenType.SLASHEQ,
+        ",": TokenType.COMMA,
+        ".": TokenType.DOT,
+        "~": TokenType.TILDE,
+        "@": TokenType.AT,
+    }
+
+    keyword_tokens: dict[str, TokenType] = {
+        "var": TokenType.VAR,
+        "func": TokenType.FUNC,
+        "null": TokenType.NULL,
+        "return": TokenType.RETURN,
+        "if": TokenType.IF,
+        "else": TokenType.ELSE,
+        "while": TokenType.WHILE,
+        "break": TokenType.BREAK,
+        "priv": TokenType.PRIV,
+        "spec": TokenType.SPEC,
+        "req": TokenType.REQ,
     }
 
     def __init__(self, source: str) -> None:
         self.tokens: list[Token] = []
-        self.curr: Loc = (0, -1)
-        self.start_loc: Loc = (0, 0)
-        self.source: list[str] = source.splitlines()
+        self.start = 0
+        self.current = 0
+        self.source = source
 
-    def __getitem__(self, loc: Loc) -> str:
-        return self.source[loc[0]][loc[1]]
+    def add_token(self, type: TokenType) -> None:
+        self.tokens.append(
+            Token(type, self.source[self.start : self.current], self.start)
+        )
 
-    def __add__(self, args: tuple[TokenType, str]) -> Token:
-        return Token(type=args[0], value=args[1], loc=self.start_loc)
-
-    def __sub__(self, msg: str) -> Token:
-        return Token(type=TokenType.error, value=msg, loc=self.start_loc)
-
-    def __xor__(self, check: Callable[[str], bool]) -> str:
-        temp = ""
-        log.debug("%r | ----- start greedy processing -----", self.curr)
-        while 1:
-            next_char, char = self.next()
-            log.debug("%r | Polling greedy char: %s", self.curr, next_char)
-            if check(next_char):
-                temp += next_char
-            else:
-                break
-        log.debug("%r | ----- end greedy processing -----", self.curr)
-        return temp
-
-    @property
-    def next_char_loc(self) -> Loc:
-        return (self.curr[0], self.curr[1] + 1)
-
-    @property
-    def next_line_loc(self) -> Loc:
-        return (self.curr[0] + 1, 0)
-
-    def next(self) -> str:
-        for loc in (self.next_char_loc, self.next_line_loc):
-            try:
-                char = self[loc]
-            except IndexError:
-                pass
-            else:
-                log.debug("%r | Got next char: %s", loc, char)
-                self.curr = loc
-                return char
-        raise EOF()
-
-    def poll_char(self, char: str | None) -> Token | None:
-        self.start_loc = self.curr
-        if char is None:
-            return
-
-        log.debug("%r | Processing %s", self.curr, char)
-
-        match char:
-            case " " | "\t" | "\n":
-                pass
+    def poll_char(self) -> bool:
+        self.start = self.current
+        if self.current >= len(self.source):
+            self.add_token(TokenType.EOF)
+            return False
+        ret_type = None
+        l = self.source[self.start : self.current + 1]
+        match l:
+            case (
+                " "
+                | "\t"
+                | "\n"  # NOTE: Not sure if you want \n to be part of this list
+            ):
+                self.current += 1
+                return True
             case "#":
-                self.curr = self.next_line_loc
-            case _ as x if x in self.char_tokens.keys():
-                return self + (self.char_tokens[x], x)
+                while (
+                    self.current < len(self.source)
+                    and self.source[self.current] != "\n"
+                ):
+                    self.current += 1
+                return True
             case '"':
-                return self + (TokenType.str, self ^ (lambda c: c != '"'))
-            case _ as x if x.isalpha():
-                temp = self ^ (lambda c: c.isalnum())
-                return self + (TokenType.id, x + temp)
-            case _ as x if x.isdigit():
-                value = x + (self ^ (lambda c: c.isdigit() or c == "."))
-                if value.count(".") > 1:
-                    return self - ("Too many dots in int/float")
-                else:
-                    return self + (TokenType.num, value)
-            case _:
-                return self - ("Unknown character")
+                self.current += 1
+                while (
+                    self.current < len(self.source) and self.source[self.current] != '"'
+                ):
+                    self.current += 1
+                if self.current >= len(self.source):
+                    raise SafulateSyntaxError("Unterminated string")
+                self.current += 1
+                self.add_token(TokenType.STR)
+            case "v" if self.source[self.current + 1].isdigit():
+                self.current += 1
+                temp = [""]
 
-    def start(self) -> List[Token]:
-        try:
-            while 1:
-                char = self.next()
-                token = self.poll_char(char)
-                if token:
-                    self.tokens.append(token)
-        except EOF:
-            if self.tokens[-1].type != TokenType.eos:
-                raise RuntimeError("File does not end with a statement ending char")
+                while self.current < len(self.source) and (
+                    self.source[self.current].isdigit()
+                    or self.source[self.current] == "."
+                ):
+                    if self.source[self.current] == ".":
+                        temp.append("")
+                    else:
+                        temp[-1] += self.source[self.current]
+                    self.current += 1
+
+                if len(temp) > 3:
+                    raise SafulateSyntaxError("Version size too big")
+                if temp[-1] == "":
+                    self.start = self.current - 1
+                    raise SafulateSyntaxError("Version can not end in a dot")
+
+                self.add_token(TokenType.VER)
+            case _ as x if x in id_first_char_characters or x == "$":
+                if x == "$":
+                    self.current = self.current + 1
+                    last_char = self.source[self.current]
+                    if last_char not in id_other_char_characters:
+                        raise SafulateSyntaxError("Expected ID after '$'")
+                else:
+                    last_char = x
+
+                while (
+                    self.current < len(self.source)
+                    and last_char in id_other_char_characters
+                ):
+                    l = self.source[self.start : self.current + 1]
+                    last_char = l[-1]
+
+                    self.current += 1
+                if not l.isalnum():
+                    self.current -= 1
+                if self.source[self.start : self.current] in self.keyword_tokens:
+                    self.add_token(
+                        self.keyword_tokens[self.source[self.start : self.current]]
+                    )
+                else:
+                    self.add_token(TokenType.ID)
+            case _ as x if x.isdigit():
+                dot_found = False
+                while self.current < len(self.source) and (
+                    l[-1].isdigit()
+                    or l[-1] == "."
+                    and self.source[self.current].isdigit()
+                    and not dot_found
+                ):
+                    if l[-1] == ".":
+                        dot_found = True
+                    l = self.source[self.start : self.current + 1]
+                    self.current += 1
+                if not l[-1].isdigit():
+                    self.current -= 1
+                self.add_token(TokenType.NUM)
+            case _:
+                while self.current < len(self.source):
+                    l = self.source[self.start : self.current + 1]
+                    for lexeme, type in self.symbol_tokens.items():
+                        if l == lexeme:
+                            ret_type = type
+                            break
+                    else:
+                        break
+                    self.current += 1
+                if ret_type is None:
+                    self.current += 1
+                    raise SafulateSyntaxError(
+                        f"Unknown character {self.source[self.start]!r}"
+                    )
+                else:
+                    self.add_token(ret_type)
+        return True
+
+    def tokenize(self) -> list[Token]:
+        with ErrorManager(start=lambda: self.start):
+            while self.poll_char():
+                pass
+
         return self.tokens

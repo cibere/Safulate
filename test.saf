@@ -1,1 +1,8 @@
-assert[5 != 5, "hi"];
+while 1{
+    print("outer");
+    while 1{
+    print("start outer");
+    break 2;
+    print("end outer");
+}
+}
