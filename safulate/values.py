@@ -15,11 +15,11 @@ from .errors import (
     SafulateValueError,
 )
 from .mock import MockNativeContext
-from .native_context import NativeContext
 from .properties import cached_property
 
 if TYPE_CHECKING:
     from .asts import ASTNode
+    from .native_context import NativeContext
     from .tokens import Token
 
 
