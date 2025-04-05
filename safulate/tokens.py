@@ -51,6 +51,7 @@ class TokenType(Enum):
     VER = "VER"
     REQ = "REQ"
     AT = "AT"
+    RAISE = "RAISE"
 
 
 @dataclass

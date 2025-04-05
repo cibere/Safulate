@@ -9,6 +9,8 @@ if TYPE_CHECKING:
     from types import TracebackType
     from typing import Literal
 
+    from .values import Value
+
 __all__ = (
     "ErrorManager",
     "SafulateError",
@@ -61,11 +63,11 @@ class ErrorManager:
 
 
 class SafulateError(BaseException):
-    def __init__(self, msg: str, token: Token = MockToken()) -> None:
-        super().__init__(msg)
-
-        self.message = msg
+    def __init__(self, obj: str | Value, token: Token = MockToken()) -> None:
+        self.message = str(obj)
         self.token = token
+
+        super().__init__(self.message)
 
     def make_report(self, source: str) -> str:
         line = source[: self.token.start].count("\n") + 1

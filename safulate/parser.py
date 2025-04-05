@@ -17,6 +17,7 @@ from .asts import (
     ASTNode,
     ASTPrivDecl,
     ASTProgram,
+    ASTRaise,
     ASTReturn,
     ASTScopedBlock,
     ASTSpecDecl,
@@ -256,9 +257,12 @@ class Parser:
 
             self.consume(TokenType.SEMI, "Expected ';'")
             return ASTImportReq(name=name, source=source)
+        if kwd := self.match(TokenType.RAISE):
+            expr = self.expr()
+            self.consume(TokenType.SEMI, "Expected ';'")
+            return ASTRaise(expr, kwd)
 
         expr = self.expr()
-        # print(f"{expr=}")
         self.consume(TokenType.SEMI, "Expected ';'")
         return ASTExprStmt(expr)
 

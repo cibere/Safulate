@@ -62,6 +62,7 @@ class Lexer:
         "priv": TokenType.PRIV,
         "spec": TokenType.SPEC,
         "req": TokenType.REQ,
+        "raise": TokenType.RAISE,
     }
 
     def __init__(self, source: str) -> None:

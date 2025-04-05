@@ -22,6 +22,7 @@ __all__ = (
     "ASTNode",
     "ASTPrivDecl",
     "ASTProgram",
+    "ASTRaise",
     "ASTReturn",
     "ASTScopedBlock",
     "ASTSpecDecl",
@@ -229,6 +230,15 @@ class ASTVersionReq(ASTNode):
         return visitor.visit_version_req(self)
 
 
+@dataclass
+class ASTRaise(ASTNode):
+    expr: ASTNode
+    kw: Token
+
+    def accept(self, visitor: ASTVisitor) -> Value:
+        return visitor.visit_raise(self)
+
+
 class ASTVisitor(ABC):
     @abstractmethod
     def visit_program(self, node: ASTProgram) -> Value: ...
@@ -272,3 +282,5 @@ class ASTVisitor(ABC):
     def visit_import_req(self, node: ASTImportReq) -> Value: ...
     @abstractmethod
     def visit_version_req(self, node: ASTVersionReq) -> Value: ...
+    @abstractmethod
+    def visit_raise(self, node: ASTRaise) -> Value: ...

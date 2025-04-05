@@ -19,6 +19,7 @@ from .asts import (
     ASTImportReq,
     ASTPrivDecl,
     ASTProgram,
+    ASTRaise,
     ASTReturn,
     ASTScopedBlock,
     ASTSpecDecl,
@@ -32,6 +33,7 @@ from .asts import (
 from .environment import Environment
 from .errors import (
     ErrorManager,
+    SafulateError,
     SafulateImportError,
     SafulateTypeError,
     SafulateVersionConflict,
@@ -314,3 +316,6 @@ class TreeWalker(ASTVisitor):
             self.env.declare(node.name)
             self.env[node.name] = value
             return value
+
+    def visit_raise(self, node: ASTRaise) -> Value:
+        raise SafulateError(node.expr.accept(self), node.kw)
