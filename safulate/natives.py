@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from typing import Callable, Concatenate, Never
+from typing import TYPE_CHECKING, Concatenate, Never
 
-from .native_context import NativeContext
 from .values import ListValue, NativeFunc, NullValue, ObjValue, Value
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from .native_context import NativeContext
 
 natives: list[NativeFunc] = []
 

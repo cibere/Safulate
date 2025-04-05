@@ -5,16 +5,17 @@ from .tokens import Token, TokenType
 
 TYPE_CHECKING = False
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from types import TracebackType
-    from typing import Callable, Literal
+    from typing import Literal
 
 __all__ = (
+    "ErrorManager",
     "SafulateError",
     "SafulateNameError",
-    "SafulateValueError",
     "SafulateSyntaxError",
-    "ErrorManager",
     "SafulateTypeError",
+    "SafulateValueError",
 )
 
 
@@ -60,7 +61,7 @@ class ErrorManager:
 
 
 class SafulateError(BaseException):
-    def __init__(self, msg: str, token: Token = MockToken()):
+    def __init__(self, msg: str, token: Token = MockToken()) -> None:
         super().__init__(msg)
 
         self.message = msg

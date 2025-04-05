@@ -11,13 +11,13 @@ __all__ = ("Environment",)
 
 
 class Environment:
-    __slots__ = "parent", "values", "scope"
+    __slots__ = "parent", "scope", "values"
 
-    def __init__(self, parent: Environment | None = None, scope: Value | None = None):
+    def __init__(
+        self, parent: Environment | None = None, scope: Value | None = None
+    ) -> None:
         self.values: dict[str, Value] = {}
-        self.parent: Environment | None = (
-            parent  # Could be a stack, might squeeze out a tiny bit more performance
-        )
+        self.parent: Environment | None = parent
         self.scope: Value | None = scope
 
         if scope:
@@ -50,7 +50,7 @@ class Environment:
             if name.startswith("%"):
                 self.scope.special_attrs[name.removeprefix("%")] = value
                 return
-            elif name.startswith("$"):
+            if name.startswith("$"):
                 self.scope.private_attrs[name] = value
                 return
 

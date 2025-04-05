@@ -29,17 +29,18 @@ DEALINGS IN THE SOFTWARE.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Generic, TypeVar, overload
+from typing import TYPE_CHECKING, Generic, TypeVar, overload
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 T = TypeVar("T")
 T_co = TypeVar("T_co", covariant=True)
 
 __all__ = (
-    "CachedSlotProperty",
     "CachedProperty",
-    "ClassProperty",
+    "CachedSlotProperty",
     "cached_property",
-    "class_property",
 )
 
 
@@ -94,17 +95,6 @@ class CachedSlotProperty(Generic[T, T_co]):
             return value
 
 
-class ClassProperty(Generic[T, T_co]):
-    def __init__(self, function: Callable[[type[T]], T_co]) -> None:
-        self.function = function
-
-    def __get__(self, instance: T | None, owner: type[T]) -> T_co:
-        return self.function(owner)
-
-    def __set__(self, instance: T | None, value: Any) -> None:
-        raise AttributeError("class properties can not be changed")
-
-
 @overload
 def cached_property(
     name_or_func: str, /
@@ -130,7 +120,3 @@ def cached_property(
         return CachedSlotProperty(name_or_func, func)
 
     return decorator
-
-
-def class_property(func: Callable[[type[T]], T_co]) -> ClassProperty[T, T_co]:
-    return ClassProperty(func)

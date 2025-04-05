@@ -10,6 +10,6 @@ __all__ = ("NativeContext",)
 
 
 class NativeContext:
-    def __init__(self, interpreter: TreeWalker, token: Token):
+    def __init__(self, interpreter: TreeWalker, token: Token) -> None:
         self.interpreter = interpreter
         self.token = token

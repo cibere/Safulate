@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import TYPE_CHECKING
 
 from .asts import (
     ASTAssign,
@@ -28,6 +28,9 @@ from .asts import (
 )
 from .errors import SafulateSyntaxError
 from .tokens import Token, TokenType
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 class Parser:
@@ -108,7 +111,7 @@ class Parser:
     def check_next(self, *types: TokenType) -> bool:
         return self.peek_next().type in types
 
-    def match(self, *types: TokenType) -> Optional[Token]:
+    def match(self, *types: TokenType) -> Token | None:
         if self.check(*types):
             return self.advance()
 
@@ -142,9 +145,9 @@ class Parser:
     def decl(self) -> ASTNode:
         if self.check(TokenType.VAR, TokenType.PRIV):
             return self.var_decl()
-        elif self.check(TokenType.FUNC, TokenType.SPEC):
+        if self.check(TokenType.FUNC, TokenType.SPEC):
             return self.func_decl()
-        elif self.check_next(TokenType.TILDE):
+        if self.check_next(TokenType.TILDE):
             return self.scoped_block()
 
         return self.stmt()
@@ -207,28 +210,28 @@ class Parser:
     def stmt(self) -> ASTNode:
         if self.check(TokenType.LBRC):
             return self.block()
-        elif self.match(TokenType.IF):
+        if self.match(TokenType.IF):
             condition = self.expr()
             body = self.block()
             else_branch = None
             if self.match(TokenType.ELSE):
                 else_branch = self.block()
             return ASTIf(condition, body, else_branch)
-        elif self.match(TokenType.WHILE):
+        if self.match(TokenType.WHILE):
             condition = self.expr()
             body = self.block()
             return ASTWhile(condition, body)
-        elif kwd := self.match(TokenType.RETURN):
+        if kwd := self.match(TokenType.RETURN):
             expr = None
             if not self.check(TokenType.SEMI):
                 expr = self.expr()
             self.consume(TokenType.SEMI, "Expected ';'")
             return ASTReturn(kwd, expr)
-        elif kwd := self.match(TokenType.BREAK):
+        if kwd := self.match(TokenType.BREAK):
             expr = None if self.check(TokenType.SEMI) else self.expr()
             self.consume(TokenType.SEMI, "Expected ';'")
             return ASTBreak(kwd, expr)
-        elif kwd := self.match(TokenType.REQ):
+        if kwd := self.match(TokenType.REQ):
             if not self.check(TokenType.ID):
                 token = self.peek()
                 version = self.expr()

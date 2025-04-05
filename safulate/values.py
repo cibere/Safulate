@@ -3,15 +3,18 @@ from __future__ import annotations
 import inspect
 from abc import ABC, abstractmethod
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
 from dataclasses import field as _field
-from typing import Any, Callable, Concatenate
+from typing import TYPE_CHECKING, Any, Concatenate
 
-from .asts import ASTNode
 from .errors import SafulateAttributeError, SafulateValueError
 from .native_context import NativeContext
 from .properties import cached_property
-from .tokens import Token
+
+if TYPE_CHECKING:
+    from .asts import ASTNode
+    from .tokens import Token
 
 
 def __method_deco[T: Callable[Concatenate[Any, NativeContext, ...], "Value"]](
@@ -46,14 +49,16 @@ class Return(BaseException):
     solution.
     """
 
-    def __init__(self, value: Value):
-        super().__init__("FATAL Error: ESCAPED RETURN EXCEPTION")
+    def __init__(self, value: Value) -> None:
         self.value = value
+
+        super().__init__("FATAL Error: ESCAPED RETURN EXCEPTION")
 
 
 class Break(BaseException):
-    def __init__(self, amount: int):
+    def __init__(self, amount: int) -> None:
         self.amount = amount
+
         super().__init__("FATAL Error: ESCAPED BREAK EXCEPTION")
 
 
@@ -346,7 +351,7 @@ class StrValue(Value):
 
         return StrValue(self.value * int(other.value))
 
-    def truthy(self):
+    def truthy(self) -> bool:
         return len(self.value) != 0
 
     def __str__(self) -> str:
@@ -357,7 +362,7 @@ class StrValue(Value):
 class ListValue(Value):
     value: list[Value]
 
-    def truthy(self):
+    def truthy(self) -> bool:
         return len(self.value) != 0
 
     def __str__(self) -> str:
@@ -443,12 +448,11 @@ class VersionValue(Value):
     def _handle_constraint(self, other: Value, constraint: str) -> Value:
         if isinstance(other, VersionValue):
             return VersionConstraintValue(left=self, right=other, constraint=constraint)
-        elif isinstance(other, NullValue):
+        if isinstance(other, NullValue):
             return VersionConstraintValue(left=other, right=self, constraint=constraint)
-        else:
-            raise SafulateValueError(
-                f"{constraint!r} operation is not defined for version and this type"
-            )
+        raise SafulateValueError(
+            f"{constraint!r} operation is not defined for version and this type"
+        )
 
     @special_method("sub", 1)
     def sub(self, ctx: NativeContext, other: Value) -> Value:

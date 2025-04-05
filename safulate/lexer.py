@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
 from .errors import ErrorManager, SafulateSyntaxError
 from .tokens import Token, TokenType
 
@@ -12,12 +14,12 @@ id_other_char_characters = f"1234567890{id_first_char_characters}"
 
 class Lexer:
     __slots__ = (
-        "tokens",
-        "start",
         "current",
         "source",
+        "start",
+        "tokens",
     )
-    symbol_tokens: dict[str, TokenType] = {
+    symbol_tokens: ClassVar[dict[str, TokenType]] = {
         "(": TokenType.LPAR,
         ")": TokenType.RPAR,
         "[": TokenType.LSQB,
@@ -48,7 +50,7 @@ class Lexer:
         "@": TokenType.AT,
     }
 
-    keyword_tokens: dict[str, TokenType] = {
+    keyword_tokens: ClassVar[dict[str, TokenType]] = {
         "var": TokenType.VAR,
         "func": TokenType.FUNC,
         "null": TokenType.NULL,
@@ -78,9 +80,11 @@ class Lexer:
         if self.current >= len(self.source):
             self.add_token(TokenType.EOF)
             return False
+
         ret_type = None
-        l = self.source[self.start : self.current + 1]
-        match l:
+        char = self.source[self.start : self.current + 1]
+
+        match char:
             case (
                 " "
                 | "\t"
@@ -139,11 +143,11 @@ class Lexer:
                     self.current < len(self.source)
                     and last_char in id_other_char_characters
                 ):
-                    l = self.source[self.start : self.current + 1]
-                    last_char = l[-1]
+                    char = self.source[self.start : self.current + 1]
+                    last_char = char[-1]
 
                     self.current += 1
-                if not l.isalnum():
+                if not char.isalnum():
                     self.current -= 1
                 if self.source[self.start : self.current] in self.keyword_tokens:
                     self.add_token(
@@ -154,23 +158,25 @@ class Lexer:
             case _ as x if x.isdigit():
                 dot_found = False
                 while self.current < len(self.source) and (
-                    l[-1].isdigit()
-                    or l[-1] == "."
-                    and self.source[self.current].isdigit()
-                    and not dot_found
+                    char[-1].isdigit()
+                    or (
+                        char[-1] == "."
+                        and self.source[self.current].isdigit()
+                        and not dot_found
+                    )
                 ):
-                    if l[-1] == ".":
+                    if char[-1] == ".":
                         dot_found = True
-                    l = self.source[self.start : self.current + 1]
+                    char = self.source[self.start : self.current + 1]
                     self.current += 1
-                if not l[-1].isdigit():
+                if not char[-1].isdigit():
                     self.current -= 1
                 self.add_token(TokenType.NUM)
             case _:
                 while self.current < len(self.source):
-                    l = self.source[self.start : self.current + 1]
+                    char = self.source[self.start : self.current + 1]
                     for lexeme, type in self.symbol_tokens.items():
-                        if l == lexeme:
+                        if char == lexeme:
                             ret_type = type
                             break
                     else:
@@ -181,8 +187,7 @@ class Lexer:
                     raise SafulateSyntaxError(
                         f"Unknown character {self.source[self.start]!r}"
                     )
-                else:
-                    self.add_token(ret_type)
+                self.add_token(ret_type)
         return True
 
     def tokenize(self) -> list[Token]:

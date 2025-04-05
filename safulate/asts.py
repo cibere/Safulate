@@ -2,35 +2,34 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
-
-from .lexer import Token
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from .lexer import Token
     from .values import Value
 
 __all__ = (
-    "ASTNode",
-    "ASTProgram",
-    "ASTVarDecl",
-    "ASTFuncDecl",
-    "ASTBlock",
-    "ASTIf",
-    "ASTWhile",
-    "ASTReturn",
-    "ASTBreak",
-    "ASTExprStmt",
     "ASTAssign",
-    "ASTBinary",
-    "ASTUnary",
-    "ASTCall",
     "ASTAtom",
+    "ASTBinary",
+    "ASTBlock",
+    "ASTBreak",
+    "ASTCall",
+    "ASTExprStmt",
+    "ASTFuncDecl",
+    "ASTIf",
+    "ASTImportReq",
+    "ASTNode",
+    "ASTPrivDecl",
+    "ASTProgram",
+    "ASTReturn",
     "ASTScopedBlock",
     "ASTSpecDecl",
-    "ASTPrivDecl",
+    "ASTUnary",
+    "ASTVarDecl",
     "ASTVersion",
     "ASTVersionReq",
-    "ASTImportReq",
+    "ASTWhile",
 )
 
 
@@ -50,7 +49,7 @@ class ASTProgram(ASTNode):
 @dataclass
 class ASTVarDecl(ASTNode):
     name: Token
-    value: Optional[ASTNode]
+    value: ASTNode | None
 
     def accept(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_var_decl(self)
@@ -59,7 +58,7 @@ class ASTVarDecl(ASTNode):
 @dataclass
 class ASTPrivDecl(ASTNode):
     name: Token
-    value: Optional[ASTNode]
+    value: ASTNode | None
 
     def accept(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_priv_decl(self)
@@ -106,7 +105,7 @@ class ASTScopedBlock(ASTNode):
 class ASTIf(ASTNode):
     condition: ASTNode
     body: ASTNode
-    else_branch: Optional[ASTNode]
+    else_branch: ASTNode | None
 
     def accept(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_if(self)
@@ -124,7 +123,7 @@ class ASTWhile(ASTNode):
 @dataclass
 class ASTReturn(ASTNode):
     keyword: Token
-    expr: Optional[ASTNode]
+    expr: ASTNode | None
 
     def accept(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_return(self)

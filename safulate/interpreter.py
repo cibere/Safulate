@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import Iterator
+from typing import TYPE_CHECKING
 
 from packaging.version import Version
 
@@ -52,6 +52,8 @@ from .values import (
     VersionValue,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 __all__ = ("TreeWalker",)
 
 

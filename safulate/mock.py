@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
-from .tokens import Token
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 __all__ = "MockObject", "MockToken"
 
@@ -27,6 +28,7 @@ def _premade(msg: str) -> Callable[[], MockObject]:
 
 
 if TYPE_CHECKING:
+    from .tokens import Token
 
     class MockToken(Token):
         def __init__(self) -> None: ...
