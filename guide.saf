@@ -24,12 +24,14 @@ print(x); # prints 5
 del x;
 
 ##### safulate version constraints
-# req v1; # require safulate v1.x.x
-# req v1.1; # require safulate v1.1.x
-# req v1.1.1; # require safulate v1.1.1
-# req +v1; # require safulate v1 or above
-# req -v1; # require safulate v1 or below
-# req v1 - v5; # require any safulate version from v1.x.x to v5.x.x
+{
+    req v1; # require safulate v1.x.x
+    req v1.1; # require safulate v1.1.x
+    req v1.1.1; # require safulate v1.1.1
+    req +v1; # require safulate v1 or above
+    req -v1; # require safulate v1 or below
+    req v1 - v5; # require any safulate version from v1.x.x to v5.x.x
+}
 
 ##### importing #####
 {
