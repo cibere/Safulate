@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Never
 
+from safulate.errors import SafulateAssertionError
 from safulate.lib_exporter import LibraryExporter
 from safulate.values import ListValue, NullValue, ObjValue, Value
 
@@ -53,3 +54,10 @@ def print_specs(ctx: NativeContext, obj: Value) -> Value:
 @exporter("object")
 def create_object(ctx: NativeContext) -> Value:
     return ObjValue(ctx.token)
+
+
+@exporter("assert")
+def assert_(ctx: NativeContext, obj: Value, message: Value = NullValue()) -> Value:
+    if not obj.truthy():
+        raise SafulateAssertionError(message)
+    return NullValue()

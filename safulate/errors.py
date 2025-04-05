@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
 __all__ = (
     "ErrorManager",
+    "SafulateAssertionError",
     "SafulateBreakoutError",
     "SafulateError",
     "SafulateInvalidReturn",
@@ -24,12 +25,15 @@ __all__ = (
 
 
 class ErrorManager:
-    __slots__ = ("get_start", "token")
+    __slots__ = ("start", "token")
 
     def __init__(
-        self, *, start: Callable[[], int] | None = None, token: Token | None = None
+        self,
+        *,
+        start: Callable[[], int] | int | None = None,
+        token: Token | None | Callable[[], Token] = None,
     ) -> None:
-        self.get_start = start
+        self.start = start
         self.token = token
 
     def __enter__(self) -> None:
@@ -51,10 +55,12 @@ class ErrorManager:
             return False
 
         if self.token:
-            token = self.token
-        elif self.get_start:
+            token = self.token if isinstance(self.token, Token) else self.token()
+        elif self.start:
             token = Token(
-                TokenType.ERR, getattr(mock_token, "__error_text__"), self.get_start()
+                TokenType.ERR,
+                getattr(mock_token, "__error_text__"),
+                self.start if isinstance(self.start, int) else self.start(),
             )
         else:
             raise RuntimeError("Error manager got no way of getting token")
@@ -142,3 +148,7 @@ class SafulateBreakoutError(SafulateError):
         self.amount = amount
 
         super().__init__("No more loops to break out of", token)
+
+
+class SafulateAssertionError(SafulateError):
+    pass
