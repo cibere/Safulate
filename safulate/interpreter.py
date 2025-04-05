@@ -13,7 +13,9 @@ from .asts import (
     ASTBlock,
     ASTBreak,
     ASTCall,
+    ASTDel,
     ASTExprStmt,
+    ASTForLoop,
     ASTFuncDecl,
     ASTIf,
     ASTImportReq,
@@ -33,21 +35,23 @@ from .asts import (
 from .environment import Environment
 from .errors import (
     ErrorManager,
+    SafulateBreakoutError,
     SafulateError,
     SafulateImportError,
+    SafulateInvalidReturn,
     SafulateTypeError,
+    SafulateValueError,
     SafulateVersionConflict,
 )
 from .native_context import NativeContext
 from .tokens import TokenType
 from .values import (
-    Break,
     ContainerValue,
     FuncValue,
+    ListValue,
     NativeFunc,
     NullValue,
     NumValue,
-    Return,
     StrValue,
     Value,
     VersionConstraintValue,
@@ -56,6 +60,7 @@ from .values import (
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
 __all__ = ("TreeWalker",)
 
 
@@ -67,7 +72,8 @@ class TreeWalker(ASTVisitor):
         self.env = Environment()
         self.env.add_builtins()
         self.builtin_imports: dict[str, ContainerValue] = {
-            "hello": ContainerValue("hello", {"test": StrValue("Booya!")})
+            "hello": ContainerValue("hello", {"test": StrValue("Booya!")}),
+            "test": ContainerValue("test", {"hello": StrValue("world!")}),
         }
 
     @contextmanager
@@ -116,34 +122,59 @@ class TreeWalker(ASTVisitor):
         while node.condition.accept(self).truthy():
             try:
                 node.body.accept(self)
-            except Break as e:
+            except SafulateBreakoutError as e:
                 e.amount -= 1
                 if e.amount != 0:
-                    print(f"Reraising break. {e.amount=}")
                     raise e
+                break
+
+        return NullValue()
+
+    def visit_for_loop(self, node: ASTForLoop) -> Value:
+        src = node.source.accept(self)
+        if not isinstance(src, ListValue):
+            func = src.specs["iter"]
+
+            with ErrorManager(token=node.var_name):
+                src = func.call(NativeContext(self, node.var_name))
+                if not isinstance(src, ListValue):
+                    raise SafulateValueError(f"{src!r} is not iterable")
+
+        for item in src.value:
+            with self.scope() as env:
+                env.declare(node.var_name)
+                env[node.var_name] = item
+                node.body.accept(self)
 
         return NullValue()
 
     def visit_return(self, node: ASTReturn) -> Value:
         if node.expr:
             value = node.expr.accept(self)
-            raise Return(value)
+            raise SafulateInvalidReturn(value, node.keyword)
 
-        raise Return(NullValue())
+        raise SafulateInvalidReturn(NullValue(), node.keyword)
 
     def visit_break(self, node: ASTBreak) -> Value:
-        if node.amount is None:
-            amount = 1
-        else:
-            amount_node = node.amount.accept(self)
-            if not isinstance(amount_node, NumValue):
-                raise SafulateTypeError(
-                    f"Expected a number for break amount, got {amount_node!r} instead.",
-                    node.keyword,
-                )
-            amount = int(amount_node.value)
+        with ErrorManager(token=node.keyword):
+            if node.amount is None:
+                amount = 1
+            else:
+                amount_node = node.amount.accept(self)
+                if not isinstance(amount_node, NumValue):
+                    raise SafulateTypeError(
+                        f"Expected a number for break amount, got {amount_node!r} instead.",
+                    )
+                amount = int(amount_node.value)
 
-        raise Break(amount + 1)
+            if amount == 0:
+                return NullValue()
+            elif amount < 0:
+                raise SafulateValueError(
+                    "You can't breakout of a negative number of loops"
+                )
+
+            raise SafulateBreakoutError(amount)
 
     def visit_expr_stmt(self, node: ASTExprStmt) -> Value:
         value = node.expr.accept(self)
@@ -202,7 +233,7 @@ class TreeWalker(ASTVisitor):
             )
 
         with ErrorManager(token=node.op):
-            func = left.special_attrs[spec_name]
+            func = left.specs[spec_name]
             return func.call(NativeContext(self, node.op), right)
 
     def visit_unary(self, node: ASTUnary) -> Value:
@@ -217,7 +248,7 @@ class TreeWalker(ASTVisitor):
             )
 
         with ErrorManager(token=node.op):
-            func = right.special_attrs[spec_name]
+            func = right.specs[spec_name]
             assert isinstance(func, NativeFunc)
             return func.call(NativeContext(self, node.op))
 
@@ -319,3 +350,7 @@ class TreeWalker(ASTVisitor):
 
     def visit_raise(self, node: ASTRaise) -> Value:
         raise SafulateError(node.expr.accept(self), node.kw)
+
+    def visit_del(self, node: ASTDel) -> Value:
+        del self.env.values[node.var.lexeme]
+        return NullValue()

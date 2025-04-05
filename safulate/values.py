@@ -6,9 +6,15 @@ from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
 from dataclasses import field as _field
-from typing import TYPE_CHECKING, Any, Concatenate
+from typing import TYPE_CHECKING, Any, Concatenate, cast, final
 
-from .errors import SafulateAttributeError, SafulateValueError
+from .errors import (
+    SafulateAttributeError,
+    SafulateInvalidReturn,
+    SafulateTypeError,
+    SafulateValueError,
+)
+from .mock import MockNativeContext
 from .native_context import NativeContext
 from .properties import cached_property
 
@@ -33,33 +39,6 @@ def __method_deco[T: Callable[Concatenate[Any, NativeContext, ...], "Value"]](
 public_method = __method_deco("")
 private_method = __method_deco("$")
 special_method = __method_deco("%")
-
-
-class Return(BaseException):
-    """
-    Soooooo, this may seem odd, but we're going to use exceptions for return and break.
-    Here's why -- exceptions have all of the following properties:
-        1. they travel back up the call stack until they are caught
-        2. they are objects, so they can store any information we want
-        3. they're very loud if not caught properly
-
-    These are all properties we want for return and break statements as well (Except maybe
-    the last one, but that can be helpful for debugging). While this same behavior could
-    be accomplished with some kind of call stack, I think this is an elegant and Pythonic
-    solution.
-    """
-
-    def __init__(self, value: Value) -> None:
-        self.value = value
-
-        super().__init__("FATAL Error: ESCAPED RETURN EXCEPTION")
-
-
-class Break(BaseException):
-    def __init__(self, amount: int) -> None:
-        self.amount = amount
-
-        super().__init__("FATAL Error: ESCAPED BREAK EXCEPTION")
 
 
 class Value(ABC):
@@ -104,7 +83,7 @@ class Value(ABC):
         return self.__safulate_private_attrs__
 
     @cached_property
-    def special_attrs(self) -> dict[str, Value]:
+    def specs(self) -> dict[str, Value]:
         if self.__safulate_specs__ is None:
             self.__safulate_specs__ = {}
 
@@ -122,7 +101,7 @@ class Value(ABC):
 
     @private_method("$get_specs", 0)
     def get_specs(self, ctx: NativeContext) -> Value:
-        return ContainerValue(f"{self}'s specs", self.special_attrs.copy())
+        return ContainerValue(f"{self}'s specs", self.specs.copy())
 
     @special_method("add", 1)
     def add(self, ctx: NativeContext, _other: Value) -> Value:
@@ -182,11 +161,44 @@ class Value(ABC):
     def call(self, ctx: NativeContext, *args: Value) -> Value:
         raise SafulateValueError("Cannot call this type")
 
+    @special_method("iter", 0)
+    def iter(self, ctx: NativeContext) -> ListValue:
+        raise SafulateValueError("This type is not iterable")
+
+    @special_method("repr", 0)
+    @abstractmethod
+    def repr(self, ctx: NativeContext) -> Value: ...
+
+    @special_method("str", 0)
+    def str(self, ctx: NativeContext) -> Value:
+        return self.specs["repr"].call(ctx)
+
     def truthy(self) -> bool:
         return True
 
-    @abstractmethod
-    def __str__(self) -> str: ...
+    @final
+    def __str__(self) -> str:
+        return self.str_spec()
+
+    def repr_spec(self, ctx: NativeContext = MockNativeContext()) -> str:
+        func = self.specs["repr"]
+        value = func.call(ctx)
+        if not isinstance(value, StrValue):
+            raise SafulateValueError(
+                f"expected return for 'repr' is str, not {value!r}", ctx.token
+            )
+
+        return value.value
+
+    def str_spec(self, ctx: NativeContext = MockNativeContext()) -> str:
+        func = self.specs["str"]
+        value = func.call(ctx)
+        if not isinstance(value, StrValue):
+            raise SafulateValueError(
+                f"expected return for 'str' is str, not {value!r}", ctx.token
+            )
+
+        return value.value
 
 
 @dataclass
@@ -197,8 +209,9 @@ class ContainerValue(Value):
     def __post_init__(self) -> None:
         self.public_attrs.update(self.attrs)
 
-    def __str__(self) -> str:
-        return f"<Container {self.name!r}>"
+    @special_method("repr", 0)
+    def repr(self, ctx: NativeContext) -> StrValue:
+        return StrValue(f"<Container {self.name!r}>")
 
 
 class ObjValue(Value):
@@ -206,16 +219,18 @@ class ObjValue(Value):
         self.token = token
         super().__init__()
 
-    def __str__(self) -> str:
-        return f"<Custom Object @{self.token.start}>"
+    @special_method("repr", 0)
+    def repr(self, ctx: NativeContext) -> StrValue:
+        return StrValue(f"<Custom Object @{self.token.start}>")
 
 
 class NullValue(Value):
     def truthy(self) -> bool:
         return False
 
-    def __str__(self) -> str:
-        return "null"
+    @special_method("repr", 0)
+    def repr(self, ctx: NativeContext) -> StrValue:
+        return StrValue("null")
 
 
 @dataclass
@@ -321,11 +336,12 @@ class NumValue(Value):
     def truthy(self) -> bool:
         return self.value != 0
 
-    def __str__(self) -> str:
+    @special_method("repr", 0)
+    def repr(self, ctx: NativeContext) -> StrValue:
         if self.value % 1 == 0 and "e" not in str(self.value):
-            return str(int(self.value))
+            return StrValue(str(int(self.value)))
 
-        return str(self.value)
+        return StrValue(str(self.value))
 
 
 @dataclass
@@ -351,22 +367,56 @@ class StrValue(Value):
 
         return StrValue(self.value * int(other.value))
 
+    @special_method("iter", 0)
+    def iter(self, ctx: NativeContext) -> ListValue:
+        return ListValue([StrValue(char) for char in self.value])
+
     def truthy(self) -> bool:
         return len(self.value) != 0
 
-    def __str__(self) -> str:
-        return self.value
+    @special_method("repr", 0)
+    def repr(self, ctx: NativeContext) -> StrValue:
+        return StrValue(self.value)
 
 
 @dataclass
 class ListValue(Value):
     value: list[Value]
 
+    @public_method("append", 1)
+    def append(self, ctx: NativeContext, item: Value) -> Value:
+        self.value.append(item)
+        return NullValue()
+
+    @public_method("remove", 1)
+    def remove(self, ctx: NativeContext, item: Value) -> Value:
+        self.value.remove(item)
+        return NullValue()
+
+    @public_method("pop", 1)
+    def pop(self, ctx: NativeContext, index: Value) -> Value:
+        if not isinstance(index, NumValue):
+            raise SafulateTypeError(f"expected num, got {index!r} instead")
+        if abs(index.value) > len(self.value):
+            return NullValue()
+
+        return self.value.pop(int(index.value))
+
     def truthy(self) -> bool:
         return len(self.value) != 0
 
-    def __str__(self) -> str:
-        return "[" + ", ".join([str(val) for val in self.value]) + "]"
+    @special_method("repr", 0)
+    def repr(self, ctx: NativeContext) -> StrValue:
+        return StrValue(
+            "["
+            + ", ".join(
+                [
+                    cast("StrValue", val.specs["repr"].call(ctx)).value
+                    for val in self.value
+                ]
+            )
+            + "]"
+        )
 
 
 @dataclass
@@ -396,7 +446,7 @@ class FuncValue(Value):
 
             try:
                 self.body.accept(ctx.interpreter)
-            except Return as r:
+            except SafulateInvalidReturn as r:
                 ret_value = r.value
 
             self.parent.private_attrs.update(
@@ -409,8 +459,9 @@ class FuncValue(Value):
 
         return ret_value
 
-    def __str__(self) -> str:
-        return f"<func {self.name.lexeme!r}>"
+    @special_method("repr", 0)
+    def repr(self, ctx: NativeContext) -> StrValue:
+        return StrValue(f"<func {self.name.lexeme!r}>")
 
 
 @dataclass
@@ -426,12 +477,11 @@ class NativeFunc(Value):
                 f"Built-in function '{self.name}' requires {self.arity} arguments, but got {len(args)}",
             )
 
-        return self.callback(
-            NativeContext(interpreter=ctx.interpreter, token=ctx.token), *args
-        )
+        return self.callback(ctx, *args)
 
-    def __str__(self) -> str:
-        return f"<built-in func {self.name!r}>"
+    @special_method("repr", 0)
+    def repr(self, ctx: NativeContext) -> StrValue:
+        return StrValue(f"<built-in func {self.name!r}>")
 
 
 @dataclass
@@ -466,8 +516,11 @@ class VersionValue(Value):
     def neg(self, ctx: NativeContext) -> Value:
         return self._handle_constraint(NullValue(), "-")
 
-    def __str__(self) -> str:
-        return f"v{self.major}{f'.{self.minor}' if isinstance(self.minor, NumValue) else ''}{f'.{self.micro}' if isinstance(self.micro, NumValue) else ''}"
+    @special_method("repr", 0)
+    def repr(self, ctx: NativeContext) -> StrValue:
+        return StrValue(
+            f"v{self.major}{f'.{self.minor}' if isinstance(self.minor, NumValue) else ''}{f'.{self.micro}' if isinstance(self.micro, NumValue) else ''}"
+        )
 
 
 @dataclass
@@ -476,5 +529,8 @@ class VersionConstraintValue(Value):
     right: VersionValue
     constraint: str
 
-    def __str__(self) -> str:
-        return f"{self.left if isinstance(self.left, VersionValue) else ''}{self.constraint}{self.right}"
+    @special_method("repr", 0)
+    def repr(self, ctx: NativeContext) -> StrValue:
+        return StrValue(
+            f"{self.left if isinstance(self.left, VersionValue) else ''}{self.constraint}{self.right}"
+        )

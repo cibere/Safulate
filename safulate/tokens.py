@@ -52,6 +52,10 @@ class TokenType(Enum):
     REQ = "REQ"
     AT = "AT"
     RAISE = "RAISE"
+    FOR = "FOR"
+    IN = "in"
+    NOT = "NOT"
+    DEL = "DEL"
 
 
 @dataclass

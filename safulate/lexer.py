@@ -29,27 +29,31 @@ class Lexer:
         "+": TokenType.PLUS,
         "-": TokenType.MINUS,
         "*": TokenType.STAR,
-        "**": TokenType.STARSTAR,
         "/": TokenType.SLASH,
         "=": TokenType.EQ,
-        "==": TokenType.EQEQ,
-        "!=": TokenType.NEQ,
         "<": TokenType.LESS,
         ">": TokenType.GRTR,
-        "<=": TokenType.LESSEQ,
-        ">=": TokenType.GRTREQ,
         ";": TokenType.SEMI,
-        "+=": TokenType.PLUSEQ,
-        "-=": TokenType.MINUSEQ,
-        "*=": TokenType.STAREQ,
-        "**=": TokenType.STARSTAREQ,
-        "/=": TokenType.SLASHEQ,
         ",": TokenType.COMMA,
         ".": TokenType.DOT,
         "~": TokenType.TILDE,
         "@": TokenType.AT,
+        "!": TokenType.NOT,
     }
-
+    bisymbol_tokens: ClassVar[dict[str, TokenType]] = {
+        "**": TokenType.STARSTAR,
+        "==": TokenType.EQEQ,
+        "!=": TokenType.NEQ,
+        "<=": TokenType.LESSEQ,
+        ">=": TokenType.GRTREQ,
+        "+=": TokenType.PLUSEQ,
+        "-=": TokenType.MINUSEQ,
+        "*=": TokenType.STAREQ,
+        "/=": TokenType.SLASHEQ,
+    }
+    trisymbol_tokens: ClassVar[dict[str, TokenType]] = {
+        "**=": TokenType.STARSTAREQ,
+    }
     keyword_tokens: ClassVar[dict[str, TokenType]] = {
         "var": TokenType.VAR,
         "func": TokenType.FUNC,
@@ -63,6 +67,9 @@ class Lexer:
         "spec": TokenType.SPEC,
         "req": TokenType.REQ,
         "raise": TokenType.RAISE,
+        "for": TokenType.FOR,
+        "in": TokenType.IN,
+        "del": TokenType.DEL,
     }
 
     def __init__(self, source: str) -> None:
@@ -82,8 +89,10 @@ class Lexer:
             self.add_token(TokenType.EOF)
             return False
 
-        ret_type = None
+        # ret_type = None
         char = self.source[self.start : self.current + 1]
+
+        # print(f"{char=}, {self.source[self.start:self.current + 3]}")
 
         match char:
             case (
@@ -110,6 +119,22 @@ class Lexer:
                     raise SafulateSyntaxError("Unterminated string")
                 self.current += 1
                 self.add_token(TokenType.STR)
+            case _ as x if tok := self.trisymbol_tokens.get(
+                self.source[self.start : self.current + 3]
+            ):
+                self.current += 3
+                self.add_token(tok)
+                # print(f"tri token added. {self.source[self.start:self.current + 3]!r} - {self.tokens[-1]!r}")
+            case _ as x if tok := self.bisymbol_tokens.get(
+                self.source[self.start : self.current + 2]
+            ):
+                self.current += 2
+                self.add_token(tok)
+                # print(f"bi token added. {self.source[self.start:self.current + 2]!r} - {self.tokens[-1]!r}")
+            case _ as x if tok := self.symbol_tokens.get(x):
+                self.current += 1
+                self.add_token(tok)
+                # print(f"mono token added. {self.source[self.start:self.current + 1]!r} - {self.tokens[-1]!r}")
             case "v" if self.source[self.current + 1].isdigit():
                 self.current += 1
                 temp = [""]
@@ -174,21 +199,24 @@ class Lexer:
                     self.current -= 1
                 self.add_token(TokenType.NUM)
             case _:
-                while self.current < len(self.source):
-                    char = self.source[self.start : self.current + 1]
-                    for lexeme, type in self.symbol_tokens.items():
-                        if char == lexeme:
-                            ret_type = type
-                            break
-                    else:
-                        break
-                    self.current += 1
-                if ret_type is None:
-                    self.current += 1
-                    raise SafulateSyntaxError(
-                        f"Unknown character {self.source[self.start]!r}"
-                    )
-                self.add_token(ret_type)
+                raise SafulateSyntaxError(
+                    f"Unknown character {self.source[self.start]!r}"
+                )
+                # while self.current < len(self.source):
+                #     char = self.source[self.start : self.current + 1]
+                #     for lexeme, type in self.symbol_tokens.items():
+                #         if char == lexeme:
+                #             ret_type = type
+                #             break
+                #     else:
+                #         break
+                #     self.current += 1
+                # if ret_type is None:
+                #     self.current += 1
+                #     raise SafulateSyntaxError(
+                #         f"Unknown character {self.source[self.start]!r}"
+                #     )
+                # self.add_token(ret_type)
         return True
 
     def tokenize(self) -> list[Token]:

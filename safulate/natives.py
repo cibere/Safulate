@@ -56,7 +56,7 @@ def print_privates(ctx: NativeContext, obj: Value) -> Value:
 
 @native_func("print_specs", 1)
 def print_specs(ctx: NativeContext, obj: Value) -> Value:
-    print(obj.special_attrs.keys())
+    print(obj.specs.keys())
     return NullValue()
 
 

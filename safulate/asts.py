@@ -15,7 +15,9 @@ __all__ = (
     "ASTBlock",
     "ASTBreak",
     "ASTCall",
+    "ASTDel",
     "ASTExprStmt",
+    "ASTForLoop",
     "ASTFuncDecl",
     "ASTIf",
     "ASTImportReq",
@@ -239,6 +241,24 @@ class ASTRaise(ASTNode):
         return visitor.visit_raise(self)
 
 
+@dataclass
+class ASTForLoop(ASTNode):
+    var_name: Token
+    source: ASTNode
+    body: ASTNode
+
+    def accept(self, visitor: ASTVisitor) -> Value:
+        return visitor.visit_for_loop(self)
+
+
+@dataclass
+class ASTDel(ASTNode):
+    var: Token
+
+    def accept(self, visitor: ASTVisitor) -> Value:
+        return visitor.visit_del(self)
+
+
 class ASTVisitor(ABC):
     @abstractmethod
     def visit_program(self, node: ASTProgram) -> Value: ...
@@ -284,3 +304,7 @@ class ASTVisitor(ABC):
     def visit_version_req(self, node: ASTVersionReq) -> Value: ...
     @abstractmethod
     def visit_raise(self, node: ASTRaise) -> Value: ...
+    @abstractmethod
+    def visit_for_loop(self, node: ASTForLoop) -> Value: ...
+    @abstractmethod
+    def visit_del(self, node: ASTDel) -> Value: ...

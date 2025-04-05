@@ -13,7 +13,9 @@ if TYPE_CHECKING:
 
 __all__ = (
     "ErrorManager",
+    "SafulateBreakoutError",
     "SafulateError",
+    "SafulateInvalidReturn",
     "SafulateNameError",
     "SafulateSyntaxError",
     "SafulateTypeError",
@@ -126,3 +128,17 @@ class SafulateVersionConflict(SafulateError):
 
 class SafulateTypeError(SafulateError):
     pass
+
+
+class SafulateInvalidReturn(SafulateError):
+    def __init__(self, value: Value, token: Token = MockToken()) -> None:
+        self.value = value
+
+        super().__init__("Return used outside of function", token)
+
+
+class SafulateBreakoutError(SafulateError):
+    def __init__(self, amount: int, token: Token = MockToken()) -> None:
+        self.amount = amount
+
+        super().__init__("No more loops to break out of", token)

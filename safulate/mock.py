@@ -28,9 +28,15 @@ def _premade(msg: str) -> Callable[[], MockObject]:
 
 
 if TYPE_CHECKING:
+    from .native_context import NativeContext
     from .tokens import Token
 
     class MockToken(Token):
         def __init__(self) -> None: ...
+
+    class MockNativeContext(NativeContext):
+        def __init__(self) -> None: ...
+
 else:
     MockToken = _premade("Token was not provided to error")
+    MockNativeContext = _premade("native context was not provided")

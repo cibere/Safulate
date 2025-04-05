@@ -48,7 +48,7 @@ class Environment:
                 value.parent = self.scope
 
             if name.startswith("%"):
-                self.scope.special_attrs[name.removeprefix("%")] = value
+                self.scope.specs[name.removeprefix("%")] = value
                 return
             if name.startswith("$"):
                 self.scope.private_attrs[name] = value

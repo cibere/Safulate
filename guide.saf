@@ -1,0 +1,212 @@
+##### blocks #####
+{
+    # this is a plain block. blocks can be useful for manipulating scope
+}
+
+# example #1:
+var x = 5;
+{
+    x = 10;
+    print(x); # prints 10
+}
+print(x); # prints 10
+
+# example #2:
+var x = 5;
+{
+    var x = 10;
+    print(x); # prints 10
+}
+print(x); # prints 5
+
+# in the following examples, blocks will be utilized for keeping the scopes between examples seperate.
+# because this example was not in a scope, we will now delete the variables made to create a fresh start
+del x;
+
+##### safulate version constraints
+# req v1; # require safulate v1.x.x
+# req v1.1; # require safulate v1.1.x
+# req v1.1.1; # require safulate v1.1.1
+# req +v1; # require safulate v1 or above
+# req -v1; # require safulate v1 or below
+# req v1 - v5; # require any safulate version from v1.x.x to v5.x.x
+
+##### importing #####
+{
+    req test; # import the builtin 'test' package under the 'test' var
+    req hello @ test; # import the builtin 'test' package under the 'hello' var
+    # req hello @ "url"; # *coming soon*: import the file from the url under the 'hello' var
+}
+
+##### variables #####
+{
+    var x; # declare a var named 'x' in current scope
+    x = "test"; # assign a value for the 'x' var
+    var y = "test"; # declare a var and set a value in current scope
+}
+
+##### operations #####
+{
+    var x = 5;
+    var y = 10;
+
+    x + y;  # add
+    x - y;  # subtract
+    x / y;  # divide
+    x * y;  # multiply
+    x ** y; # power
+    -x; # unary negative
+    +x; # unary positive
+    x == y; # equality
+    x != y; # inequality
+    x > y; # check if x is greater than y
+    x < y; # check if y is greater than x
+    x >= y; # check if x is greater than or equal to y
+    x <= y; # check if y is greater than or equal to x
+}
+
+##### functions #####
+{
+    print(); # call function
+    print("arg1", "arg2"); # call function with args
+
+    # define function
+    func func_name(args){
+        print(args);
+    }
+    func_name("test"); # prints 'test'
+
+    # you can also use the 'return' keyword to return values
+    func test(){
+        return 5;
+    }
+    print(test()); # prints '5'
+}
+
+##### if statement #####
+{
+    # you can wrap the expr in parens or choose not to
+    if 5 == 5 {
+        print("This is true");
+    }
+    if (5 == 5) {
+        print("This also runs");
+    }
+
+    ##### while loops
+    # like if statements. the expression can be put in parens if desired
+    # while 5 == 5 {
+    #     print("this will never end");
+    # }
+}
+
+##### for loops #####
+{
+    # you don't have to declare the var used in the loops, that is done for you behind the scenes.
+    var abc = "abcdefg";
+    for y in abc {
+        print(y); # prints each character from the `abc` var on a new line
+    }
+}
+
+##### break #####
+{
+    # the break statement can be used with any loop to escape it
+
+    while 5 == 5 {
+        print("1");
+        break;
+        print("2");
+    }
+    # this code only prints '1'.
+
+    # the break keyword also accepts a number arg that lets you break out of multiple loops at the same time
+    while 1 {
+        print("outer started");
+        while 1 {
+            print("middle started");
+            while 1{
+                print("inner started");
+                break 3;
+                print("inner ended");
+            }
+            print("middle ended");
+        }
+        print("outer ended");
+    }
+    # this prints the following text: "outer started", "middle started", "innter started"
+
+    # you can also pass `0` into the break keyword to remove its affectiveness
+    while 1 {
+        print("hi");
+        break 0;
+    }
+    # this will infinitely print 'hi'
+}
+
+##### custom objects #####
+{
+    var x = object(); # you can create a new object via the `object` func
+    # you can't edit attributes directly, but you can enter the object editing mode via a scoped block
+
+    # syntax: obj ~ {block}
+    x ~ {
+        var test = "world";
+    }
+    print(x.test); # prints "world"
+
+    ## you can also make methods. The parent of the method is exposed in the method via a `parent` var
+    x ~ {
+        func foo(){
+            print(parent.test);
+        }
+    }
+    x.foo(); # prints "world" from "x.test"
+}
+
+##### private attributes #####
+{
+    # when you access an attribute, you are only able to look up public attributes.
+    # objects can have private attributes that are denoted by starting with the '$' character.
+    # however they are only exposed in methods and while in a scoped block for the object.
+    # private attributes are defined with the `priv` keyword instead of the `var` keyword
+    # example:
+
+    var x = object();
+    x ~ {
+        priv test = "world";
+        print($test); # prints "world"
+
+        func foo(){
+            # unlike public attributes where you have to do `parent.attr`, private attributes are directly exposed
+            print($test);
+        }
+    }
+    x.foo(); # prints "world"
+}
+
+##### specs #####
+{
+    # every operation between objects internally call a special function called a spec.
+    # in an operation, the spec function of the object on the left value decides how the operation works.
+    # specs can be defined like a function, but using the `spec` keyword in a scoped block.
+
+    var x = object();
+    x ~ {
+        spec add(other){
+            return 5;
+        }
+    }
+
+    print(x + "test"); # prints '5' due to the 'add' spec defined in 'x'
+
+    # normally, specs can't be called directly, and are stored in a completely different spot than public and private attrs, and are never exposed to you.
+    # however, every object comes with a private method called "get_specs" that gives you a container object that contains all of the specs on the object, and that way they can be called directly.
+    # example:
+
+    x ~ {
+        var specs = $get_specs();
+    }
+    var value = x.specs.add("booya");
+    print(value); # prints "5" from the add spec in "x"
+}

@@ -10,7 +10,9 @@ from .asts import (
     ASTBlock,
     ASTBreak,
     ASTCall,
+    ASTDel,
     ASTExprStmt,
+    ASTForLoop,
     ASTFuncDecl,
     ASTIf,
     ASTImportReq,
@@ -211,28 +213,37 @@ class Parser:
     def stmt(self) -> ASTNode:
         if self.check(TokenType.LBRC):
             return self.block()
-        if self.match(TokenType.IF):
+        elif self.match(TokenType.IF):
             condition = self.expr()
             body = self.block()
             else_branch = None
             if self.match(TokenType.ELSE):
                 else_branch = self.block()
             return ASTIf(condition, body, else_branch)
-        if self.match(TokenType.WHILE):
+        elif self.match(TokenType.WHILE):
             condition = self.expr()
             body = self.block()
             return ASTWhile(condition, body)
-        if kwd := self.match(TokenType.RETURN):
+        elif self.match(TokenType.FOR):
+            var = self.consume(
+                TokenType.ID, "Expected name of variable for loop iteration"
+            )
+            self.consume(TokenType.IN, "Expected 'in'")
+            src = self.expr()
+            body = self.block()
+
+            return ASTForLoop(var_name=var, source=src, body=body)
+        elif kwd := self.match(TokenType.RETURN):
             expr = None
             if not self.check(TokenType.SEMI):
                 expr = self.expr()
             self.consume(TokenType.SEMI, "Expected ';'")
             return ASTReturn(kwd, expr)
-        if kwd := self.match(TokenType.BREAK):
+        elif kwd := self.match(TokenType.BREAK):
             expr = None if self.check(TokenType.SEMI) else self.expr()
             self.consume(TokenType.SEMI, "Expected ';'")
             return ASTBreak(kwd, expr)
-        if kwd := self.match(TokenType.REQ):
+        elif kwd := self.match(TokenType.REQ):
             if not self.check(TokenType.ID):
                 token = self.peek()
                 version = self.expr()
@@ -257,10 +268,14 @@ class Parser:
 
             self.consume(TokenType.SEMI, "Expected ';'")
             return ASTImportReq(name=name, source=source)
-        if kwd := self.match(TokenType.RAISE):
+        elif kwd := self.match(TokenType.RAISE):
             expr = self.expr()
             self.consume(TokenType.SEMI, "Expected ';'")
             return ASTRaise(expr, kwd)
+        elif kwd := self.match(TokenType.DEL):
+            var = self.consume(TokenType.ID, "Expected ID for deletion")
+            self.consume(TokenType.SEMI, "Expected ';'")
+            return ASTDel(var)
 
         expr = self.expr()
         self.consume(TokenType.SEMI, "Expected ';'")
@@ -321,7 +336,7 @@ class Parser:
                 )
             case TokenType.SLASHEQ:
                 value = ASTBinary(
-                    ASTAtom(name), Token(TokenType.SLASHEQ, op.lexeme, op.start), value
+                    ASTAtom(name), Token(TokenType.SLASH, op.lexeme, op.start), value
                 )
             case _:
                 pass
