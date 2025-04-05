@@ -109,10 +109,11 @@ class Lexer:
                 ):
                     self.current += 1
                 return True
-            case '"':
+            case '"' | "'" | "`" as enclosing_char:
                 self.current += 1
                 while (
-                    self.current < len(self.source) and self.source[self.current] != '"'
+                    self.current < len(self.source)
+                    and self.source[self.current] != enclosing_char
                 ):
                     self.current += 1
                 if self.current >= len(self.source):
