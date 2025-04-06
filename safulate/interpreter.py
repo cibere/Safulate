@@ -46,7 +46,6 @@ from .errors import (
     SafulateVersionConflict,
 )
 from .lib_exporter import LibraryExporter
-from .libs.builtins import exporter as builtins
 from .native_context import NativeContext
 from .tokens import TokenType
 from .values import (
@@ -72,10 +71,13 @@ libs_path = Path(__file__).parent / "libs"
 class TreeWalker(ASTVisitor):
     __slots__ = ("env",)
 
-    def __init__(self) -> None:
+    def __init__(self, *, env: Environment | None = None) -> None:
         self.version = Version("v0.0.1")
-        self.env = Environment()
-        self.env.values.update(builtins.exports)
+
+        if env:
+            self.env = env
+        else:
+            self.env = Environment().add_builtins()
 
     @contextmanager
     def scope(self, source: Value | None = None) -> Iterator[Environment]:
