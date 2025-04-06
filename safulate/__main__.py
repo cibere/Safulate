@@ -47,6 +47,9 @@ def repl() -> None:
     try:
         while True:
             code = input("\033[34m>>>\033[0m ")
+            if code == "quit":
+                return
+
             try:
                 value = run_code(code, args, env=env)
                 if not isinstance(value, NullValue):
