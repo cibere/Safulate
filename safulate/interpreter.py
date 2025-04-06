@@ -54,6 +54,7 @@ from .values import (
     NativeFunc,
     NullValue,
     NumValue,
+    ObjectValue,
     StrValue,
     Value,
     VersionConstraintValue,
@@ -69,10 +70,11 @@ libs_path = Path(__file__).parent / "libs"
 
 
 class TreeWalker(ASTVisitor):
-    __slots__ = ("env",)
+    __slots__ = ("env", "import_cache")
 
     def __init__(self, *, env: Environment | None = None) -> None:
         self.version = Version("v0.0.1")
+        self.import_cache: dict[str, ObjectValue] = {}
 
         if env:
             self.env = env
@@ -333,6 +335,10 @@ class TreeWalker(ASTVisitor):
             return NullValue()
 
     def visit_import_req(self, node: ASTImportReq) -> Value:
+        cached_value = self.import_cache.get(node.source.lexeme)
+        if cached_value:
+            return cached_value
+
         with ErrorManager(token=node.source):
             value = None
 
@@ -361,6 +367,7 @@ class TreeWalker(ASTVisitor):
 
             self.env.declare(node.name)
             self.env[node.name] = value
+            self.import_cache[node.name.lexeme] = value
             return value
 
     def visit_raise(self, node: ASTRaise) -> Value:
