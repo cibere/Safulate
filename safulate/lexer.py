@@ -20,58 +20,67 @@ class Lexer:
         "tokens",
     )
     symbol_tokens: ClassVar[dict[str, TokenType]] = {
-        "(": TokenType.LPAR,
-        ")": TokenType.RPAR,
-        "[": TokenType.LSQB,
-        "]": TokenType.RSQB,
-        "{": TokenType.LBRC,
-        "}": TokenType.RBRC,
-        "+": TokenType.PLUS,
-        "-": TokenType.MINUS,
-        "*": TokenType.STAR,
-        "/": TokenType.SLASH,
-        "=": TokenType.EQ,
-        "<": TokenType.LESS,
-        ">": TokenType.GRTR,
-        ";": TokenType.SEMI,
-        ",": TokenType.COMMA,
-        ".": TokenType.DOT,
-        "~": TokenType.TILDE,
-        "@": TokenType.AT,
-        "!": TokenType.NOT,
-        "&": TokenType.AND,
-        "|": TokenType.OR,
+        sym.value: sym
+        for sym in (
+            TokenType.LPAR,
+            TokenType.RPAR,
+            TokenType.LSQB,
+            TokenType.RSQB,
+            TokenType.LBRC,
+            TokenType.RBRC,
+            TokenType.PLUS,
+            TokenType.MINUS,
+            TokenType.STAR,
+            TokenType.SLASH,
+            TokenType.EQ,
+            TokenType.LESS,
+            TokenType.GRTR,
+            TokenType.SEMI,
+            TokenType.COMMA,
+            TokenType.DOT,
+            TokenType.TILDE,
+            TokenType.AT,
+            TokenType.NOT,
+            TokenType.AND,
+            TokenType.OR,
+        )
     }
     bisymbol_tokens: ClassVar[dict[str, TokenType]] = {
-        "**": TokenType.STARSTAR,
-        "==": TokenType.EQEQ,
-        "!=": TokenType.NEQ,
-        "<=": TokenType.LESSEQ,
-        ">=": TokenType.GRTREQ,
-        "+=": TokenType.PLUSEQ,
-        "-=": TokenType.MINUSEQ,
-        "*=": TokenType.STAREQ,
-        "/=": TokenType.SLASHEQ,
+        sym.value: sym
+        for sym in (
+            TokenType.STARSTAR,
+            TokenType.EQEQ,
+            TokenType.NEQ,
+            TokenType.LESSEQ,
+            TokenType.GRTREQ,
+            TokenType.PLUSEQ,
+            TokenType.MINUSEQ,
+            TokenType.STAREQ,
+            TokenType.SLASHEQ,
+        )
     }
     trisymbol_tokens: ClassVar[dict[str, TokenType]] = {
-        "**=": TokenType.STARSTAREQ,
+        sym.value: sym for sym in (TokenType.STARSTAREQ,)
     }
     keyword_tokens: ClassVar[dict[str, TokenType]] = {
-        "var": TokenType.VAR,
-        "func": TokenType.FUNC,
-        "null": TokenType.NULL,
-        "return": TokenType.RETURN,
-        "if": TokenType.IF,
-        "else": TokenType.ELSE,
-        "while": TokenType.WHILE,
-        "break": TokenType.BREAK,
-        "priv": TokenType.PRIV,
-        "spec": TokenType.SPEC,
-        "req": TokenType.REQ,
-        "raise": TokenType.RAISE,
-        "for": TokenType.FOR,
-        "in": TokenType.IN,
-        "del": TokenType.DEL,
+        sym.value: sym
+        for sym in (
+            TokenType.VAR,
+            TokenType.FUNC,
+            TokenType.NULL,
+            TokenType.RETURN,
+            TokenType.IF,
+            TokenType.ELSE,
+            TokenType.WHILE,
+            TokenType.BREAK,
+            TokenType.PRIV,
+            TokenType.SPEC,
+            TokenType.REQ,
+            TokenType.RAISE,
+            TokenType.FOR,
+            TokenType.IN,
+            TokenType.DEL,
+        )
     }
 
     def __init__(self, source: str) -> None:
