@@ -136,8 +136,11 @@ class Value(ABC):
         raise SafulateValueError("Equality is not defined for this type")
 
     @special_method("neq")
-    def neq(self, ctx: NativeContext, _other: Value) -> Value:
-        raise SafulateValueError("Non-equality is not defined for this type")
+    def neq(self, ctx: NativeContext, other: Value) -> Value:
+        val = self.specs["eq"].call(ctx, other)
+        if not isinstance(val, NumValue):
+            raise SafulateValueError(f"equality spec returned {val!r}, expected number")
+        return NumValue(not val.value)
 
     @special_method("less")
     def less(self, ctx: NativeContext, _other: Value) -> Value:
@@ -157,6 +160,10 @@ class Value(ABC):
             "Greater than or equal to is not defined for this type"
         )
 
+    @special_method("bool")
+    def bool(self, ctx: NativeContext) -> Value:
+        return NumValue(1)
+
     @special_method("call")
     def call(self, ctx: NativeContext, *args: Value) -> Value:
         raise SafulateValueError("Cannot call this type")
@@ -173,32 +180,39 @@ class Value(ABC):
     def str(self, ctx: NativeContext) -> Value:
         return self.specs["repr"].call(ctx)
 
+    @final
     def truthy(self) -> bool:
-        return True
+        return self.bool_spec()
 
     @final
     def __str__(self) -> str:
         return self.str_spec()
 
-    def repr_spec(self, ctx: NativeContext = MockNativeContext()) -> str:
-        func = self.specs["repr"]
+    def run_spec[T: Value](
+        self, spec_name: str, return_value: type[T], ctx: NativeContext
+    ) -> T:
+        func = self.specs[spec_name]
         value = func.call(ctx)
-        if not isinstance(value, StrValue):
+        if not isinstance(value, return_value):
             raise SafulateValueError(
-                f"expected return for 'repr' is str, not {value!r}", ctx.token
+                f"expected return for {spec_name!r} is str, not {value!r}", ctx.token
             )
 
-        return value.value
+        return value
+
+    def repr_spec(self, ctx: NativeContext = MockNativeContext()) -> str:
+        return self.run_spec("repr", StrValue, ctx).value
 
     def str_spec(self, ctx: NativeContext = MockNativeContext()) -> str:
-        func = self.specs["str"]
-        value = func.call(ctx)
-        if not isinstance(value, StrValue):
-            raise SafulateValueError(
-                f"expected return for 'str' is str, not {value!r}", ctx.token
-            )
+        return self.run_spec("str", StrValue, ctx).value
 
-        return value.value
+    def bool_spec(self, ctx: NativeContext = MockNativeContext()) -> bool:
+        val = self.run_spec("bool", NumValue, ctx)
+        if int(val.value) not in (1, 0):
+            raise SafulateValueError(
+                f"expected return for bool spec to be 1 or 0, got {val!r} instead"
+            )
+        return bool(val.value)
 
 
 @dataclass
@@ -225,12 +239,17 @@ class ObjValue(Value):
 
 
 class NullValue(Value):
-    def truthy(self) -> bool:
-        return False
-
     @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
         return StrValue("null")
+
+    @special_method("eq")
+    def eq(self, ctx: NativeContext, other: Value) -> Value:
+        return NumValue(isinstance(other, NullValue))
+
+    @special_method("bool")
+    def bool(self, ctx: NativeContext) -> Value:
+        return NumValue(0)
 
 
 @dataclass
@@ -333,8 +352,9 @@ class NumValue(Value):
 
         return NumValue(self.value >= other.value)
 
-    def truthy(self) -> bool:
-        return self.value != 0
+    @special_method("bool")
+    def bool(self, ctx: NativeContext) -> NumValue:
+        return NumValue(int(self.value != 0))
 
     @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
@@ -371,8 +391,9 @@ class StrValue(Value):
     def iter(self, ctx: NativeContext) -> ListValue:
         return ListValue([StrValue(char) for char in self.value])
 
-    def truthy(self) -> bool:
-        return len(self.value) != 0
+    @special_method("bool")
+    def bool(self, ctx: NativeContext) -> NumValue:
+        return NumValue(int(len(self.value) != 0))
 
     @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
@@ -381,6 +402,10 @@ class StrValue(Value):
     @special_method("str")
     def str(self, ctx: NativeContext) -> StrValue:
         return StrValue(self.value)
+
+    @special_method("eq")
+    def eq(self, ctx: NativeContext, other: Value) -> Value:
+        return NumValue(isinstance(other, StrValue) and other.value == self.value)
 
 
 @dataclass
@@ -406,8 +431,9 @@ class ListValue(Value):
 
         return self.value.pop(int(index.value))
 
-    def truthy(self) -> bool:
-        return len(self.value) != 0
+    @special_method("bool")
+    def bool(self, ctx: NativeContext) -> NumValue:
+        return NumValue(int(len(self.value) != 0))
 
     @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
