@@ -296,7 +296,6 @@ class Parser:
         return self.assign()
 
     def assign(self) -> ASTNode:
-        # print(f"Assign: {self.peek()} - {self.peek_next()}")
         if not (
             self.check(TokenType.ID)
             and self.check_next(
@@ -313,9 +312,6 @@ class Parser:
         name = self.advance()  # We know it's the right type b/c of check above
         op = self.advance()
         value = self.assign()
-        # print(f"{name=}")
-        # print(f"{op=}")
-        # print(f"{value=}")
 
         match op.type:
             case TokenType.PLUSEQ:

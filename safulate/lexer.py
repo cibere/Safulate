@@ -91,10 +91,7 @@ class Lexer:
             self.add_token(TokenType.EOF)
             return False
 
-        # ret_type = None
         char = self.source[self.start : self.current + 1]
-
-        # print(f"{char=}, {self.source[self.start:self.current + 3]}")
 
         match char:
             case (
@@ -127,17 +124,14 @@ class Lexer:
             ):
                 self.current += 3
                 self.add_token(tok)
-                # print(f"tri token added. {self.source[self.start:self.current + 3]!r} - {self.tokens[-1]!r}")
             case _ as x if tok := self.bisymbol_tokens.get(
                 self.source[self.start : self.current + 2]
             ):
                 self.current += 2
                 self.add_token(tok)
-                # print(f"bi token added. {self.source[self.start:self.current + 2]!r} - {self.tokens[-1]!r}")
             case _ as x if tok := self.symbol_tokens.get(x):
                 self.current += 1
                 self.add_token(tok)
-                # print(f"mono token added. {self.source[self.start:self.current + 1]!r} - {self.tokens[-1]!r}")
             case "v" if self.source[self.current + 1].isdigit():
                 self.current += 1
                 temp = [""]
