@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Concatenate
 
-from .values import ContainerValue, NativeFunc, Value
+from .values import NativeFunc, ObjectValue, Value
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -38,5 +38,5 @@ class LibraryExporter:
 
     __call__ = export
 
-    def to_container(self) -> ContainerValue:
-        return ContainerValue(self.name, self.exports)
+    def to_container(self) -> ObjectValue:
+        return ObjectValue(self.name, self.exports)

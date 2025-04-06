@@ -101,7 +101,7 @@ class Value(ABC):
 
     @private_method("$get_specs")
     def get_specs(self, ctx: NativeContext) -> Value:
-        return ContainerValue(f"{self}'s specs", self.specs.copy())
+        return ObjectValue(f"{self}'s specs", self.specs.copy())
 
     @special_method("add")
     def add(self, ctx: NativeContext, _other: Value) -> Value:
@@ -235,26 +235,16 @@ class Value(ABC):
 
 
 @dataclass
-class ContainerValue(Value):
+class ObjectValue(Value):
     name: str
-    attrs: dict[str, Value]
+    attrs: dict[str, Value] = _field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.public_attrs.update(self.attrs)
 
     @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
-        return StrValue(f"<Container {self.name!r}>")
-
-
-class ObjValue(Value):
-    def __init__(self, token: Token) -> None:
-        self.token = token
-        super().__init__()
-
-    @special_method("repr")
-    def repr(self, ctx: NativeContext) -> StrValue:
-        return StrValue(f"<Custom Object @{self.token.start}>")
+        return StrValue(f"<{self.name}>")
 
 
 class NullValue(Value):

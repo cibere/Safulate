@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from typing import Never
 
-from safulate import (
+from safulate.init import (
     LibraryExporter,
     ListValue,
     NativeContext,
     NullValue,
-    ObjValue,
+    ObjectValue,
     SafulateAssertionError,
+    SafulateTypeError,
+    StrValue,
     Value,
 )
 
@@ -54,8 +56,18 @@ def print_specs(ctx: NativeContext, obj: Value) -> Value:
 
 
 @exporter("object")
-def create_object(ctx: NativeContext) -> Value:
-    return ObjValue(ctx.token)
+def create_object(ctx: NativeContext, name: Value = NullValue()) -> Value:
+    match name:
+        case StrValue():
+            obj_name = name.value
+        case NullValue():
+            obj_name = f"Custom Object @ {ctx.token.start}"
+        case _ as x:
+            raise SafulateTypeError(
+                f"Expected str or null for object name, received {x.repr_spec(ctx)} instead"
+            )
+
+    return ObjectValue(obj_name)
 
 
 @exporter("assert")

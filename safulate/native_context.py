@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from .values import ContainerValue, ListValue, NullValue, NumValue, StrValue, Value
+from .values import ListValue, NullValue, NumValue, ObjectValue, StrValue, Value
 
 if TYPE_CHECKING:
     from .interpreter import TreeWalker
@@ -22,7 +22,7 @@ class NativeContext:
 
         match obj:
             case dict() as obj:
-                return ContainerValue(
+                return ObjectValue(
                     "json-dict",
                     {key: self.python_to_values(value) for key, value in obj.items()},  # pyright: ignore[reportUnknownVariableType]
                 )
@@ -37,7 +37,7 @@ class NativeContext:
 
     def value_to_python(self, obj: Value) -> Any:
         match obj:
-            case ContainerValue():
+            case ObjectValue():
                 return {
                     key: self.value_to_python(value) for key, value in obj.attrs.items()
                 }
