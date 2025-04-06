@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any, Self
 
 from .errors import SafulateNameError
-from .libs.builtins import exporter as builtins
 from .tokens import Token
 from .values import FuncValue, NullValue, Value
 
@@ -24,6 +23,8 @@ class Environment:
             self.values = scope.public_attrs
 
     def add_builtins(self) -> Self:
+        from .libs.builtins import exporter as builtins
+
         self.values.update(builtins.exports)
         return self
 
