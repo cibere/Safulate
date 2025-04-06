@@ -37,6 +37,11 @@ ignore = [
     "ANN401", # https://docs.astral.sh/ruff/rules/any-type/
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"safulate/__init__.py" = [
+    "F403" # https://docs.astral.sh/ruff/rules/undefined-local-with-import-star/
+]
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"

@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Never
+from typing import Never
 
-from safulate.errors import SafulateAssertionError
-from safulate.lib_exporter import LibraryExporter
-from safulate.values import ListValue, NullValue, ObjValue, Value
-
-if TYPE_CHECKING:
-    from safulate.native_context import NativeContext
-
+from safulate import (
+    LibraryExporter,
+    ListValue,
+    NativeContext,
+    NullValue,
+    ObjValue,
+    SafulateAssertionError,
+    Value,
+)
 
 exporter = LibraryExporter("builtins")
 

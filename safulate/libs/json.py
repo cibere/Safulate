@@ -1,17 +1,14 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
 
-from safulate.lib_exporter import LibraryExporter
-from safulate.values import (
+from safulate import (
+    LibraryExporter,
+    NativeContext,
     NumValue,
     StrValue,
     Value,
 )
-
-if TYPE_CHECKING:
-    from safulate.native_context import NativeContext
 
 exporter = LibraryExporter("json")
 

@@ -1,18 +1,14 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import yaml
 
-from safulate.lib_exporter import LibraryExporter
-from safulate.values import (
+from safulate import (
+    LibraryExporter,
+    NativeContext,
     NumValue,
     StrValue,
     Value,
 )
-
-if TYPE_CHECKING:
-    from safulate.native_context import NativeContext
 
 exporter = LibraryExporter("yaml")
 
