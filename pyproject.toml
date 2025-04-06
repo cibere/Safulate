@@ -38,7 +38,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"safulate/__init__.py" = [
+"safulate/init.py" = [
     "F403" # https://docs.astral.sh/ruff/rules/undefined-local-with-import-star/
 ]
 
