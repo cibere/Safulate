@@ -39,6 +39,8 @@ class Lexer:
         "~": TokenType.TILDE,
         "@": TokenType.AT,
         "!": TokenType.NOT,
+        "&": TokenType.AND,
+        "|": TokenType.OR,
     }
     bisymbol_tokens: ClassVar[dict[str, TokenType]] = {
         "**": TokenType.STARSTAR,

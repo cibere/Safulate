@@ -227,6 +227,8 @@ class TreeWalker(ASTVisitor):
             TokenType.GRTR: "grtr",
             TokenType.LESSEQ: "lesseq",
             TokenType.GRTREQ: "grtreq",
+            TokenType.AND: "and",
+            TokenType.OR: "or",
         }.get(node.op.type)
         if spec_name is None:
             raise ValueError(

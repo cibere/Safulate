@@ -160,6 +160,16 @@ class Value(ABC):
             "Greater than or equal to is not defined for this type"
         )
 
+    @special_method("and")
+    def and_(self, ctx: NativeContext, other: Value) -> Value:
+        return NumValue(int(self.bool_spec(ctx) and other.bool_spec(ctx)))
+
+    @special_method("or")
+    def or_(self, ctx: NativeContext, other: Value) -> Value:
+        if self.bool_spec(ctx):
+            return self
+        return other
+
     @special_method("bool")
     def bool(self, ctx: NativeContext) -> Value:
         return NumValue(1)

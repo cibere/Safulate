@@ -349,6 +349,8 @@ class Parser:
             TokenType.GRTR,
             TokenType.LESSEQ,
             TokenType.GRTREQ,
+            TokenType.AND,
+            TokenType.OR,
         )
 
     def equality(self) -> ASTNode:
@@ -361,7 +363,7 @@ class Parser:
         return self.binary_op(self.unary, TokenType.STAR, TokenType.SLASH)
 
     def unary(self) -> ASTNode:
-        op = self.match(TokenType.PLUS, TokenType.MINUS)
+        op = self.match(TokenType.PLUS, TokenType.MINUS, TokenType.NOT)
         if not op:
             return self.power()
 

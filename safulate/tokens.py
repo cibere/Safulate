@@ -56,6 +56,8 @@ class TokenType(Enum):
     IN = "in"
     NOT = "NOT"
     DEL = "DEL"
+    AND = "AND"
+    OR = "OR"
 
 
 @dataclass
