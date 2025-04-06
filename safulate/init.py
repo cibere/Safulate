@@ -1,3 +1,5 @@
+# for some reason python doesn't like when this is named __init__.py
+
 from .environment import *
 from .errors import *
 from .interpreter import *

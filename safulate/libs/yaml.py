@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import yaml
 
-from safulate import (
+from safulate.init import (
     LibraryExporter,
     NativeContext,
     NumValue,
