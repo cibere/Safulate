@@ -3,6 +3,7 @@ import sys
 import msgspec
 
 from .cli import CliOptions, parse_cli_args
+from .environment import Environment
 from .errors import SafulateError
 from .interpreter import TreeWalker
 from .lexer import Lexer
@@ -14,7 +15,7 @@ REPL_GREETING = "\033[34;1mTest v0.0.0\033[0m"
 encoder = msgspec.json.Encoder(enc_hook=lambda c: repr(c))
 
 
-def run_code(source: str, opts: CliOptions) -> Value:
+def run_code(source: str, opts: CliOptions, *, env: Environment | None = None) -> Value:
     lexer = Lexer(source)
     parser = Parser()
 
@@ -27,7 +28,7 @@ def run_code(source: str, opts: CliOptions) -> Value:
         if opts.ast:
             print(ast)
             quit(1)
-        return ast.accept(TreeWalker())
+        return ast.accept(TreeWalker(env=env))
     except SafulateError as error:
         error.print_report(source)
         raise
@@ -41,11 +42,13 @@ def run_file(args: CliOptions) -> None:
 def repl() -> None:
     print(REPL_GREETING)
 
+    env = Environment().add_builtins()
+
     try:
         while True:
             code = input("\033[34m>>>\033[0m ")
             try:
-                value = run_code(code, args)
+                value = run_code(code, args, env=env)
                 if not isinstance(value, NullValue):
                     print(value)
             except SafulateError:
