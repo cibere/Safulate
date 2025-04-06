@@ -244,9 +244,11 @@ class TreeWalker(ASTVisitor):
     def visit_unary(self, node: ASTUnary) -> Value:
         right = node.right.accept(self)
 
-        spec_name = {TokenType.PLUS: "uadd", TokenType.MINUS: "neg"}.get(
-            node.op.type, None
-        )
+        spec_name = {
+            TokenType.PLUS: "uadd",
+            TokenType.MINUS: "neg",
+            TokenType.NOT: "not",
+        }.get(node.op.type, None)
         if spec_name is None:
             raise ValueError(
                 f"Invalid token type {node.op.type.name} for unary operator"

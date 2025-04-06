@@ -166,9 +166,11 @@ class Value(ABC):
 
     @special_method("or")
     def or_(self, ctx: NativeContext, other: Value) -> Value:
-        if self.bool_spec(ctx):
-            return self
-        return other
+        return self if self.bool_spec(ctx) else other
+
+    @special_method("not")
+    def not_(self, ctx: NativeContext) -> Value:
+        return NumValue(0) if self.bool_spec(ctx) else NumValue(1)
 
     @special_method("bool")
     def bool(self, ctx: NativeContext) -> Value:
