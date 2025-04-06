@@ -78,7 +78,7 @@ class Lexer:
             TokenType.REQ,
             TokenType.RAISE,
             TokenType.FOR,
-            TokenType.IN,
+            TokenType.CONTAINS,
             TokenType.DEL,
         )
     }

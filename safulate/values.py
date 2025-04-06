@@ -142,6 +142,13 @@ class Value(ABC):
             raise SafulateValueError(f"equality spec returned {val!r}, expected number")
         return NumValue(not val.value)
 
+    @special_method("contains")
+    def contains(self, ctx: NativeContext, other: Value) -> Value:
+        val = self.specs["iter"].call(ctx)
+        if not isinstance(val, ListValue):
+            raise SafulateValueError(f"iter spec returned {val!r}, expected list")
+        return NumValue(other in val.value)
+
     @special_method("less")
     def less(self, ctx: NativeContext, _other: Value) -> Value:
         raise SafulateValueError("Less than is not defined for this type")

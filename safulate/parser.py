@@ -228,7 +228,9 @@ class Parser:
             var = self.consume(
                 TokenType.ID, "Expected name of variable for loop iteration"
             )
-            self.consume(TokenType.IN, "Expected 'in'")
+            in_token = self.consume(TokenType.ID, "Expected 'in'")
+            if in_token.lexeme != "in":
+                raise SafulateSyntaxError("Expected 'in'")
             src = self.expr()
             body = self.block()
 
@@ -347,6 +349,7 @@ class Parser:
             TokenType.GRTREQ,
             TokenType.AND,
             TokenType.OR,
+            TokenType.CONTAINS,
         )
 
     def equality(self) -> ASTNode:

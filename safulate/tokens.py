@@ -65,7 +65,7 @@ class TokenType(Enum):
     DEL = "del"
     RAISE = "raise"
     FOR = "for"
-    IN = "in"
+    CONTAINS = "contains"
 
 
 @dataclass
