@@ -23,6 +23,7 @@ from .asts import (
     ASTReturn,
     ASTScopedBlock,
     ASTSpecDecl,
+    ASTTryCatch,
     ASTUnary,
     ASTVarDecl,
     ASTVersion,
@@ -125,6 +126,18 @@ class Parser:
             raise SafulateSyntaxError(msg, t)
 
         return t
+
+    def match_soft_kw(self, kw: str) -> Token | None:
+        tok = self.peek()
+        if tok.type is TokenType.ID and tok.lexeme == kw:
+            return self.advance()
+
+    def consume_soft_kw(self, kw: str, msg: str) -> Token:
+        tok = self.match_soft_kw(kw)
+        if tok is None:
+            raise SafulateSyntaxError(msg)
+
+        return tok
 
     def binary_op(self, next_prec: Callable[[], ASTNode], *types: TokenType) -> ASTNode:
         left = next_prec()
@@ -278,6 +291,27 @@ class Parser:
             var = self.consume(TokenType.ID, "Expected ID for deletion")
             self.consume(TokenType.SEMI, "Expected ';'")
             return ASTDel(var)
+        elif kwd := self.match(TokenType.TRY):
+            body = self.block()
+
+            catch_branch = None
+            error_var = None
+            if self.match_soft_kw("catch"):
+                if self.match_soft_kw("as"):
+                    error_var = self.consume(
+                        TokenType.ID, "Expected variable name after 'catch as'"
+                    )
+                catch_branch = self.block()
+
+            else_branch = None
+            if self.match(TokenType.ELSE):
+                else_branch = self.block()
+            return ASTTryCatch(
+                body=body,
+                catch_branch=catch_branch,
+                error_var=error_var,
+                else_branch=else_branch,
+            )
 
         expr = self.expr()
         self.consume(TokenType.SEMI, "Expected ';'")

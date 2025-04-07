@@ -27,6 +27,7 @@ from .asts import (
     ASTReturn,
     ASTScopedBlock,
     ASTSpecDecl,
+    ASTTryCatch,
     ASTUnary,
     ASTVarDecl,
     ASTVersion,
@@ -376,3 +377,22 @@ class TreeWalker(ASTVisitor):
     def visit_del(self, node: ASTDel) -> Value:
         del self.env.values[node.var.lexeme]
         return NullValue()
+
+    def visit_try_catch(self, node: ASTTryCatch) -> Value:
+        try:
+            node.body.accept(self)
+        except SafulateError as e:
+            if node.catch_branch is None:
+                return NullValue()
+
+            with self.scope() as env:
+                if node.error_var:
+                    env.declare(node.error_var)
+                    env[node.error_var] = e.obj
+
+                return self._visit_block_unscoped(node.catch_branch)
+
+        if node.else_branch is None:
+            return NullValue()
+
+        return self._visit_block_unscoped(node.else_branch)

@@ -73,6 +73,7 @@ class ErrorManager:
 class SafulateError(BaseException):
     def __init__(self, obj: str | Value, token: Token = MockToken()) -> None:
         self.message = str(obj)
+        self.obj = obj
         self.token = token
 
         super().__init__(self.message)

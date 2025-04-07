@@ -80,6 +80,7 @@ class Lexer:
             TokenType.FOR,
             TokenType.CONTAINS,
             TokenType.DEL,
+            TokenType.TRY,
         )
     }
 
@@ -103,11 +104,7 @@ class Lexer:
         char = self.source[self.start : self.current + 1]
 
         match char:
-            case (
-                " "
-                | "\t"
-                | "\n"
-            ):
+            case " " | "\t" | "\n":
                 self.current += 1
                 return True
             case "#":

@@ -28,6 +28,7 @@ __all__ = (
     "ASTReturn",
     "ASTScopedBlock",
     "ASTSpecDecl",
+    "ASTTryCatch",
     "ASTUnary",
     "ASTVarDecl",
     "ASTVersion",
@@ -259,6 +260,17 @@ class ASTDel(ASTNode):
         return visitor.visit_del(self)
 
 
+@dataclass
+class ASTTryCatch(ASTNode):
+    body: ASTBlock
+    catch_branch: ASTBlock | None
+    error_var: Token | None
+    else_branch: ASTBlock | None
+
+    def accept(self, visitor: ASTVisitor) -> Value:
+        return visitor.visit_try_catch(self)
+
+
 class ASTVisitor(ABC):
     @abstractmethod
     def visit_program(self, node: ASTProgram) -> Value: ...
@@ -308,3 +320,5 @@ class ASTVisitor(ABC):
     def visit_for_loop(self, node: ASTForLoop) -> Value: ...
     @abstractmethod
     def visit_del(self, node: ASTDel) -> Value: ...
+    @abstractmethod
+    def visit_try_catch(self, node: ASTTryCatch) -> Value: ...

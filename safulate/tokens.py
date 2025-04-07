@@ -66,6 +66,7 @@ class TokenType(Enum):
     RAISE = "raise"
     FOR = "for"
     CONTAINS = "contains"
+    TRY = "try"
 
 
 @dataclass
