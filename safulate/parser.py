@@ -23,6 +23,7 @@ from .asts import (
     ASTReturn,
     ASTScopedBlock,
     ASTSpecDecl,
+    ASTSwitchCase,
     ASTTryCatch,
     ASTUnary,
     ASTVarDecl,
@@ -311,6 +312,28 @@ class Parser:
                 catch_branch=catch_branch,
                 error_var=error_var,
                 else_branch=else_branch,
+            )
+        elif kwd := self.match(TokenType.SWITCH):
+            switch_expr = self.expr()
+            self.consume(TokenType.LBRC, "Expected '{'")
+            cases: list[tuple[ASTNode, ASTBlock]] = []
+
+            while 1:
+                if not self.match_soft_kw("case"):
+                    break
+
+                cases.append((self.expr(), self.block()))
+
+            if len(cases) == 0:
+                raise SafulateSyntaxError("Switch/Case requires at least 1 case", kwd)
+
+            else_branch = None
+            if self.match(TokenType.ELSE):
+                else_branch = self.block()
+
+            self.consume(TokenType.RBRC, "Expected '}'")
+            return ASTSwitchCase(
+                cases=cases, expr=switch_expr, else_branch=else_branch, kw=kwd
             )
 
         expr = self.expr()

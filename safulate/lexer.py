@@ -81,6 +81,7 @@ class Lexer:
             TokenType.CONTAINS,
             TokenType.DEL,
             TokenType.TRY,
+            TokenType.SWITCH,
         )
     }
 

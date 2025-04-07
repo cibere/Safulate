@@ -27,6 +27,7 @@ from .asts import (
     ASTReturn,
     ASTScopedBlock,
     ASTSpecDecl,
+    ASTSwitchCase,
     ASTTryCatch,
     ASTUnary,
     ASTVarDecl,
@@ -395,4 +396,18 @@ class TreeWalker(ASTVisitor):
         if node.else_branch is None:
             return NullValue()
 
-        return self._visit_block_unscoped(node.else_branch)
+        return node.else_branch.accept(self)
+
+    def visit_switch_case(self, node: ASTSwitchCase) -> Value:
+        key = node.expr.accept(self)
+        block: ASTBlock | None = node.else_branch
+
+        for expr, body in node.cases:
+            res = key.specs["eq"].call(NativeContext(self, node.kw), expr.accept(self))
+            if isinstance(res, NumValue) and res.value == 1:
+                block = body
+                break
+
+        if block is None:
+            return NullValue()
+        return block.accept(self)

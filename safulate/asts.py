@@ -28,6 +28,7 @@ __all__ = (
     "ASTReturn",
     "ASTScopedBlock",
     "ASTSpecDecl",
+    "ASTSwitchCase",
     "ASTTryCatch",
     "ASTUnary",
     "ASTVarDecl",
@@ -271,6 +272,17 @@ class ASTTryCatch(ASTNode):
         return visitor.visit_try_catch(self)
 
 
+@dataclass
+class ASTSwitchCase(ASTNode):
+    cases: list[tuple[ASTNode, ASTBlock]]
+    else_branch: ASTBlock | None
+    expr: ASTNode
+    kw: Token
+
+    def accept(self, visitor: ASTVisitor) -> Value:
+        return visitor.visit_switch_case(self)
+
+
 class ASTVisitor(ABC):
     @abstractmethod
     def visit_program(self, node: ASTProgram) -> Value: ...
@@ -322,3 +334,5 @@ class ASTVisitor(ABC):
     def visit_del(self, node: ASTDel) -> Value: ...
     @abstractmethod
     def visit_try_catch(self, node: ASTTryCatch) -> Value: ...
+    @abstractmethod
+    def visit_switch_case(self, node: ASTSwitchCase) -> Value: ...
