@@ -207,6 +207,9 @@ class Value(ABC):
     def __str__(self) -> str:
         return self.str_spec()
 
+    def __repr__(self) -> str:
+        return self.repr_spec()
+
     def run_spec[T: Value](
         self, spec_name: str, return_value: type[T], ctx: NativeContext
     ) -> T:
