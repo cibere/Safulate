@@ -2,9 +2,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from .errors import SafulateTypeError
 from .values import ListValue, NullValue, NumValue, ObjectValue, StrValue, Value
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from .environment import Environment
     from .interpreter import TreeWalker
     from .tokens import Token
 
@@ -15,6 +19,21 @@ class NativeContext:
     def __init__(self, interpreter: TreeWalker, token: Token) -> None:
         self.interpreter = interpreter
         self.token = token
+
+    @property
+    def env(self) -> Environment:
+        return self.interpreter.env
+
+    def walk_envs(self) -> Iterator[Environment]:
+        env: Environment | None = self.env
+
+        while 1:
+            if env:
+                yield env
+            else:
+                break
+
+            env = env.parent
 
     def python_to_values(self, obj: Any) -> Value:
         if obj is None:
@@ -33,19 +52,51 @@ class NativeContext:
             case int() | float():
                 return NumValue(float(obj))
             case _ as x:
-                raise ValueError(f"Unable to convert {x!r} to value")
+                raise SafulateTypeError(f"Unable to convert {x!r} to value")
 
-    def value_to_python(self, obj: Value) -> Any:
+    def value_to_python(
+        self,
+        obj: Value,
+        *,
+        repr_fallback: bool = False,
+        ignore_null_attrs: bool = False,
+    ) -> Any:
         match obj:
             case ObjectValue():
                 return {
-                    key: self.value_to_python(value) for key, value in obj.attrs.items()
+                    key: value
+                    for key, raw_value in obj.attrs.items()
+                    if (
+                        (
+                            value := self.value_to_python(
+                                raw_value, repr_fallback=repr_fallback
+                            )
+                        )
+                        is not None
+                        and ignore_null_attrs is True
+                    )
+                    or ignore_null_attrs is False
                 }
             case ListValue():
-                return [self.value_to_python(child) for child in obj.value]
+                return [
+                    value
+                    for child in obj.value
+                    if (
+                        (
+                            value := self.value_to_python(
+                                child, repr_fallback=repr_fallback
+                            )
+                        )
+                        is not None
+                        and ignore_null_attrs is True
+                    )
+                    or ignore_null_attrs is False
+                ]
             case StrValue() | NumValue():
                 return obj.value
             case NullValue():
                 return None
+            case _ as x if repr_fallback:
+                return x.repr_spec()
             case _ as x:
-                raise ValueError(f"Unable to convert {x!r} to value")
+                raise SafulateTypeError(f"Unable to convert {x.repr_spec()} to value")
