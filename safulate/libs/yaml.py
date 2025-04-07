@@ -3,14 +3,14 @@ from __future__ import annotations
 import yaml
 
 from safulate import (
-    LibraryExporter,
+    Exporter,
     NativeContext,
     NumValue,
     StrValue,
     Value,
 )
 
-exporter = LibraryExporter("yaml")
+exporter = Exporter("yaml")
 
 
 @exporter("load")

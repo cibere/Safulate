@@ -45,7 +45,7 @@ from .errors import (
     SafulateValueError,
     SafulateVersionConflict,
 )
-from .lib_exporter import LibraryExporter
+from .exporter import Exporter
 from .native_context import NativeContext
 from .tokens import TokenType
 from .values import (
@@ -352,7 +352,7 @@ class TreeWalker(ASTVisitor):
                             raise SafulateImportError(
                                 "Module does not have an exporter"
                             )
-                        if not isinstance(exporter, LibraryExporter):
+                        if not isinstance(exporter, Exporter):
                             raise RuntimeError("Module does not have a valid exporter")
                         value = exporter.to_container()
                 case TokenType.STR:

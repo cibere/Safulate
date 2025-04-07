@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Never
 
 from safulate import (
-    LibraryExporter,
+    Exporter,
     ListValue,
     NativeContext,
     NullValue,
@@ -14,7 +14,7 @@ from safulate import (
     Value,
 )
 
-exporter = LibraryExporter("builtins")
+exporter = Exporter("builtins")
 
 
 @exporter("print")

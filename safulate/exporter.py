@@ -9,10 +9,10 @@ if TYPE_CHECKING:
 
     from .native_context import NativeContext
 
-__all__ = ("LibraryExporter",)
+__all__ = ("Exporter",)
 
 
-class LibraryExporter:
+class Exporter:
     def __init__(self, name: str) -> None:
         self.name = name
         self.exports: dict[str, Value] = {}

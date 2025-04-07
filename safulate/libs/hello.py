@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from safulate import LibraryExporter, StrValue
+from safulate import Exporter, StrValue
 
-exporter = LibraryExporter("builtins")
+exporter = Exporter("builtins")
 exporter["hello"] = StrValue("world")

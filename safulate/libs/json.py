@@ -3,14 +3,14 @@ from __future__ import annotations
 import json
 
 from safulate import (
-    LibraryExporter,
+    Exporter,
     NativeContext,
     NumValue,
     StrValue,
     Value,
 )
 
-exporter = LibraryExporter("json")
+exporter = Exporter("json")
 
 
 @exporter("load")
