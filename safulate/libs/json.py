@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from safulate.init import (
+from safulate import (
     LibraryExporter,
     NativeContext,
     NumValue,

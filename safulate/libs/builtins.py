@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Never
 
-from safulate.init import (
+from safulate import (
     LibraryExporter,
     ListValue,
     NativeContext,
