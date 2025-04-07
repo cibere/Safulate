@@ -106,7 +106,7 @@ class Lexer:
             case (
                 " "
                 | "\t"
-                | "\n"  # NOTE: Not sure if you want \n to be part of this list
+                | "\n"
             ):
                 self.current += 1
                 return True
@@ -124,6 +124,7 @@ class Lexer:
                     and self.source[self.current] != enclosing_char
                 ):
                     self.current += 1
+
                 if self.current >= len(self.source):
                     raise SafulateSyntaxError("Unterminated string")
                 self.current += 1
@@ -208,21 +209,6 @@ class Lexer:
                 raise SafulateSyntaxError(
                     f"Unknown character {self.source[self.start]!r}"
                 )
-                # while self.current < len(self.source):
-                #     char = self.source[self.start : self.current + 1]
-                #     for lexeme, type in self.symbol_tokens.items():
-                #         if char == lexeme:
-                #             ret_type = type
-                #             break
-                #     else:
-                #         break
-                #     self.current += 1
-                # if ret_type is None:
-                #     self.current += 1
-                #     raise SafulateSyntaxError(
-                #         f"Unknown character {self.source[self.start]!r}"
-                #     )
-                # self.add_token(ret_type)
         return True
 
     def tokenize(self) -> list[Token]:
