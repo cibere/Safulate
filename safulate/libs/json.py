@@ -1,28 +1,3 @@
-from __future__ import annotations
+from safulate.libs._msgspec_wrapper import make_exporter
 
-import json
-
-from safulate import (
-    Exporter,
-    NativeContext,
-    NumValue,
-    StrValue,
-    Value,
-)
-
-exporter = Exporter("json")
-
-
-@exporter("load")
-def load_json(ctx: NativeContext, content: StrValue) -> Value:
-    data = json.loads(content.value)
-    return ctx.python_to_values(data)
-
-
-@exporter("dump")
-def dump_json(
-    ctx: NativeContext, content: Value, indent: NumValue = NumValue(2.0)
-) -> StrValue:
-    return StrValue(
-        json.dumps(ctx.value_to_python(content), indent=int(indent.value))
-    )  # seems to be returning the repr of the dumped content for some reason``
+exporter = make_exporter("json")

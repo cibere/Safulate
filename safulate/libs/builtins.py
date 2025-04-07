@@ -33,26 +33,14 @@ def list_(_: NativeContext, *values: Value) -> ListValue:
     return ListValue(list(values))
 
 
-@exporter("print_globals")
-def print_globals(ctx: NativeContext) -> Value:
-    env = ctx.interpreter.env
-    while env.parent is not None:
-        env = env.parent
-
-    print(env.values.keys())
-    return NullValue()
+@exporter("globals")
+def get_globals(ctx: NativeContext) -> Value:
+    return ObjectValue("globals", list(ctx.walk_envs())[-1].values)
 
 
-@exporter("print_privates")
-def print_privates(ctx: NativeContext, obj: Value) -> Value:
-    print(obj.private_attrs.keys())
-    return NullValue()
-
-
-@exporter("print_specs")
-def print_specs(ctx: NativeContext, obj: Value) -> Value:
-    print(obj.specs.keys())
-    return NullValue()
+@exporter("locals")
+def get_locals(ctx: NativeContext) -> Value:
+    return ObjectValue("locals", next(ctx.walk_envs()).values)
 
 
 @exporter("object")
