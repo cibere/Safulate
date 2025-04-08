@@ -16,6 +16,7 @@ __all__ = (
     "SafulateAssertionError",
     "SafulateBreakoutError",
     "SafulateError",
+    "SafulateInvalidContinue",
     "SafulateInvalidReturn",
     "SafulateNameError",
     "SafulateSyntaxError",
@@ -144,11 +145,37 @@ class SafulateInvalidReturn(SafulateError):
         super().__init__("Return used outside of function", token)
 
 
+class SafulateInvalidContinue(SafulateError):
+    def __init__(self, amount: int, token: Token = MockToken()) -> None:
+        self.amount = amount
+
+        super().__init__("Continue used in a context where it isn't allowed", token)
+
+    def handle_skips[T](self, loops: list[T]) -> T | None:
+        next_loop = None
+
+        while self.amount != 0:
+            try:
+                next_loop = loops.pop(0)
+            except IndexError:
+                return
+            self.amount -= 1
+
+        if next_loop:
+            loops.insert(0, next_loop)
+        return next_loop
+
+
 class SafulateBreakoutError(SafulateError):
     def __init__(self, amount: int, token: Token = MockToken()) -> None:
         self.amount = amount
 
         super().__init__("No more loops to break out of", token)
+
+    def check(self) -> None:
+        self.amount -= 1
+        if self.amount != 0:
+            raise self from None
 
 
 class SafulateAssertionError(SafulateError):

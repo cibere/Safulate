@@ -15,12 +15,14 @@ from .asts import (
     ASTBlock,
     ASTBreak,
     ASTCall,
+    ASTContinue,
     ASTDel,
     ASTExprStmt,
     ASTForLoop,
     ASTFuncDecl,
     ASTIf,
     ASTImportReq,
+    ASTNode,
     ASTPrivDecl,
     ASTProgram,
     ASTRaise,
@@ -42,6 +44,7 @@ from .errors import (
     SafulateBreakoutError,
     SafulateError,
     SafulateImportError,
+    SafulateInvalidContinue,
     SafulateInvalidReturn,
     SafulateTypeError,
     SafulateValueError,
@@ -130,10 +133,10 @@ class TreeWalker(ASTVisitor):
             try:
                 node.body.accept(self)
             except SafulateBreakoutError as e:
-                e.amount -= 1
-                if e.amount != 0:
-                    raise e
+                e.check()
                 break
+            except SafulateInvalidContinue:
+                pass
 
         return NullValue()
 
@@ -147,11 +150,20 @@ class TreeWalker(ASTVisitor):
                 if not isinstance(src, ListValue):
                     raise SafulateValueError(f"{src!r} is not iterable")
 
-        for item in src.value:
-            with self.scope() as env:
-                env.declare(node.var_name)
-                env[node.var_name] = item
-                node.body.accept(self)
+        loops = src.value.copy()
+        while loops:
+            item = loops.pop(0)
+
+            try:
+                with self.scope() as env:
+                    env.declare(node.var_name)
+                    env[node.var_name] = item
+                    node.body.accept(self)
+            except SafulateInvalidContinue as e:
+                e.handle_skips(loops)
+            except SafulateBreakoutError as e:
+                e.check()
+                break
 
         return NullValue()
 
@@ -162,7 +174,9 @@ class TreeWalker(ASTVisitor):
 
         raise SafulateInvalidReturn(NullValue(), node.keyword)
 
-    def visit_break(self, node: ASTBreak) -> Value:
+    def _visit_continue_and_break(self, node: ASTBreak | ASTContinue) -> Value:
+        is_break = isinstance(node, ASTBreak)
+
         with ErrorManager(token=node.keyword):
             if node.amount is None:
                 amount = 1
@@ -170,18 +184,29 @@ class TreeWalker(ASTVisitor):
                 amount_node = node.amount.accept(self)
                 if not isinstance(amount_node, NumValue):
                     raise SafulateTypeError(
-                        f"Expected a number for break amount, got {amount_node!r} instead.",
+                        f"Expected a number for {'break' if is_break else 'continue'} amount, got {amount_node!r} instead.",
                     )
                 amount = int(amount_node.value)
 
             if amount == 0:
                 return NullValue()
             elif amount < 0:
-                raise SafulateValueError(
+                msg = (
                     "You can't breakout of a negative number of loops"
+                    if is_break
+                    else "You can't skip a negative number of loops"
                 )
+                raise SafulateValueError(msg)
 
-            raise SafulateBreakoutError(amount)
+            if is_break:
+                raise SafulateBreakoutError(amount)
+            raise SafulateInvalidContinue(amount)
+
+    def visit_break(self, node: ASTBreak) -> Value:
+        return self._visit_continue_and_break(node)
+
+    def visit_continue(self, node: ASTContinue) -> Value:
+        return self._visit_continue_and_break(node)
 
     def visit_expr_stmt(self, node: ASTExprStmt) -> Value:
         value = node.expr.accept(self)
@@ -398,16 +423,32 @@ class TreeWalker(ASTVisitor):
 
         return node.else_branch.accept(self)
 
+    def _visit_switch_case_entry(
+        self, body: ASTBlock, loops: list[tuple[ASTNode, ASTBlock]]
+    ) -> Value:
+        try:
+            return body.accept(self)
+        except SafulateInvalidContinue as e:
+            next_loop = e.handle_skips(loops)
+
+            if next_loop is None:
+                return NullValue()
+            return self._visit_switch_case_entry(next_loop[-1], loops)
+
     def visit_switch_case(self, node: ASTSwitchCase) -> Value:
         key = node.expr.accept(self)
-        block: ASTBlock | None = node.else_branch
+        cases = node.cases.copy()
 
-        for expr, body in node.cases:
+        while cases:
+            expr, body = cases.pop(0)
+
             res = key.specs["eq"].call(NativeContext(self, node.kw), expr.accept(self))
-            if isinstance(res, NumValue) and res.value == 1:
-                block = body
-                break
+            if not res.bool_spec():
+                continue
 
-        if block is None:
+            self._visit_switch_case_entry(body, cases)
             return NullValue()
-        return block.accept(self)
+
+        if node.else_branch:
+            node.else_branch.accept(self)
+        return NullValue()

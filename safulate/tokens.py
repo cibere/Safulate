@@ -68,6 +68,7 @@ class TokenType(Enum):
     CONTAINS = "contains"
     TRY = "try"
     SWITCH = "switch"
+    CONTINUE = "continue"
 
 
 @dataclass

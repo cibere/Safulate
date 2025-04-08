@@ -15,6 +15,7 @@ __all__ = (
     "ASTBlock",
     "ASTBreak",
     "ASTCall",
+    "ASTContinue",
     "ASTDel",
     "ASTExprStmt",
     "ASTForLoop",
@@ -141,6 +142,15 @@ class ASTBreak(ASTNode):
 
     def accept(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_break(self)
+
+
+@dataclass
+class ASTContinue(ASTNode):
+    keyword: Token
+    amount: ASTNode | None
+
+    def accept(self, visitor: ASTVisitor) -> Value:
+        return visitor.visit_continue(self)
 
 
 @dataclass
@@ -336,3 +346,5 @@ class ASTVisitor(ABC):
     def visit_try_catch(self, node: ASTTryCatch) -> Value: ...
     @abstractmethod
     def visit_switch_case(self, node: ASTSwitchCase) -> Value: ...
+    @abstractmethod
+    def visit_continue(self, node: ASTContinue) -> Value: ...

@@ -10,6 +10,7 @@ from .asts import (
     ASTBlock,
     ASTBreak,
     ASTCall,
+    ASTContinue,
     ASTDel,
     ASTExprStmt,
     ASTForLoop,
@@ -259,6 +260,10 @@ class Parser:
             expr = None if self.check(TokenType.SEMI) else self.expr()
             self.consume(TokenType.SEMI, "Expected ';'")
             return ASTBreak(kwd, expr)
+        elif kwd := self.match(TokenType.CONTINUE):
+            expr = None if self.check(TokenType.SEMI) else self.expr()
+            self.consume(TokenType.SEMI, "Expected ';'")
+            return ASTContinue(kwd, expr)
         elif kwd := self.match(TokenType.REQ):
             if not self.check(TokenType.ID):
                 token = self.peek()
@@ -317,19 +322,23 @@ class Parser:
             switch_expr = self.expr()
             self.consume(TokenType.LBRC, "Expected '{'")
             cases: list[tuple[ASTNode, ASTBlock]] = []
+            else_branch = None
 
             while 1:
                 if not self.match_soft_kw("case"):
                     break
 
-                cases.append((self.expr(), self.block()))
+                if self.check(TokenType.LBRC):
+                    if else_branch is not None:
+                        raise SafulateSyntaxError(
+                            "A plain case has already been registered", self.peek()
+                        )
+                    else_branch = self.block()
+                else:
+                    cases.append((self.expr(), self.block()))
 
             if len(cases) == 0:
                 raise SafulateSyntaxError("Switch/Case requires at least 1 case", kwd)
-
-            else_branch = None
-            if self.match(TokenType.ELSE):
-                else_branch = self.block()
 
             self.consume(TokenType.RBRC, "Expected '}'")
             return ASTSwitchCase(
