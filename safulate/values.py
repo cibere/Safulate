@@ -380,6 +380,9 @@ class NumValue(Value):
 class StrValue(Value):
     value: str
 
+    def __post_init__(self) -> None:
+        self.value = self.value.encode("ascii").decode("unicode_escape")
+
     @special_method("add")
     def add(self, ctx: NativeContext, other: Value) -> StrValue:
         if isinstance(other, StrValue):
