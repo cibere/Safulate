@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from .tokens import TokenType
+
 if TYPE_CHECKING:
     from .lexer import Token
     from .values import Value
@@ -175,6 +177,12 @@ class ASTBinary(ASTNode):
     left: ASTNode
     op: Token
     right: ASTNode
+
+    def __post_init__(self) -> None:
+        if self.op.type is TokenType.IN:
+            self.left, self.right = self.right, self.left
+            self.op.type = TokenType.CONTAINS
+            self.op.lexeme = "contains"
 
     def accept(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_binary(self)

@@ -83,6 +83,7 @@ class Lexer:
             TokenType.TRY,
             TokenType.SWITCH,
             TokenType.CONTINUE,
+            TokenType.IN,
         )
     }
 

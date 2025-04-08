@@ -450,6 +450,10 @@ class ListValue(Value):
     def bool(self, ctx: NativeContext) -> NumValue:
         return NumValue(int(len(self.value) != 0))
 
+    @special_method("iter")
+    def iter(self, ctx: NativeContext) -> ListValue:
+        return self
+
     @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
         return StrValue(

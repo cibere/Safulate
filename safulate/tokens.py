@@ -11,6 +11,7 @@ class TokenType(Enum):
     STR = "STR"
     ID = "ID"
     NUM = "NUM"
+    VER = "VER"
 
     # trisymbols
     STARSTAREQ = "**="
@@ -60,7 +61,6 @@ class TokenType(Enum):
     ELSE = "else"
     WHILE = "while"
     BREAK = "break"
-    VER = "ver"
     REQ = "req"
     DEL = "del"
     RAISE = "raise"
@@ -69,6 +69,7 @@ class TokenType(Enum):
     TRY = "try"
     SWITCH = "switch"
     CONTINUE = "continue"
+    IN = "in"
 
 
 @dataclass

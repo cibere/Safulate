@@ -148,6 +148,7 @@ class Parser:
             op = self.match(*types)
             if op:
                 right = next_prec()
+
                 left = ASTBinary(left, op, right)
             else:
                 return left
@@ -416,6 +417,7 @@ class Parser:
             TokenType.AND,
             TokenType.OR,
             TokenType.CONTAINS,
+            TokenType.IN,
         )
 
     def equality(self) -> ASTNode:
