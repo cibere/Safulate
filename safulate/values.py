@@ -433,6 +433,176 @@ class StrValue(Value):
 
         return StrValue(val)
 
+    @public_method("capitalize")
+    def capitalize(self, ctx: NativeContext) -> Value:
+        return StrValue(self.value.capitalize())
+
+    @public_method("title")
+    def title(self, ctx: NativeContext) -> Value:
+        return StrValue(self.value.title())
+
+    @public_method("upper")
+    def upper(self, ctx: NativeContext) -> Value:
+        return StrValue(self.value.upper())
+
+    @public_method("casefold")
+    def casefold(self, ctx: NativeContext) -> Value:
+        return StrValue(self.value.casefold())
+
+    @public_method("count")
+    def count(
+        self,
+        ctx: NativeContext,
+        char: Value,
+        start: Value = NumValue(0),
+        end: Value = NumValue(-1),
+    ) -> Value:
+        if not isinstance(char, StrValue):
+            raise SafulateTypeError(
+                f"Expected str for char, received {char.repr_spec(ctx)} instead"
+            )
+        if not isinstance(start, NumValue):
+            raise SafulateTypeError(
+                f"Expected num for start, received {start.repr_spec(ctx)} instead"
+            )
+        if not isinstance(end, NumValue):
+            raise SafulateTypeError(
+                f"Expected num for end, received {end.repr_spec(ctx)} instead"
+            )
+        return NumValue(self.value.count(char.value, int(start.value), int(end.value)))
+
+    @public_method("endswith")
+    def casendswithefold(self, ctx: NativeContext, sub: Value) -> Value:
+        if not isinstance(sub, StrValue):
+            raise SafulateTypeError(
+                f"Expected str, received {sub.repr_spec(ctx)} instead"
+            )
+        return NumValue(int(self.value.endswith(sub.value)))
+
+    @public_method("index")
+    def index(self, ctx: NativeContext, sub: Value) -> Value:
+        if not isinstance(sub, StrValue):
+            raise SafulateTypeError(
+                f"Expected str, received {sub.repr_spec(ctx)} instead"
+            )
+        return NumValue(int(self.value.index(sub.value)))
+
+    @public_method("is_alnum")
+    def isalnum(self, ctx: NativeContext) -> Value:
+        return NumValue(int(self.value.isalnum()))
+
+    @public_method("is_alpha")
+    def isalpha(self, ctx: NativeContext) -> Value:
+        return NumValue(int(self.value.isalpha()))
+
+    @public_method("is_ascii")
+    def isascii(self, ctx: NativeContext) -> Value:
+        return NumValue(int(self.value.isascii()))
+
+    @public_method("is_decimal")
+    def isdecimal(self, ctx: NativeContext) -> Value:
+        return NumValue(int(self.value.isdecimal()))
+
+    @public_method("is_digit")
+    def isdigit(self, ctx: NativeContext) -> Value:
+        return NumValue(int(self.value.isdigit()))
+
+    @public_method("is_lower")
+    def islower(self, ctx: NativeContext) -> Value:
+        return NumValue(int(self.value.islower()))
+
+    @public_method("is_numeric")
+    def isnumeric(self, ctx: NativeContext) -> Value:
+        return NumValue(int(self.value.isnumeric()))
+
+    @public_method("is_space")
+    def isspace(self, ctx: NativeContext) -> Value:
+        return NumValue(int(self.value.isspace()))
+
+    @public_method("is_title")
+    def istitle(self, ctx: NativeContext) -> Value:
+        return NumValue(int(self.value.istitle()))
+
+    @public_method("is_upper")
+    def isupper(self, ctx: NativeContext) -> Value:
+        return NumValue(int(self.value.isupper()))
+
+    @public_method("lower")
+    def lower(self, ctx: NativeContext) -> Value:
+        return StrValue(self.value.lower())
+
+    @public_method("replace")
+    def replace(
+        self,
+        ctx: NativeContext,
+        before: Value,
+        after: Value,
+        count: Value = NumValue(-1),
+    ) -> Value:
+        if not isinstance(before, StrValue):
+            raise SafulateTypeError(
+                f"Expected str for before, received {before.repr_spec(ctx)} instead"
+            )
+        if not isinstance(after, StrValue):
+            raise SafulateTypeError(
+                f"Expected str for after, received {after.repr_spec(ctx)} instead"
+            )
+        if not isinstance(count, (NumValue)):
+            raise SafulateTypeError(
+                f"Expected int for cont, received {count.repr_spec(ctx)} instead"
+            )
+        return StrValue(
+            self.value.replace(before.value, after.value, count=int(count.value))
+        )
+
+    @public_method("remove_prefix")
+    def remove_prefix(self, ctx: NativeContext, prefix: Value) -> Value:
+        if not isinstance(prefix, StrValue):
+            raise SafulateTypeError(
+                f"Expected str, received {prefix.repr_spec(ctx)} instead"
+            )
+        return StrValue(self.value.removeprefix(prefix.value))
+
+    @public_method("remove_suffix")
+    def remove_suffix(self, ctx: NativeContext, suffix: Value) -> Value:
+        if not isinstance(suffix, StrValue):
+            raise SafulateTypeError(
+                f"Expected str, received {suffix.repr_spec(ctx)} instead"
+            )
+        return StrValue(self.value.removesuffix(suffix.value))
+
+    @public_method("strip")
+    def strip(self, ctx: NativeContext, sub: Value) -> Value:
+        if not isinstance(sub, StrValue):
+            raise SafulateTypeError(
+                f"Expected str, received {sub.repr_spec(ctx)} instead"
+            )
+        return StrValue(self.value.strip(sub.value))
+
+    @public_method("lstrip")
+    def lstrip(self, ctx: NativeContext, sub: Value) -> Value:
+        if not isinstance(sub, StrValue):
+            raise SafulateTypeError(
+                f"Expected str, received {sub.repr_spec(ctx)} instead"
+            )
+        return StrValue(self.value.lstrip(sub.value))
+
+    @public_method("rstrip")
+    def rstrip(self, ctx: NativeContext, sub: Value) -> Value:
+        if not isinstance(sub, StrValue):
+            raise SafulateTypeError(
+                f"Expected str, received {sub.repr_spec(ctx)} instead"
+            )
+        return StrValue(self.value.rstrip(sub.value))
+
+    @public_method("split")
+    def split(self, ctx: NativeContext, delimiter: Value) -> Value:
+        if not isinstance(delimiter, StrValue):
+            raise SafulateTypeError(
+                f"Expected str, received {delimiter.repr_spec(ctx)} instead"
+            )
+        return ListValue([StrValue(part) for part in self.value.split(delimiter.value)])
+
 
 @dataclass
 class ListValue(Value):
