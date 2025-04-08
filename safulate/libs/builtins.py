@@ -63,3 +63,8 @@ def assert_(ctx: NativeContext, obj: Value, message: Value = NullValue()) -> Val
     if not obj.truthy():
         raise SafulateAssertionError(message)
     return NullValue()
+
+
+@exporter("dir")
+def dir_(ctx: NativeContext, obj: Value) -> Value:
+    return ListValue([StrValue(attr) for attr in obj.public_attrs])
