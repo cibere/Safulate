@@ -422,6 +422,17 @@ class StrValue(Value):
     def eq(self, ctx: NativeContext, other: Value) -> Value:
         return NumValue(isinstance(other, StrValue) and other.value == self.value)
 
+    @public_method("format")
+    def format_(self, ctx: NativeContext, *args: Value) -> Value:
+        val = self.value
+        for arg in args:
+            if not isinstance(arg, StrValue):
+                raise SafulateTypeError("Format can only accept str values")
+
+            val = val.replace("{}", arg.value, 1)
+
+        return StrValue(val)
+
 
 @dataclass
 class ListValue(Value):
