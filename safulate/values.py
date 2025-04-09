@@ -282,9 +282,9 @@ class TypeValue(Value, type=ValueTypeEnum.type):
     def repr(self, ctx: NativeContext) -> StrValue:
         return StrValue(f"<type {self.enum.name}>")
 
-    @special_method("eq")
-    def eq(self, ctx: NativeContext, other: Value) -> NumValue:
-        return NumValue(int(self.enum is other.type))
+    @public_method("check")
+    def check(self, ctx: NativeContext, obj: Value) -> NumValue:
+        return NumValue(int(obj.type is self.enum))
 
 
 @dataclass(repr=False)
