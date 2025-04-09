@@ -88,7 +88,7 @@ class SafulateError(BaseException):
 
         src = source.splitlines()[line - 1]
         ws = len(src) - len(src.lstrip())
-        res = f"\033[31mFile 'files_not_implemented.test' line {line}, col {col}\n\033[36m{line:>5} | \033[0m{src.lstrip()}\n"
+        res = f"\033[31mLine {line}, col {col}\n\033[36m{line:>5} | \033[0m{src.lstrip()}\n"
         res += (
             "\033[36m  "
             + " " * max(5, len(str(line)))
