@@ -393,3 +393,20 @@ del x;
     # they don't exist.
     # use objects instead.
 }
+
+##### type comparison #####
+{
+    # objects dont have 'classes', they are just objects.
+    # however, you can check if a object is a certain builtin object.
+    # to do so, you can use the 'types' module to get the type objects that will be used to compare the types.
+
+    req types;
+
+    # for the items in the types module, the "check" method can be used. it will return a number (0 or 1) that represents whether or not the given object is that builtin object.
+
+    types.str.check("test"); # 1
+    types.num.check("test"); # 0
+    types.num.check(5); # 1
+    types.list.check(5); # 0
+    types.list.check(list("test")); # 1
+}
