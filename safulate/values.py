@@ -435,10 +435,12 @@ class StrValue(Value, type=ValueTypeEnum.str):
 
     @special_method("add")
     def add(self, ctx: NativeContext, other: Value) -> StrValue:
-        if isinstance(other, StrValue):
-            return StrValue(self.value + other.value)
+        if not isinstance(other, StrValue):
+            other = other.specs["str"].call(ctx)
+        if not isinstance(other, StrValue):
+            raise SafulateValueError(f"{other!r} could not be converted into a string")
 
-        raise SafulateValueError("Add is not defined for string and this type")
+        return StrValue(self.value + other.value)
 
     @special_method("mul")
     def mul(self, ctx: NativeContext, other: Value) -> StrValue:
