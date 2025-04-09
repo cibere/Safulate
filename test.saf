@@ -1,9 +1,0 @@
-var x = object();
-
-x ~ {
-    spec str(){
-        return "booya";
-    }
-}
-
-raise x;
