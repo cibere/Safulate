@@ -1,0 +1,11 @@
+var x = object();
+
+x ~ {
+    var name = "foo";
+
+    func print_name(){
+        print(parent.name);
+    }
+}
+
+x.print_name(); # prints "foo"
