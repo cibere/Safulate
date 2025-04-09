@@ -1,5 +1,6 @@
-from safulate.lib_exporter import LibraryExporter
-from safulate.tokens import StringToken
+from __future__ import annotations
 
-exporter = LibraryExporter("hello")
-exporter["author"] = StringToken("cibere")
+from safulate import Exporter, StrValue
+
+exporter = Exporter("builtins")
+exporter["hello"] = StrValue("world")

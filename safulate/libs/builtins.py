@@ -1,76 +1,80 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
-from safulate.tokens import (
-    NullToken,
-    StringToken,
-    ContainerToken,
-    Token,
-    ListToken,
-    IntToken,
+
+from typing import Never
+
+from safulate import (
+    Exporter,
+    ListValue,
+    NativeContext,
+    NullValue,
+    NumValue,
+    ObjectValue,
+    SafulateAssertionError,
+    SafulateTypeError,
+    StrValue,
+    TypeValue,
+    Value,
 )
-import msgspec
-import runpy
-from pathlib import Path
-from safulate.lib_exporter import LibraryExporter
 
-if TYPE_CHECKING:
-    from ..executer import Executer
-
-libs_folder = Path(__file__).parent
-
-exporter = LibraryExporter("builtins")
+exporter = Exporter("builtins")
 
 
 @exporter("print")
-def print_func(exe: Executer, content: Token) -> NullToken:
-    print(content.to_str(exe).value)
-    return NullToken()
+def print_(_: NativeContext, *args: Value) -> Value:
+    print(*[str(arg) for arg in args])
+    return NullValue()
 
 
-@exporter("_dump")
-def dump_vars(exe: Executer) -> NullToken:
-    print(
-        msgspec.json.format(
-            msgspec.json.encode(
-                {key: val for key, val in exe.variables.items()},
-                enc_hook=lambda v: repr(v),
+@exporter("quit")
+def quit_(_: NativeContext) -> Never:
+    quit(1)
+
+
+@exporter("list")
+def list_(_: NativeContext, *values: Value) -> ListValue:
+    return ListValue(list(values))
+
+
+@exporter("globals")
+def get_globals(ctx: NativeContext) -> Value:
+    return ObjectValue("globals", list(ctx.walk_envs())[-1].values)
+
+
+@exporter("locals")
+def get_locals(ctx: NativeContext) -> Value:
+    return ObjectValue("locals", next(ctx.walk_envs()).values)
+
+
+@exporter("object")
+def create_object(ctx: NativeContext, name: Value = NullValue()) -> Value:
+    match name:
+        case StrValue():
+            obj_name = name.value
+        case NullValue():
+            obj_name = f"Custom Object @ {ctx.token.start}"
+        case _ as x:
+            raise SafulateTypeError(
+                f"Expected str or null for object name, received {x.repr_spec(ctx)} instead"
             )
-        ).decode()
-    )
-    return NullToken()
 
-
-@exporter("import")
-def import_lib(exe: Executer, location: StringToken) -> ContainerToken:
-    if location.value in exe.additional_imports:
-        return exe.additional_imports[location.value]
-
-    for module in libs_folder.glob("*.py"):
-        if module.name.removesuffix(".py") == location.value:
-            globals = runpy.run_path(str(module.absolute()))
-            exporter = globals.get("exporter")
-            if exporter is None:
-                raise RuntimeError(
-                    f"Module {location.value!r} does not have an exporter"
-                )
-            if not isinstance(exporter, LibraryExporter):
-                raise RuntimeError(
-                    f"Module {location.value!r} does not have a valid exporter"
-                )
-            return exporter.to_container()
-
-    raise RuntimeError(f"Module {location.value!r} was not found")
-
-
-@exporter("dir")
-def dir_func(exe: Executer, obj: Token) -> ListToken:
-    return ListToken(
-        value=[StringToken(name) for name in obj.public_attrs.keys()],
-    )
+    return ObjectValue(name=obj_name)
 
 
 @exporter("assert")
-def assert_func(exe: Executer, value: IntToken, message: StringToken) -> NullToken:
-    if value.value == 0:
-        raise RuntimeError(f"Assertion: {message.value}")
-    return NullToken()
+def assert_(ctx: NativeContext, obj: Value, message: Value = NullValue()) -> Value:
+    if not obj.truthy():
+        raise SafulateAssertionError(message)
+    return NullValue()
+
+
+@exporter("dir")
+def dir_(ctx: NativeContext, obj: Value) -> Value:
+    return ListValue([StrValue(attr) for attr in obj.public_attrs])
+
+
+@exporter("isinstance")
+def isinstance_(ctx: NativeContext, obj: Value, type: Value) -> Value:
+    if not isinstance(type, TypeValue):
+        raise SafulateTypeError(f"Expected type, recieved {type!r} instead.")
+
+    return NumValue(int(obj.type is type.enum))

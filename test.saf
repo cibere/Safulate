@@ -1,1 +1,9 @@
-assert[5 != 5, "hi"];
+var x = object();
+
+x ~ {
+    spec str(){
+        return "booya";
+    }
+}
+
+raise x;

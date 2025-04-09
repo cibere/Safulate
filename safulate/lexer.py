@@ -1,333 +1,233 @@
-from .tokens import (
-    StringToken,
-    VariableToken,
-    GroupToken,
-    EndOfStatementToken,
-    AdditionToken,
-    EqualsToken,
-    SubtractToken,
-    Token,
-    CommaToken,
-    ListToken,
-    DictToken,
-    DictEntrySeperatorToken,
-    SetVariableToken,
-    IntToken,
-    FloatToken,
-    CreateFuncToken,
-    NotToken,
-)
-from typing import Any, overload
+from __future__ import annotations
 
-# import math
-from enum import Enum, auto as auto_enum
+from typing import ClassVar
 
-STRING_END_CHARS = ('"', "'")
+from .errors import ErrorManager, SafulateSyntaxError
+from .tokens import Token, TokenType
 
+__all__ = ("Lexer",)
 
-class Status(Enum):
-    in_string = auto_enum()
-    none = auto_enum()
-    exit_step_1 = auto_enum()
-    exit_step_2 = auto_enum()
-    in_group = auto_enum()
-
-
-class GroupType(Enum):
-    start_paren = "("
-    end_paren = ")"
-    start_list = "["
-    end_list = "]"
-    start_dict = "{"
-    end_dict = "}"
-
-
-group_type_to_cls: dict[GroupType, Any] = {
-    GroupType.start_paren: GroupToken,
-    GroupType.end_paren: GroupToken,
-    GroupType.start_list: ListToken,
-    GroupType.end_list: ListToken,
-    GroupType.start_dict: DictToken,
-    GroupType.end_dict: DictToken,
-}
-group_type_start_to_end = {
-    GroupType.start_dict: GroupType.end_dict,
-    GroupType.start_list: GroupType.end_list,
-    GroupType.start_paren: GroupType.end_paren,
-}
-group_type_end_to_start = {end: start for start, end in group_type_start_to_end.items()}
-
-special_char_tokens = {
-    ";": EndOfStatementToken,
-    "+": AdditionToken,
-    "=": EqualsToken,
-    "-": SubtractToken,
-    ",": CommaToken,
-    ":": DictEntrySeperatorToken,
-    "~": CreateFuncToken,
-    "!": NotToken,
-}
-keywords = {
-    "set": SetVariableToken,
-}
-
-_chars = "qwertyuiopasdfghjklzxcvbnm"
-variable_name_chars = _chars + _chars.upper() + "_.$"
+_querty = "qwertyuiopasdfghjklzxcvbnm"
+id_first_char_characters = f"_{_querty}{_querty.upper()}"
+id_other_char_characters = f"1234567890{id_first_char_characters}"
 
 
 class Lexer:
-    def __init__(self, code: str) -> None:
-        self.code = code
+    __slots__ = (
+        "current",
+        "source",
+        "start",
+        "tokens",
+    )
+    symbol_tokens: ClassVar[dict[str, TokenType]] = {
+        sym.value: sym
+        for sym in (
+            TokenType.LPAR,
+            TokenType.RPAR,
+            TokenType.LSQB,
+            TokenType.RSQB,
+            TokenType.LBRC,
+            TokenType.RBRC,
+            TokenType.PLUS,
+            TokenType.MINUS,
+            TokenType.STAR,
+            TokenType.SLASH,
+            TokenType.EQ,
+            TokenType.LESS,
+            TokenType.GRTR,
+            TokenType.SEMI,
+            TokenType.COMMA,
+            TokenType.DOT,
+            TokenType.TILDE,
+            TokenType.AT,
+            TokenType.NOT,
+            TokenType.AND,
+            TokenType.OR,
+        )
+    }
+    bisymbol_tokens: ClassVar[dict[str, TokenType]] = {
+        sym.value: sym
+        for sym in (
+            TokenType.STARSTAR,
+            TokenType.EQEQ,
+            TokenType.NEQ,
+            TokenType.LESSEQ,
+            TokenType.GRTREQ,
+            TokenType.PLUSEQ,
+            TokenType.MINUSEQ,
+            TokenType.STAREQ,
+            TokenType.SLASHEQ,
+        )
+    }
+    trisymbol_tokens: ClassVar[dict[str, TokenType]] = {
+        sym.value: sym for sym in (TokenType.STARSTAREQ,)
+    }
+
+    def __init__(self, source: str) -> None:
         self.tokens: list[Token] = []
-        self.temp = ""
-        self.status = Status.none
-        self.statements: list[list[Token]] = []
-        self.groups: list[tuple[str, GroupType]] = []
-        self.num_groups = 0
-        self.last_group_type = None
+        self.start = 0
+        self.current = 0
+        self.source = source
 
-    def run_isolated(self, code: str) -> list[Token]:
-        new_self = self.__class__(code)
-        new_self.start()
-        return new_self.tokens
+    def add_token(self, type: TokenType) -> None:
+        self.tokens.append(
+            Token(type, self.source[self.start : self.current], self.start)
+        )
 
-    def clear_temp(self) -> None:
-        txt = self.temp.strip()
-        if txt:
-            cls = keywords.get(txt, VariableToken)
-            if txt[0].isnumeric() and cls is VariableToken:
-                if "." in txt:
-                    try:
-                        txt = float(txt)
-                    except ValueError:
-                        raise RuntimeError(f"Invalid float: {txt!r}")
-                    cls = FloatToken
-                else:
-                    try:
-                        txt = int(txt)
-                    except ValueError:
-                        raise RuntimeError(f"Invalid int: {txt!r}")
-                    cls = IntToken
-            self.add(cls(txt))  # pyright: ignore[reportArgumentType]
-        self.temp = ""
+    def poll_char(self) -> bool:
+        self.start = self.current
+        if self.current >= len(self.source):
+            self.add_token(TokenType.EOF)
+            return False
 
-    def add(self, token: Token) -> None:
-        post_init = getattr(token, "__post_init__", lambda: None)
-        post_init()
+        char = self.source[self.start : self.current + 1]
 
-        if isinstance(token, EndOfStatementToken):
-            self.statements.append(self.tokens)
-            self.tokens = []
-        else:
-            self.tokens.append(token)
-
-    # def lex_group(
-    #     self, group_entries: list[tuple[str, GroupType] | None | GroupToken]
-    # ) -> list[Token]:
-    #     i = 1
-    #     middle = []
-    #     while any([isinstance(x, tuple) for x in group_entries]):
-    #         for idx, entry in enumerate(group_entries):
-    #             if entry is None or isinstance(entry, GroupToken):
-    #                 continue
-    #             text, group_type = entry
-    #             print(f"Handling entry {entry=}")
-
-    #             try:
-    #                 middle =group_entries[idx:idx + i]
-    #                 end = middle.pop(-1)
-    #                 if isinstance(end, tuple) and group_type == end[1]:
-    #                     group_entries[idx + i] = None
-    #                     start = self.run_isolated(text)
-    #                     end = self.run_isolated(end[0])
-    #                     resolved_middle = [token for token in middle if isinstance(token, GroupToken)]
-    #                     group_entries[idx] = GroupToken(tokens=[*start, *resolved_middle, *end])
-    #             except IndexError as e:
-    #                 print(f"{e=}")
-    #         i += 1
-
-    #     return group_entries
-
-    @overload
-    def lex_group(
-        self, group_tokens: list[tuple[str, GroupType]], *, end: GroupType
-    ) -> tuple[str, GroupType] | list[Token]: ...
-    @overload
-    def lex_group(self, group_tokens: list[tuple[str, GroupType]]) -> list[Token]: ...
-    def lex_group(
-        self, group_tokens: list[tuple[str, GroupType]], *, end: GroupType | None = None
-    ) -> list[Token] | tuple[str, GroupType]:
-        while group_tokens:
-            text, group_type = group_tokens.pop(0)
-            print(f"Lexing group: {group_type=} {text=}")
-            match group_type:
-                case (
-                    GroupType.start_dict
-                    | GroupType.start_list
-                    | GroupType.start_paren as start_type
+        match char:
+            case " " | "\t" | "\n":
+                self.current += 1
+                return True
+            case "#":
+                while (
+                    self.current < len(self.source)
+                    and self.source[self.current] != "\n"
                 ):
-                    end_type = group_type_start_to_end[start_type]
-                    print(f"is start. {end_type=}")
-                    ret = self.lex_group(group_tokens, end=end_type)
-                    print(f"{ret=}")
-                    if isinstance(ret, tuple):
-                        return self.run_isolated(text + ret[0])
-                    ret2 = self.lex_group(group_tokens, end=end_type)
-                    print(f"{ret2=}")
-                    # if
-                    return [*self.run_isolated(text), GroupToken(tokens=ret)]
-                case (
-                    GroupType.end_dict
-                    | GroupType.end_list
-                    | GroupType.end_paren as end_type
-                ) if end is not None and end_type is end:
-                    print("is end")
-                    return (
-                        text,
-                        group_type,
-                    )
-                case (
-                    GroupType.end_dict
-                    | GroupType.end_list
-                    | GroupType.end_paren as end_type
+                    self.current += 1
+                return True
+            case "f" | "F" if (idx := self.current + 1) < len(self.source) and (
+                enclosing_char := self.source[idx]
+            ) in "\"'`":
+                self.current += 2
+                start_token_added = False
+
+                while (
+                    self.current < len(self.source)
+                    and self.source[self.current] != enclosing_char
                 ):
-                    raise RuntimeError(
-                        f"{end_type!r} detected without starting version"
-                    )
-                case other:
-                    raise RuntimeError(f"How did we get here? {other=}")
-
-        return []
-
-    def start(self) -> None:
-        for line in self.code.splitlines():
-            for idx, char in enumerate(line):
-                print(f"{char=}")
-
-                match (self.status, char):
-                    # Strings
-                    case (Status.none, '"'):
-                        self.status = Status.in_string
-                        self.clear_temp()
-                    case (Status.in_string, '"'):
-                        self.add(StringToken(self.temp))
-                        self.temp = ""
-                        self.status = Status.none
-                    case (Status.in_string, char):
-                        self.temp += char
-
-                    # comments
-                    case (Status.none, "#"):
-                        break
-
-                    # groups
-                    case (Status.none, "(" | "[" | "{" as char):
-                        self.clear_temp()
-                        self.status = Status.in_group
-                        self.groups = []
-                        self.num_groups = 1
-                        self.last_group_type = GroupType(char)
-                        print(
-                            f"Setting last group to {self.last_group_type=} for char {char}"
+                    if self.source[self.current] == "\\":
+                        self.current += 2
+                    elif self.source[self.current] == "{":
+                        self.add_token(
+                            TokenType.FSTR_MIDDLE
+                            if start_token_added
+                            else TokenType.FSTR_START
                         )
-                    case (Status.in_group, "(" | "[" | "{" as char):
-                        assert self.last_group_type
-                        print(f"{self.last_group_type=}")
-                        self.groups.append((self.temp, self.last_group_type))
-                        self.temp = ""
-                        self.num_groups += 1
-                        self.last_group_type = GroupType(char)
-                    case (Status.in_group, ")" | "]" | "}" as char):
-                        group_type = GroupType(char)
+                        start_token_added = True
+                        self.current += 1
 
-                        if (
-                            self.last_group_type
-                            and group_type
-                            == group_type_start_to_end[self.last_group_type]
+                        while (
+                            self.current < len(self.source)
+                            and self.source[self.current] != "}"
                         ):
-                            self.groups.append(("", self.last_group_type))
-                            # self.num_groups -= 1
-                            self.last_group_type = None
+                            self.poll_char()
+                        self.current += 1
+                        self.start = self.current
+                    else:
+                        self.current += 1
 
-                        self.groups.append((self.temp, group_type))
-                        self.temp = ""
-                        self.num_groups -= 1
+                if self.current >= len(self.source):
+                    raise SafulateSyntaxError("Unterminated string")
+                self.current += 1
 
-                        if self.num_groups == 0:
-                            print(f"{self.groups=}")
-                            # if len(self.groups) % 2 != 0:
-                            #     code, paren_type = self.groups.pop(
-                            #         int(len(self.groups) / 2)
-                            #     )
-                            #     token = [
-                            #         group_type_to_cls[paren_type](
-                            #             tokens=self.run_isolated(code)
-                            #         )
-                            #     ]
-                            # else:
-                            #     token = []
+                if start_token_added:
+                    token_type = TokenType.FSTR_END
+                else:
+                    self.start += 1
+                    token_type = TokenType.STR
 
-                            # while self.groups:
-                            #     print(f"{self.groups=}")
-                            #     print(f"{token=}")
-                            #     num_groups = len(self.groups)
+                self.add_token(token_type)
+            case '"' | "'" | "`" as enclosing_char:
+                self.current += 1
+                while (
+                    self.current < len(self.source)
+                    and self.source[self.current] != enclosing_char
+                ):
+                    self.current += 1
 
-                            #     idx = math.ceil(num_groups / 2) - 1
-                            #     first, first_type = self.groups.pop(idx)
-                            #     second, second_type = self.groups.pop(idx)
-                            #     assert first_type is second_type, (
-                            #         f"{first_type} != {second_type} for {idx} idx"
-                            #     )
+                if self.current >= len(self.source):
+                    raise SafulateSyntaxError("Unterminated string")
+                self.current += 1
+                self.add_token(TokenType.STR)
+            case _ as x if tok := self.trisymbol_tokens.get(
+                self.source[self.start : self.current + 3]
+            ):
+                self.current += 3
+                self.add_token(tok)
+            case _ as x if tok := self.bisymbol_tokens.get(
+                self.source[self.start : self.current + 2]
+            ):
+                self.current += 2
+                self.add_token(tok)
+            case _ as x if tok := self.symbol_tokens.get(x):
+                self.current += 1
+                self.add_token(tok)
+            case "v" if self.source[self.current + 1].isdigit():
+                self.current += 1
+                temp = [""]
 
-                            #     token = [
-                            #         group_type_to_cls[first_type](
-                            #             self.run_isolated(first)
-                            #             + token
-                            #             + self.run_isolated(second)
-                            #         )
-                            #     ]
+                while self.current < len(self.source) and (
+                    self.source[self.current].isdigit()
+                    or self.source[self.current] == "."
+                ):
+                    if self.source[self.current] == ".":
+                        temp.append("")
+                    else:
+                        temp[-1] += self.source[self.current]
+                    self.current += 1
 
-                            # self.add(token[0])
-                            self.add(GroupToken(tokens=self.lex_group(self.groups)))
-                            self.groups = []
-                            self.status = Status.none
-                    case (Status.in_group, char):
-                        self.temp += char
+                if len(temp) > 3:
+                    raise SafulateSyntaxError("Version size too big")
+                if temp[-1] == "":
+                    self.start = self.current - 1
+                    raise SafulateSyntaxError("Version can not end in a dot")
 
-                    # special chars like operators
-                    case (
-                        Status.none,
-                        "-" | "+" | "=" | ";" | "," | ":" | "~" | "!" as special_char,
-                    ):
-                        self.clear_temp()
-                        self.add(special_char_tokens[special_char](special_char))
+                self.add_token(TokenType.VER)
+            case _ as x if x in id_first_char_characters or x == "$":
+                if x == "$":
+                    self.current = self.current + 1
+                    last_char = self.source[self.current]
+                    if last_char not in id_other_char_characters:
+                        raise SafulateSyntaxError("Expected ID after '$'")
+                else:
+                    last_char = x
 
-                    # no match
-                    case (_, char) if (
-                        char in variable_name_chars
-                        and not self.temp.startswith(
-                            ("1", "2", "3", "4", "5", "6", "7", "8", "9", "0")
-                        )
-                    ):
-                        self.temp += char
-                    case (_, char) if char in "1234567890":
-                        self.temp += char
-                    case (_, ".") if self.temp.isnumeric():
-                        self.temp += "."
-                    case (_, char) if char.strip():
-                        raise RuntimeError(f"Invalid Character: {char!r} as pos {idx}")
-                    case (_, char):
-                        if self.temp.strip():
-                            self.clear_temp()
+                while (
+                    self.current < len(self.source)
+                    and last_char in id_other_char_characters
+                ):
+                    char = self.source[self.start : self.current + 1]
+                    last_char = char[-1]
 
-        self.clear_temp()
+                    self.current += 1
+                if not char.isalnum():
+                    self.current -= 1
 
-        match self.status:
-            case Status.in_string:
-                raise RuntimeError("String was not closed")
-            case Status.in_group:
-                raise RuntimeError("Parens were not exited")
-            case Status.none:
+                self.add_token(TokenType.ID)
+            case _ as x if x.isdigit():
+                dot_found = False
+                while self.current < len(self.source) and (
+                    char[-1].isdigit()
+                    or (
+                        char[-1] == "."
+                        and self.source[self.current].isdigit()
+                        and not dot_found
+                    )
+                ):
+                    if char[-1] == ".":
+                        dot_found = True
+                    char = self.source[self.start : self.current + 1]
+                    self.current += 1
+                if not char[-1].isdigit():
+                    self.current -= 1
+                self.add_token(TokenType.NUM)
+            case _:
+                raise SafulateSyntaxError(
+                    f"Unknown character {self.source[self.start]!r}"
+                )
+        return True
+
+    def tokenize(self) -> list[Token]:
+        with ErrorManager(start=lambda: self.start):
+            while self.poll_char():
                 pass
-            case other:
-                raise RuntimeError(f"Status is not none: {other!r}")
+
+        return self.tokens
