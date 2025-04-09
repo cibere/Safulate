@@ -515,7 +515,7 @@ class Parser:
                 elif orig_type is TokenType.FSTR_MIDDLE:
                     node.token.lexeme = f'"{node.token.lexeme}"'
                 elif orig_type is TokenType.FSTR_START:
-                    node.token.lexeme = node.token.lexeme[1:] + node.token.lexeme[2]
+                    node.token.lexeme = node.token.lexeme[1:] + node.token.lexeme[1]
             else:
                 parts.append(self.expr())
 
