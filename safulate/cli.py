@@ -21,7 +21,7 @@ level_group = parser.add_mutually_exclusive_group()
 level_group.add_argument("--lex", action="store_true")
 level_group.add_argument("--ast", action="store_true")
 
-parser.add_argument("--python-errors", action="store_true")
+parser.add_argument("-pyers", "--python-errors", action="store_true")
 
 
 def parse_cli_args() -> CliOptions:

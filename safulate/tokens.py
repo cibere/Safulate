@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+__all__ = "Keyword", "Token", "TokenType"
+
 
 class TokenType(Enum):
     ERR = "ERR"
@@ -53,7 +55,8 @@ class TokenType(Enum):
     OR = "|"
     AT = "@"
 
-    # keywords
+
+class Keyword(Enum):
     VAR = "var"
     PRIV = "priv"
     SPEC = "spec"
@@ -73,6 +76,9 @@ class TokenType(Enum):
     SWITCH = "switch"
     CONTINUE = "continue"
     IN = "in"
+    CATCH = "catch"
+    AS = "as"
+    CASE = "case"
 
 
 @dataclass

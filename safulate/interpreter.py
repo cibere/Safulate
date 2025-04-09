@@ -52,7 +52,7 @@ from .errors import (
 )
 from .exporter import Exporter
 from .native_context import NativeContext
-from .tokens import TokenType
+from .tokens import Keyword, TokenType
 from .values import (
     FuncValue,
     ListValue,
@@ -246,22 +246,28 @@ class TreeWalker(ASTVisitor):
         left = node.left.accept(self)
         right = node.right.accept(self)
 
-        spec_name = {
-            TokenType.PLUS: "add",
-            TokenType.MINUS: "sub",
-            TokenType.STAR: "mul",
-            TokenType.STARSTAR: "pow",
-            TokenType.SLASH: "div",
-            TokenType.EQEQ: "eq",
-            TokenType.NEQ: "neq",
-            TokenType.LESS: "less",
-            TokenType.GRTR: "grtr",
-            TokenType.LESSEQ: "lesseq",
-            TokenType.GRTREQ: "grtreq",
-            TokenType.AND: "and",
-            TokenType.OR: "or",
-            TokenType.CONTAINS: "contains",
-        }.get(node.op.type)
+        if node.op.type is TokenType.ID:
+            spec_name = {
+                Keyword.IN.value: "in",
+                Keyword.CONTAINS.value: "contains",
+            }.get(node.op.lexeme)
+        else:
+            spec_name = {
+                TokenType.PLUS: "add",
+                TokenType.MINUS: "sub",
+                TokenType.STAR: "mul",
+                TokenType.STARSTAR: "pow",
+                TokenType.SLASH: "div",
+                TokenType.EQEQ: "eq",
+                TokenType.NEQ: "neq",
+                TokenType.LESS: "less",
+                TokenType.GRTR: "grtr",
+                TokenType.LESSEQ: "lesseq",
+                TokenType.GRTREQ: "grtreq",
+                TokenType.AND: "and",
+                TokenType.OR: "or",
+            }.get(node.op.type)
+
         if spec_name is None:
             raise ValueError(
                 f"Invalid token type {node.op.type.name} for binary operator"
@@ -301,10 +307,10 @@ class TreeWalker(ASTVisitor):
                 return NumValue(node.token.value)
             case TokenType.STR:
                 return StrValue(node.token.value)
+            case TokenType.ID if node.token.lexeme == Keyword.NULL.value:
+                return NullValue()
             case TokenType.ID:
                 return self.env[node.token]
-            case TokenType.NULL:
-                return NullValue()
             case _:
                 raise ValueError(f"Invalid atom type {node.token.type.name}")
 

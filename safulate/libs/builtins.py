@@ -7,10 +7,12 @@ from safulate import (
     ListValue,
     NativeContext,
     NullValue,
+    NumValue,
     ObjectValue,
     SafulateAssertionError,
     SafulateTypeError,
     StrValue,
+    TypeValue,
     Value,
 )
 
@@ -55,7 +57,7 @@ def create_object(ctx: NativeContext, name: Value = NullValue()) -> Value:
                 f"Expected str or null for object name, received {x.repr_spec(ctx)} instead"
             )
 
-    return ObjectValue(obj_name)
+    return ObjectValue(name=obj_name)
 
 
 @exporter("assert")
@@ -68,3 +70,11 @@ def assert_(ctx: NativeContext, obj: Value, message: Value = NullValue()) -> Val
 @exporter("dir")
 def dir_(ctx: NativeContext, obj: Value) -> Value:
     return ListValue([StrValue(attr) for attr in obj.public_attrs])
+
+
+@exporter("isinstance")
+def isinstance_(ctx: NativeContext, obj: Value, type: Value) -> Value:
+    if not isinstance(type, TypeValue):
+        raise SafulateTypeError(f"Expected type, recieved {type!r} instead.")
+
+    return NumValue(int(obj.type is type.enum))

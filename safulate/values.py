@@ -6,6 +6,8 @@ from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
 from dataclasses import field as _field
+from enum import Enum
+from enum import auto as _enum_auto
 from typing import TYPE_CHECKING, Any, Concatenate, cast, final
 
 from .errors import (
@@ -22,6 +24,21 @@ if TYPE_CHECKING:
     from .asts import ASTNode
     from .native_context import NativeContext
     from .tokens import Token
+
+__all__ = (
+    "FuncValue",
+    "ListValue",
+    "NativeFunc",
+    "NullValue",
+    "NumValue",
+    "ObjectValue",
+    "StrValue",
+    "TypeValue",
+    "Value",
+    "ValueTypeEnum",
+    "VersionConstraintValue",
+    "VersionValue",
+)
 
 
 def __method_deco[T: Callable[Concatenate[Any, NativeContext, ...], "Value"]](
@@ -42,6 +59,18 @@ private_method = __method_deco("$")
 special_method = __method_deco("%")
 
 
+class ValueTypeEnum(Enum):
+    str = _enum_auto()
+    obj = _enum_auto()
+    null = _enum_auto()
+    num = _enum_auto()
+    list = _enum_auto()
+    func = _enum_auto()
+    version = _enum_auto()
+    version_constraint = _enum_auto()
+    type = _enum_auto()
+
+
 class Value(ABC):
     __safulate_public_attrs__: dict[str, Value] | None = None
     __safulate_private_attrs__: dict[str, Value] | None = (
@@ -50,6 +79,10 @@ class Value(ABC):
     __safulate_specs__: dict[str, Value] | None = (
         None  # __safulate_special_method_info__
     )
+    type: ValueTypeEnum
+
+    def __init_subclass__(cls, type: ValueTypeEnum) -> None:
+        cls.type = type
 
     @cached_property
     def _attrs(self) -> defaultdict[str, dict[str, NativeFunc]]:
@@ -132,8 +165,8 @@ class Value(ABC):
         raise SafulateValueError("Unary minus is not defined for this type")
 
     @special_method("eq")
-    def eq(self, ctx: NativeContext, _other: Value) -> Value:
-        raise SafulateValueError("Equality is not defined for this type")
+    def eq(self, ctx: NativeContext, other: Value) -> Value:
+        return NumValue(int(self == other))
 
     @special_method("neq")
     def neq(self, ctx: NativeContext, other: Value) -> Value:
@@ -148,6 +181,10 @@ class Value(ABC):
         if not isinstance(val, ListValue):
             raise SafulateValueError(f"iter spec returned {val!r}, expected list")
         return NumValue(other in val.value)
+
+    @special_method("in")
+    def in_(self, ctx: NativeContext, other: Value) -> Value:
+        return other.specs["contains"].call(ctx, self)
 
     @special_method("less")
     def less(self, ctx: NativeContext, _other: Value) -> Value:
@@ -237,8 +274,21 @@ class Value(ABC):
         return bool(val.value)
 
 
-@dataclass
-class ObjectValue(Value):
+@dataclass(repr=False)
+class TypeValue(Value, type=ValueTypeEnum.type):
+    enum: ValueTypeEnum
+
+    @special_method("repr")
+    def repr(self, ctx: NativeContext) -> StrValue:
+        return StrValue(f"<type {self.enum.name}>")
+
+    @special_method("eq")
+    def eq(self, ctx: NativeContext, other: Value) -> NumValue:
+        return NumValue(int(self.enum is other.type))
+
+
+@dataclass(repr=False)
+class ObjectValue(Value, type=ValueTypeEnum.obj):
     name: str
     attrs: dict[str, Value] = _field(default_factory=dict)
 
@@ -250,7 +300,7 @@ class ObjectValue(Value):
         return StrValue(f"<{self.name}>")
 
 
-class NullValue(Value):
+class NullValue(Value, type=ValueTypeEnum.null):
     @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
         return StrValue("null")
@@ -264,8 +314,8 @@ class NullValue(Value):
         return NumValue(0)
 
 
-@dataclass
-class NumValue(Value):
+@dataclass(repr=False)
+class NumValue(Value, type=ValueTypeEnum.num):
     value: float
 
     @special_method("add")
@@ -376,8 +426,8 @@ class NumValue(Value):
         return StrValue(str(self.value))
 
 
-@dataclass
-class StrValue(Value):
+@dataclass(repr=False)
+class StrValue(Value, type=ValueTypeEnum.str):
     value: str
 
     def __post_init__(self) -> None:
@@ -604,8 +654,8 @@ class StrValue(Value):
         return ListValue([StrValue(part) for part in self.value.split(delimiter.value)])
 
 
-@dataclass
-class ListValue(Value):
+@dataclass(repr=False)
+class ListValue(Value, type=ValueTypeEnum.list):
     value: list[Value]
 
     @public_method("append")
@@ -649,8 +699,8 @@ class ListValue(Value):
         )
 
 
-@dataclass
-class FuncValue(Value):
+@dataclass(repr=False)
+class FuncValue(Value, type=ValueTypeEnum.func):
     name: Token
     params: list[Token]
     body: ASTNode
@@ -694,8 +744,8 @@ class FuncValue(Value):
         return StrValue(f"<func {self.name.lexeme!r}>")
 
 
-@dataclass
-class NativeFunc(Value):
+@dataclass(repr=False)
+class NativeFunc(Value, type=ValueTypeEnum.func):
     name: str
     callback: Callable[Concatenate[NativeContext, ...], Value]
 
@@ -731,8 +781,8 @@ class NativeFunc(Value):
         return StrValue(f"<built-in func {self.name!r}>")
 
 
-@dataclass
-class VersionValue(Value):
+@dataclass(repr=False)
+class VersionValue(Value, type=ValueTypeEnum.version):
     major: NumValue
     minor: NumValue | NullValue
     micro: NumValue | NullValue
@@ -770,8 +820,8 @@ class VersionValue(Value):
         )
 
 
-@dataclass
-class VersionConstraintValue(Value):
+@dataclass(repr=False)
+class VersionConstraintValue(Value, type=ValueTypeEnum.version_constraint):
     left: VersionValue | NullValue
     right: VersionValue
     constraint: str
