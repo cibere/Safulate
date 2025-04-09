@@ -37,7 +37,7 @@ del x;
 {
     req test; # import the builtin 'test' package under the 'test' var
     req hello @ test; # import the builtin 'test' package under the 'hello' var
-    # req hello @ "url"; # *coming soon*: import the file from the url under the 'hello' var
+    req hello @ "url"; # import the file from the url under the 'hello' var
 }
 
 ##### variables #####
@@ -45,6 +45,7 @@ del x;
     var x; # declare a var named 'x' in current scope
     x = "test"; # assign a value for the 'x' var
     var y = "test"; # declare a var and set a value in current scope
+    del x; # delete the var `x`
 }
 
 ##### operations #####
@@ -59,12 +60,18 @@ del x;
     x ** y; # power
     -x; # unary negative
     +x; # unary positive
+    !x; # inverse of the boolean version of x
+    !!x; # boolean version of x
     x == y; # equality
     x != y; # inequality
     x > y; # check if x is greater than y
     x < y; # check if y is greater than x
     x >= y; # check if x is greater than or equal to y
     x <= y; # check if y is greater than or equal to x
+    x in y; # check if x is in y *NOTE: this simply calls the 'contains' spec on y with x as a argument.
+    y contains x; # check if x contains y
+    x | y; # boolean x or y
+    x & y; # boolean x and y
 }
 
 ##### functions #####
@@ -94,12 +101,14 @@ del x;
     if (5 == 5) {
         print("This also runs");
     }
+}
 
-    ##### while loops
-    # like if statements. the expression can be put in parens if desired
-    # while 5 == 5 {
-    #     print("this will never end");
-    # }
+##### while loops #####
+{
+    # like if statements, the expression can be put in parens if desired
+    while 5 == 5 {
+        print("this will never end");
+    }
 }
 
 ##### for loops #####
@@ -122,7 +131,7 @@ del x;
     }
     # this code only prints '1'.
 
-    # the break keyword also accepts a number arg that lets you break out of multiple loops at the same time
+    # the break keyword also accepts a number arg that lets you break out of multiple loops at the same time.
     while 1 {
         print("outer started");
         while 1 {
@@ -146,12 +155,58 @@ del x;
     # this will infinitely print 'hi'
 }
 
+##### continue #####
+{
+    # a continue statement kind of acts like a skip statement.
+    # it can take a number arg, which defaults to 1.
+
+    var x = list("first", "second", "apple", "pear", "foo", "car");
+
+    # if the number arg is 1, the statement will skip the rest of the current loop and skip to the start of the next loop
+    for item in x {
+        print(x);
+        continue;
+        print("2");
+    }
+    # this code only prints the items in 'x', and never '2'.
+
+    # if the number arg is more than 1, the statement will skip the rest of the current loop, and the never of loops equal to the number arg.
+    # for example, 'continue 2;' would skip the rest of the current loop, and the entirety of the next loop.
+
+    for item in x {
+        print(x);
+        continue 2;
+        print("2");
+    }
+    # this code prints 'first', 'apple', 'foo'. it never prints '2', and skips every other item.
+
+    # you can also pass `0` into the continue keyword to remove its affectiveness
+    for item in x {
+        print(item);
+        continue 0;
+        print("2");
+    }
+    # this will print the following:
+    # first
+    # 2
+    # second
+    # 2
+    # apple
+    # 2
+    # pear
+    # 2
+    # foo
+    # 2
+    # car
+    # 2
+}
+
 ##### custom objects #####
 {
     var x = object(); # you can create a new object via the `object` func
-    # you can't edit attributes directly, but you can enter the object editing mode via a scoped block
 
-    # syntax: obj ~ {block}
+    # you can't edit attributes directly, but you can "enter" the object to edit it.
+    # inside the block used in the edit object statement, the local scope is synced to the object
     x ~ {
         var test = "world";
     }
@@ -170,7 +225,7 @@ del x;
 {
     # when you access an attribute, you are only able to look up public attributes.
     # objects can have private attributes that are denoted by starting with the '$' character.
-    # however they are only exposed in methods and while in a scoped block for the object.
+    # however they are only exposed in methods and while editing the object.
     # private attributes are defined with the `priv` keyword instead of the `var` keyword
     # example:
 
@@ -180,7 +235,7 @@ del x;
         print($test); # prints "world"
 
         func foo(){
-            # unlike public attributes where you have to do `parent.attr`, private attributes are directly exposed
+            # unlike public attributes where you have to do `parent.attr`, private attributes are directly exposed in methods
             print($test);
         }
     }
@@ -189,9 +244,9 @@ del x;
 
 ##### specs #####
 {
-    # every operation between objects internally call a special function called a spec.
+    # every operation between objects internally calls a special function called a spec.
     # in an operation, the spec function of the object on the left value decides how the operation works.
-    # specs can be defined like a function, but using the `spec` keyword in a scoped block.
+    # specs can be defined like a function, but using the `spec` keyword in an object editing block.
 
     var x = object();
     x ~ {
@@ -202,8 +257,8 @@ del x;
 
     print(x + "test"); # prints '5' due to the 'add' spec defined in 'x'
 
-    # normally, specs can't be called directly, and are stored in a completely different spot than public and private attrs, and are never exposed to you.
-    # however, every object comes with a private method called "get_specs" that gives you a container object that contains all of the specs on the object, and that way they can be called directly.
+    # specs are stored in a completely different spot than public and private attrs, and are never directly exposed to you.
+    # however, every object comes with a private method called "get_specs" that gives you a new object that contains all of the specs on the object, and that way they can be called directly.
     # example:
 
     x ~ {
@@ -211,4 +266,130 @@ del x;
     }
     var value = x.specs.add("booya");
     print(value); # prints "5" from the add spec in "x"
+}
+
+##### raising errors #####
+{
+    # using the 'raise' keyword, you can raise anything like an error.
+
+    raise "booya"; # raises the string "booya" and treats it like an error
+}
+
+##### try/catch #####
+{
+    # using a try/catch statement you can catch errors.
+    # syntax for the block is as follows:
+    # try {block} catch {block} else {block}
+    # the catch and else branches are optional
+    # to get the error you're catching, you can use:
+    # try {block} catch e {block}
+    # in this statement, the error that got raised will be assigned to the 'e' var.
+
+    try {
+        raise "foo";
+    } catch e {
+        print(e); # prints "foo"
+    } else {
+        print("success"); # never runs
+    }
+
+    try {
+        1 + 1
+    } else {
+        print("success"); # runs
+    }
+}
+
+##### switch/case #####
+{
+    # pretty much a normal switch/case statement but with some changes.
+    # for instance: by default, there is no fallthrough.
+
+    switch "test" {
+        case "best" {
+            print("best case"); # never runs
+        }
+        case "test" {
+            print("test case"); # runs
+        }
+        case "foo" {
+            print("foo case"); # never runs
+        }
+    }
+
+    # to get a fallthrough behavior, the 'continue' keyword can be used.
+    # for example:
+
+    switch "test" {
+        case "best" {
+            print("best case"); # never runs
+        }
+        case "test" {
+            print("test case"); # runs
+            continue;
+        }
+        case "foo" {
+            print("foo case"); # runs
+        }
+    }
+
+    # the number arg passed to the 'continue' keyword can be used to skip certain cases.
+
+    switch "best" {
+        case "best" {
+            print("best case"); # runs
+            continue 2; # continues in the second case after this one
+        }
+        case "test" {
+            print("test case"); # never runs
+        }
+        case "foo" {
+            print("foo case"); # runs
+        }
+    }
+}
+
+
+##### string formatting #####
+{
+    # to format strings, there are 3 methods
+
+    ## 1) normal concatentation
+    print(
+        "Hello" + " " + "World"
+    ); # prints "Hello World"
+
+    ## 2) .format
+    print(
+        "Hello {}, and welcome to {}.".format(
+            "traveller",
+            "hell"
+        )
+    ); # prints "Hello traveller, and welcome to hell."
+    # the format method basically just goes through the given arguments and replaces the first instance of `{}` it sees with the arg.
+
+    ## 3) f-strings
+    # like python's f-strings, they are denoted by a "f" infront of the starting quote
+
+    var name = "Max";
+
+    print(
+        f"Hello {name}, please stay a while."
+    ); # prints "Hello Max, please stay a while."
+}
+
+##### lists #####
+{
+    # lists exist, but the sugar syntax hasn't been added yet.
+    # currently you do the following to create a list:
+    var x = list("first", "apple");
+
+    # the sugar syntax for lists will probaly be the following:
+    var x = ["first", "apple"];
+}
+
+##### dicts #####
+{
+    # they don't exist.
+    # use objects instead.
 }
