@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import runpy
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -50,8 +49,8 @@ from .errors import (
     SafulateValueError,
     SafulateVersionConflict,
 )
-from .exporter import Exporter
 from .native_context import NativeContext
+from .py_libs import LibManager
 from .tokens import Keyword, TokenType
 from .values import (
     FuncValue,
@@ -77,9 +76,12 @@ libs_path = Path(__file__).parent / "libs"
 class TreeWalker(ASTVisitor):
     __slots__ = ("env", "import_cache")
 
-    def __init__(self, *, env: Environment | None = None) -> None:
+    def __init__(
+        self, *, env: Environment | None = None, lib_manager: LibManager | None = None
+    ) -> None:
         self.version = Version("v0.0.1")
         self.import_cache: dict[str, ObjectValue] = {}
+        self.libs = lib_manager or LibManager()
 
         if env:
             self.env = env
@@ -377,17 +379,7 @@ class TreeWalker(ASTVisitor):
 
             match node.source.type:
                 case TokenType.ID:
-                    path = libs_path / f"{node.source.lexeme}.py"
-                    if path.exists():
-                        globals = runpy.run_path(str(path.absolute()))
-                        exporter = globals.get("exporter")
-                        if exporter is None:
-                            raise SafulateImportError(
-                                "Module does not have an exporter"
-                            )
-                        if not isinstance(exporter, Exporter):
-                            raise RuntimeError("Module does not have a valid exporter")
-                        value = exporter.to_container()
+                    value = self.libs[node.source.lexeme]
                 case TokenType.STR:
                     raise SafulateImportError("Url imports are not allowed yet")
                 case other:
