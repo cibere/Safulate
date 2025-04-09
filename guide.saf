@@ -390,8 +390,8 @@ del x;
 
 ##### dicts #####
 {
-    # they don't exist.
-    # use objects instead.
+    # they don't exist. for now, use objects intead.
+    # I'll probably add them eventually (most likely after I implement subscription), but they won't have any syntax sugar (the blocks make that hard)
 }
 
 ##### type comparison #####
