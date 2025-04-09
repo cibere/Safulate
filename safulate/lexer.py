@@ -117,6 +117,48 @@ class Lexer:
                 ):
                     self.current += 1
                 return True
+            case "f" | "F" if (idx := self.current + 1) < len(self.source) and (
+                enclosing_char := self.source[idx]
+            ) in "\"'`":
+                self.current += 2
+                start_token_added = False
+
+                while (
+                    self.current < len(self.source)
+                    and self.source[self.current] != enclosing_char
+                ):
+                    if self.source[self.current] == "\\":
+                        self.current += 2
+                    elif self.source[self.current] == "{":
+                        self.add_token(
+                            TokenType.FSTR_MIDDLE
+                            if start_token_added
+                            else TokenType.FSTR_START
+                        )
+                        start_token_added = True
+                        self.current += 1
+
+                        while (
+                            self.current < len(self.source)
+                            and self.source[self.current] != "}"
+                        ):
+                            self.poll_char()
+                        self.current += 1
+                        self.start = self.current
+                    else:
+                        self.current += 1
+
+                if self.current >= len(self.source):
+                    raise SafulateSyntaxError("Unterminated string")
+                self.current += 1
+
+                if start_token_added:
+                    token_type = TokenType.FSTR_END
+                else:
+                    self.start += 1
+                    token_type = TokenType.STR
+
+                self.add_token(token_type)
             case '"' | "'" | "`" as enclosing_char:
                 self.current += 1
                 while (

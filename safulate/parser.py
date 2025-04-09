@@ -487,7 +487,42 @@ class Parser:
             self.consume(TokenType.RPAR, "Expected ')'")
             return expr
 
-        if not self.check(TokenType.NUM, TokenType.STR, TokenType.ID, TokenType.NULL):
+        if self.check(TokenType.FSTR_START):
+            return self.fstring()
+        elif not self.check(TokenType.NUM, TokenType.STR, TokenType.ID, TokenType.NULL):
             raise SafulateSyntaxError("Expected expression", self.peek())
 
         return ASTAtom(self.advance())
+
+    def fstring(self) -> ASTNode:
+        parts: list[ASTNode] = []
+        start_token = self.peek()
+
+        while 1:
+            if (orig_type := self.peek().type) in (
+                TokenType.FSTR_START,
+                TokenType.FSTR_MIDDLE,
+                TokenType.FSTR_END,
+            ):
+                self.tokens[self.current].type = TokenType.STR
+                node = self.atom()
+                parts.append(node)
+                assert isinstance(node, ASTAtom)
+
+                if orig_type is TokenType.FSTR_END:
+                    node.token.lexeme = node.token.lexeme[-1] + node.token.lexeme
+                    break
+                elif orig_type is TokenType.FSTR_MIDDLE:
+                    node.token.lexeme = f'"{node.token.lexeme}"'
+                elif orig_type is TokenType.FSTR_START:
+                    node.token.lexeme = node.token.lexeme[1:] + node.token.lexeme[2]
+            else:
+                parts.append(self.expr())
+
+        node = parts.pop(0)
+        while parts:
+            node = ASTBinary(
+                node, Token(TokenType.PLUS, "", start_token.start), parts.pop(0)
+            )
+
+        return node

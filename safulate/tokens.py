@@ -12,6 +12,9 @@ class TokenType(Enum):
     ID = "ID"
     NUM = "NUM"
     VER = "VER"
+    FSTR_START = "FSTR_START"
+    FSTR_MIDDLE = "FSTR_MIDDLE"
+    FSTR_END = "FSTR_END"
 
     # trisymbols
     STARSTAREQ = "**="
