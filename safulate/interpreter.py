@@ -123,23 +123,24 @@ class TreeWalker(ASTVisitor):
 
     def visit_if(self, node: ASTIf) -> Value:
         if node.condition.accept(self).truthy():
-            node.body.accept(self)
+            return node.body.accept(self)
         elif node.else_branch:
-            node.else_branch.accept(self)
-
+            return node.else_branch.accept(self)
         return NullValue()
 
     def visit_while(self, node: ASTWhile) -> Value:
+        val = NullValue()
+
         while node.condition.accept(self).truthy():
             try:
-                node.body.accept(self)
+                val = node.body.accept(self)
             except SafulateBreakoutError as e:
                 e.check()
                 break
             except SafulateInvalidContinue:
                 pass
 
-        return NullValue()
+        return val
 
     def visit_for_loop(self, node: ASTForLoop) -> Value:
         src = node.source.accept(self)
@@ -152,6 +153,7 @@ class TreeWalker(ASTVisitor):
                     raise SafulateValueError(f"{src!r} is not iterable")
 
         loops = src.value.copy()
+        val = NullValue()
         while loops:
             item = loops.pop(0)
 
@@ -159,14 +161,14 @@ class TreeWalker(ASTVisitor):
                 with self.scope() as env:
                     env.declare(node.var_name)
                     env[node.var_name] = item
-                    node.body.accept(self)
+                    val = node.body.accept(self)
             except SafulateInvalidContinue as e:
                 e.handle_skips(loops)
             except SafulateBreakoutError as e:
                 e.check()
                 break
 
-        return NullValue()
+        return val
 
     def visit_return(self, node: ASTReturn) -> Value:
         if node.expr:
