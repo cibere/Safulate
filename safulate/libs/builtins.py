@@ -69,3 +69,13 @@ def assert_(ctx: NativeContext, obj: Value, message: Value = NullValue()) -> Val
 @exporter("dir")
 def dir_(ctx: NativeContext, obj: Value) -> Value:
     return ListValue([StrValue(attr) for attr in obj.public_attrs])
+
+
+@exporter("repr")
+def repr_(ctx: NativeContext, obj: Value) -> Value:
+    return obj.run_spec("repr", StrValue, ctx)
+
+
+@exporter("str")
+def str_(ctx: NativeContext, obj: Value) -> Value:
+    return obj.run_spec("str", StrValue, ctx)
