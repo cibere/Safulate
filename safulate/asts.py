@@ -196,7 +196,7 @@ class ASTUnary(ASTNode):
 @dataclass
 class ASTCall(ASTNode):
     callee: ASTNode
-    paren: Token  # Soley for error handling
+    paren: Token
     args: list[ASTNode]
 
     def accept(self, visitor: ASTVisitor) -> Value:

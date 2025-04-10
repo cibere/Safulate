@@ -220,6 +220,10 @@ class Value(ABC):
     def call(self, ctx: NativeContext, *args: Value) -> Value:
         raise SafulateValueError("Cannot call this type")
 
+    @special_method("subscript")
+    def subscript(self, ctx: NativeContext, *args: Value) -> Value:
+        raise SafulateValueError("Cannot subscript this type")
+
     @special_method("iter")
     def iter(self, ctx: NativeContext) -> ListValue:
         raise SafulateValueError("This type is not iterable")
@@ -428,6 +432,13 @@ class StrValue(Value, type=ValueTypeEnum.str):
 
     def __post_init__(self) -> None:
         self.value = self.value.encode("ascii").decode("unicode_escape")
+
+    @special_method("subscript")
+    def subscript(self, ctx: NativeContext, idx: Value) -> StrValue:  # pyright: ignore[reportIncompatibleMethodOverride]
+        if not isinstance(idx, NumValue):
+            raise SafulateTypeError(f"Expected num, got {idx.repr_spec(ctx)} instead")
+
+        return StrValue(self.value[int(idx.value)])
 
     @special_method("add")
     def add(self, ctx: NativeContext, other: Value) -> StrValue:
@@ -678,6 +689,13 @@ class ListValue(Value, type=ValueTypeEnum.list):
     @special_method("bool")
     def bool(self, ctx: NativeContext) -> NumValue:
         return NumValue(int(len(self.value) != 0))
+
+    @special_method("subscript")
+    def subscript(self, ctx: NativeContext, idx: Value) -> Value:  # pyright: ignore[reportIncompatibleMethodOverride]
+        if not isinstance(idx, NumValue):
+            raise SafulateTypeError(f"Expected num, got {idx.repr_spec(ctx)} instead.")
+
+        return self.value[int(idx.value)]
 
     @special_method("iter")
     def iter(self, ctx: NativeContext) -> ListValue:

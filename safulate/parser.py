@@ -451,22 +451,27 @@ class Parser:
     def call(self) -> ASTNode:
         callee = self.version()
 
-        while token := self.match(TokenType.LPAR, TokenType.DOT):
-            if token.type != TokenType.LPAR:
-                callee = ASTAttr(
-                    callee, self.consume(TokenType.ID, "Expected attribute name")
-                )
-            else:
-                args: list[ASTNode] = []
+        while token := self.match(TokenType.LPAR, TokenType.DOT, TokenType.LSQB):
+            match token.type:
+                case TokenType.LPAR | TokenType.LSQB as open_paren:
+                    args: list[ASTNode] = []
+                    close_paren = {
+                        TokenType.LPAR: TokenType.RPAR,
+                        TokenType.LSQB: TokenType.RSQB,
+                    }[open_paren]
 
-                if not self.match(TokenType.RPAR):
-                    while True:
-                        args.append(self.expr())
-                        if self.match(TokenType.RPAR):
-                            break
-                        self.consume(TokenType.COMMA, "Expected ','")
+                    if not self.match(close_paren):
+                        while True:
+                            args.append(self.expr())
+                            if self.match(close_paren):
+                                break
+                            self.consume(TokenType.COMMA, "Expected ','")
 
-                callee = ASTCall(callee, token, args)
+                    callee = ASTCall(callee, token, args)
+                case _:
+                    callee = ASTAttr(
+                        callee, self.consume(TokenType.ID, "Expected attribute name")
+                    )
 
         return callee
 

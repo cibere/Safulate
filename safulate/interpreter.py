@@ -297,7 +297,12 @@ class TreeWalker(ASTVisitor):
 
     def visit_call(self, node: ASTCall) -> Value:
         callee = node.callee.accept(self)
-        return callee.call(
+        func_name = {TokenType.LPAR: "call", TokenType.LSQB: "subscript"}[
+            node.paren.type
+        ]
+
+        func = callee.specs[func_name]
+        return func.call(
             NativeContext(self, node.paren), *[arg.accept(self) for arg in node.args]
         )
 
