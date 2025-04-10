@@ -24,6 +24,7 @@ from .asts import (
     ASTRaise,
     ASTReturn,
     ASTSpecDecl,
+    ASTStructDecl,
     ASTSwitchCase,
     ASTTryCatch,
     ASTUnary,
@@ -162,11 +163,11 @@ class Parser:
             TokenType.ID
         ):
             return self.var_decl()
-        if self.check(SoftKeyword.FUNC, SoftKeyword.SPEC) and self.check_next(
-            TokenType.ID
-        ):
+        elif self.check(
+            SoftKeyword.FUNC, SoftKeyword.SPEC, SoftKeyword.STRUCT
+        ) and self.check_next(TokenType.ID):
             return self.func_decl()
-        if self.check_next(TokenType.TILDE):
+        elif self.check_next(TokenType.TILDE):
             return self.edit_object()
 
         return self.stmt()
@@ -204,7 +205,11 @@ class Parser:
                 f"Unknown func declaration keyword type: {kw_token!r}"
             ) from None
 
-        cls = {SoftKeyword.FUNC: ASTFuncDecl, SoftKeyword.SPEC: ASTSpecDecl}[soft_kw]
+        cls = {
+            SoftKeyword.FUNC: ASTFuncDecl,
+            SoftKeyword.SPEC: ASTSpecDecl,
+            SoftKeyword.STRUCT: ASTStructDecl,
+        }[soft_kw]
 
         name = self.consume(TokenType.ID, "Expected function name")
         self.consume(TokenType.LPAR, "Expected '('")
@@ -220,7 +225,7 @@ class Parser:
         self.consume(TokenType.RPAR, "Expected ')'")
         body = self.block()
 
-        return cls(name, params, body)
+        return cls(name=name, params=params, body=body, kw=kw_token)
 
     def edit_object(self) -> ASTNode:
         obj = self.version()

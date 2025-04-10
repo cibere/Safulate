@@ -27,6 +27,7 @@ from .asts import (
     ASTRaise,
     ASTReturn,
     ASTSpecDecl,
+    ASTStructDecl,
     ASTSwitchCase,
     ASTTryCatch,
     ASTUnary,
@@ -50,7 +51,7 @@ from .errors import (
 )
 from .native_context import NativeContext
 from .py_libs import LibManager
-from .tokens import TokenType
+from .tokens import Token, TokenType
 from .values import (
     FuncValue,
     ListValue,
@@ -444,3 +445,34 @@ class TreeWalker(ASTVisitor):
         if node.else_branch:
             node.else_branch.accept(self)
         return NullValue()
+
+    def visit_struct_decl(self, node: ASTStructDecl) -> Value:
+        func = FuncValue(
+            name=node.name,
+            params=node.params,
+            body=ASTBlock(
+                stmts=[
+                    ASTVarDecl(
+                        name=Token(TokenType.ID, "x", node.kw.start),
+                        value=ASTCall(
+                            callee=ASTAtom(
+                                Token(TokenType.ID, "object", node.kw.start)
+                            ),
+                            paren=Token(TokenType.LPAR, "(", node.kw.start),
+                            args=[],
+                        ),
+                    ),
+                    ASTEditObject(
+                        obj=ASTAtom(Token(TokenType.ID, "x", node.kw.start)),
+                        block=node.body,
+                    ),
+                    ASTReturn(
+                        keyword=Token(TokenType.RETURN, "return", node.kw.start),
+                        expr=ASTAtom(Token(TokenType.ID, "x", node.kw.start)),
+                    ),
+                ]
+            ),
+        )
+        self.env.declare(node.name)
+        self.env[node.name] = func
+        return func

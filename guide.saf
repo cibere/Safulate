@@ -410,3 +410,28 @@ del x;
     types.list.check(5); # 0
     types.list.check(list("test")); # 1
 }
+
+##### structs #####
+{
+    # classes don't exist, however there is a struct statement.
+    # syntax is the same as defining a function, but using the `struct` keyword instead.
+
+    # example:
+
+    struct obj_struct (val){
+        let foo = val;
+    }
+    var x = obj_struct("apple");
+    print(x.foo); # prints "apple"
+
+    # since classes dont exist, the struct statement is literally just a shorthand for a function that creates and edits a new object.
+    # for example, the interpreter turns the above struct into the following:
+
+    func obj_struct(val){
+        let x = object();
+        x ~ {
+            let foo = val;
+        }
+        return x;
+    }
+}

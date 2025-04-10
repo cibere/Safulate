@@ -29,6 +29,7 @@ __all__ = (
     "ASTRaise",
     "ASTReturn",
     "ASTSpecDecl",
+    "ASTStructDecl",
     "ASTSwitchCase",
     "ASTTryCatch",
     "ASTUnary",
@@ -75,6 +76,7 @@ class ASTFuncDecl(ASTNode):
     name: Token
     params: list[Token]
     body: ASTNode
+    kw: Token
 
     def accept(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_func_decl(self)
@@ -85,6 +87,7 @@ class ASTSpecDecl(ASTNode):
     name: Token
     params: list[Token]
     body: ASTNode
+    kw: Token
 
     def accept(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_spec_decl(self)
@@ -293,6 +296,17 @@ class ASTSwitchCase(ASTNode):
         return visitor.visit_switch_case(self)
 
 
+@dataclass
+class ASTStructDecl(ASTNode):
+    name: Token
+    params: list[Token]
+    body: ASTBlock
+    kw: Token
+
+    def accept(self, visitor: ASTVisitor) -> Value:
+        return visitor.visit_struct_decl(self)
+
+
 class ASTVisitor(ABC):
     @abstractmethod
     def visit_program(self, node: ASTProgram) -> Value: ...
@@ -348,3 +362,5 @@ class ASTVisitor(ABC):
     def visit_switch_case(self, node: ASTSwitchCase) -> Value: ...
     @abstractmethod
     def visit_continue(self, node: ASTContinue) -> Value: ...
+    @abstractmethod
+    def visit_struct_decl(self, node: ASTStructDecl) -> Value: ...
