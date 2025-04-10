@@ -23,6 +23,7 @@ __all__ = (
     "ASTFuncDecl",
     "ASTIf",
     "ASTImportReq",
+    "ASTList",
     "ASTNode",
     "ASTPrivDecl",
     "ASTProgram",
@@ -307,6 +308,14 @@ class ASTStructDecl(ASTNode):
         return visitor.visit_struct_decl(self)
 
 
+@dataclass
+class ASTList(ASTNode):
+    children: list[ASTBlock]
+
+    def accept(self, visitor: ASTVisitor) -> Value:
+        return visitor.visit_list(self)
+
+
 class ASTVisitor(ABC):
     @abstractmethod
     def visit_program(self, node: ASTProgram) -> Value: ...
@@ -364,3 +373,5 @@ class ASTVisitor(ABC):
     def visit_continue(self, node: ASTContinue) -> Value: ...
     @abstractmethod
     def visit_struct_decl(self, node: ASTStructDecl) -> Value: ...
+    @abstractmethod
+    def visit_list(self, node: ASTList) -> Value: ...

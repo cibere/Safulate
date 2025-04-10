@@ -18,6 +18,7 @@ from .asts import (
     ASTFuncDecl,
     ASTIf,
     ASTImportReq,
+    ASTList,
     ASTNode,
     ASTPrivDecl,
     ASTProgram,
@@ -471,7 +472,7 @@ class Parser:
 
     def version(self) -> ASTNode:
         if not self.check(TokenType.VER):
-            return self.atom()
+            return self.list_syntax()
 
         token = self.advance()
         parts = token.lexeme.removeprefix("v").split(".")
@@ -487,6 +488,27 @@ class Parser:
             micro = None
 
         return ASTVersion(major=major, minor=minor, micro=micro)
+
+    def list_syntax(self) -> ASTNode:
+        if not self.check(TokenType.LSQB):
+            return self.atom()
+
+        self.advance()  # eat '['
+        parts: list[ASTBlock] = []
+        temp: list[ASTNode] = []
+
+        while not self.check(TokenType.RSQB):
+            if self.check(TokenType.COMMA):
+                parts.append(ASTBlock(temp))
+                temp = []
+                self.advance()
+            else:
+                temp.append(self.expr())
+
+        parts.append(ASTBlock(temp))
+        self.advance()  # eat ']'
+
+        return ASTList(parts)
 
     def atom(self) -> ASTNode:
         if self.match(TokenType.LPAR):

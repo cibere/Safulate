@@ -21,6 +21,7 @@ from .asts import (
     ASTFuncDecl,
     ASTIf,
     ASTImportReq,
+    ASTList,
     ASTNode,
     ASTPrivDecl,
     ASTProgram,
@@ -476,3 +477,6 @@ class TreeWalker(ASTVisitor):
         self.env.declare(node.name)
         self.env[node.name] = func
         return func
+
+    def visit_list(self, node: ASTList) -> ListValue:
+        return ListValue([child.accept(self) for child in node.children])

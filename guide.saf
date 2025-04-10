@@ -380,11 +380,12 @@ del x;
 
 ##### lists #####
 {
-    # lists exist, but the sugar syntax hasn't been added yet.
-    # currently you do the following to create a list:
+    # there are two ways to create a list
+
+    # 1) with the 'list' function
     var x = list("first", "apple");
 
-    # the sugar syntax for lists will probaly be the following:
+    # 2) with the list syntax
     var x = ["first", "apple"];
 }
 
