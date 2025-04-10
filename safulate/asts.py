@@ -17,6 +17,7 @@ __all__ = (
     "ASTCall",
     "ASTContinue",
     "ASTDel",
+    "ASTEditObject",
     "ASTExprStmt",
     "ASTForLoop",
     "ASTFuncDecl",
@@ -27,7 +28,6 @@ __all__ = (
     "ASTProgram",
     "ASTRaise",
     "ASTReturn",
-    "ASTScopedBlock",
     "ASTSpecDecl",
     "ASTSwitchCase",
     "ASTTryCatch",
@@ -99,12 +99,12 @@ class ASTBlock(ASTNode):
 
 
 @dataclass
-class ASTScopedBlock(ASTNode):
-    source: ASTNode
+class ASTEditObject(ASTNode):
+    obj: ASTNode
     block: ASTBlock
 
     def accept(self, visitor: ASTVisitor) -> Value:
-        return visitor.visit_scoped_block(self)
+        return visitor.visit_edit_object(self)
 
 
 @dataclass
@@ -325,7 +325,7 @@ class ASTVisitor(ABC):
     @abstractmethod
     def visit_attr(self, node: ASTAttr) -> Value: ...
     @abstractmethod
-    def visit_scoped_block(self, node: ASTScopedBlock) -> Value: ...
+    def visit_edit_object(self, node: ASTEditObject) -> Value: ...
     @abstractmethod
     def visit_spec_decl(self, node: ASTSpecDecl) -> Value: ...
     @abstractmethod

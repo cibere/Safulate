@@ -12,6 +12,7 @@ from .asts import (
     ASTCall,
     ASTContinue,
     ASTDel,
+    ASTEditObject,
     ASTExprStmt,
     ASTForLoop,
     ASTFuncDecl,
@@ -22,7 +23,6 @@ from .asts import (
     ASTProgram,
     ASTRaise,
     ASTReturn,
-    ASTScopedBlock,
     ASTSpecDecl,
     ASTSwitchCase,
     ASTTryCatch,
@@ -167,7 +167,7 @@ class Parser:
         ):
             return self.func_decl()
         if self.check_next(TokenType.TILDE):
-            return self.scoped_block()
+            return self.edit_object()
 
         return self.stmt()
 
@@ -222,13 +222,12 @@ class Parser:
 
         return cls(name, params, body)
 
-    def scoped_block(self) -> ASTNode:
-        source = self.version()
+    def edit_object(self) -> ASTNode:
+        obj = self.version()
         self.consume(TokenType.TILDE, "Expected '~'")
-
         body = self.block()
 
-        return ASTScopedBlock(source, body)
+        return ASTEditObject(obj, body)
 
     def stmt(self) -> ASTNode:
         if self.check(TokenType.LBRC):

@@ -15,6 +15,7 @@ from .asts import (
     ASTCall,
     ASTContinue,
     ASTDel,
+    ASTEditObject,
     ASTExprStmt,
     ASTForLoop,
     ASTFuncDecl,
@@ -25,7 +26,6 @@ from .asts import (
     ASTProgram,
     ASTRaise,
     ASTReturn,
-    ASTScopedBlock,
     ASTSpecDecl,
     ASTSwitchCase,
     ASTTryCatch,
@@ -116,8 +116,8 @@ class TreeWalker(ASTVisitor):
         with self.scope():
             return self._visit_block_unscoped(node)
 
-    def visit_scoped_block(self, node: ASTScopedBlock) -> Value:
-        src = node.source.accept(self)
+    def visit_edit_object(self, node: ASTEditObject) -> Value:
+        src = node.obj.accept(self)
         with self.scope(source=src):
             return self._visit_block_unscoped(node.block)
 
