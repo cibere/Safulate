@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 
 class Parser:
     """
-    Formal Grammar
+    (outdated) Formal Grammar
 
     ```
     program: decl*
