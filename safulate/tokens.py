@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-__all__ = "Keyword", "Token", "TokenType"
+__all__ = "SoftKeyword", "Token", "TokenType"
 
 
 class TokenType(Enum):
@@ -55,30 +55,31 @@ class TokenType(Enum):
     OR = "|"
     AT = "@"
 
+    # hard keywords
 
-class Keyword(Enum):
+    RETURN = "return"
+    IF = "if"
+    REQ = "req"
+    WHILE = "while"
+    BREAK = "break"
+    DEL = "del"
+    RAISE = "raise"
+    FOR = "for"
+    TRY = "try"
+    HAS = "has"
+    CONTINUE = "continue"
+
+
+class SoftKeyword(Enum):
+    ELSE = "else"
+    SWITCH = "switch"
+    CATCH = "catch"
+    AS = "as"
+    CASE = "case"
     VAR = "var"
     PRIV = "priv"
     SPEC = "spec"
     FUNC = "func"
-    NULL = "null"
-    RETURN = "return"
-    IF = "if"
-    ELSE = "else"
-    WHILE = "while"
-    BREAK = "break"
-    REQ = "req"
-    DEL = "del"
-    RAISE = "raise"
-    FOR = "for"
-    CONTAINS = "contains"
-    TRY = "try"
-    SWITCH = "switch"
-    CONTINUE = "continue"
-    IN = "in"
-    CATCH = "catch"
-    AS = "as"
-    CASE = "case"
 
 
 @dataclass

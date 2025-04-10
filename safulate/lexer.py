@@ -62,6 +62,22 @@ class Lexer:
     trisymbol_tokens: ClassVar[dict[str, TokenType]] = {
         sym.value: sym for sym in (TokenType.STARSTAREQ,)
     }
+    hard_keywords: ClassVar[dict[str, TokenType]] = {
+        sym.value: sym
+        for sym in (
+            TokenType.RETURN,
+            TokenType.IF,
+            TokenType.REQ,
+            TokenType.WHILE,
+            TokenType.BREAK,
+            TokenType.DEL,
+            TokenType.RAISE,
+            TokenType.FOR,
+            TokenType.TRY,
+            TokenType.CONTINUE,
+            TokenType.HAS,
+        )
+    }
 
     def __init__(self, source: str) -> None:
         self.tokens: list[Token] = []
@@ -201,7 +217,11 @@ class Lexer:
                 if not char.isalnum():
                     self.current -= 1
 
-                self.add_token(TokenType.ID)
+                self.add_token(
+                    self.hard_keywords.get(
+                        self.source[self.start : self.current], TokenType.ID
+                    )
+                )
             case _ as x if x.isdigit():
                 dot_found = False
                 while self.current < len(self.source) and (

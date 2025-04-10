@@ -33,7 +33,7 @@ from .asts import (
     ASTWhile,
 )
 from .errors import SafulateSyntaxError
-from .tokens import Keyword, Token, TokenType
+from .tokens import SoftKeyword, Token, TokenType
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -111,23 +111,23 @@ class Parser:
     def peek_next(self) -> Token:
         return self.tokens[self.current + 1]
 
-    def compare(self, token: Token, type: TokenType | Keyword) -> bool:
+    def compare(self, token: Token, type: TokenType | SoftKeyword) -> bool:
         if isinstance(type, TokenType):
             return token.type is type
         else:
             return token.type is TokenType.ID and token.lexeme == type.value
 
-    def check(self, *types: TokenType | Keyword) -> bool:
+    def check(self, *types: TokenType | SoftKeyword) -> bool:
         return any(self.compare(self.peek(), type) for type in types)
 
-    def check_next(self, *types: TokenType | Keyword) -> bool:
+    def check_next(self, *types: TokenType | SoftKeyword) -> bool:
         return any(self.compare(self.peek_next(), type) for type in types)
 
-    def match(self, *types: TokenType | Keyword) -> Token | None:
+    def match(self, *types: TokenType | SoftKeyword) -> Token | None:
         if self.check(*types):
             return self.advance()
 
-    def consume(self, type: TokenType | Keyword, msg: str) -> Token:
+    def consume(self, type: TokenType | SoftKeyword, msg: str) -> Token:
         token = self.advance()
 
         if not self.compare(token, type):
@@ -136,7 +136,7 @@ class Parser:
         return token
 
     def binary_op(
-        self, next_prec: Callable[[], ASTNode], *types: TokenType | Keyword
+        self, next_prec: Callable[[], ASTNode], *types: TokenType | SoftKeyword
     ) -> ASTNode:
         left = next_prec()
 
@@ -158,9 +158,13 @@ class Parser:
         return ASTProgram(stmts)
 
     def decl(self) -> ASTNode:
-        if self.check(Keyword.VAR, Keyword.PRIV):
+        if self.check(SoftKeyword.VAR, SoftKeyword.PRIV) and self.check_next(
+            TokenType.ID
+        ):
             return self.var_decl()
-        if self.check(Keyword.FUNC, Keyword.SPEC):
+        if self.check(SoftKeyword.FUNC, SoftKeyword.SPEC) and self.check_next(
+            TokenType.ID
+        ):
             return self.func_decl()
         if self.check_next(TokenType.TILDE):
             return self.scoped_block()
@@ -171,13 +175,13 @@ class Parser:
         kw_token = self.advance()
 
         try:
-            kw = Keyword(kw_token.lexeme)
+            soft_kw = SoftKeyword(kw_token.lexeme)
         except ValueError:
-            raise ValueError(
+            raise RuntimeError(
                 f"Unknown var declaration keyword type: {kw_token!r}"
             ) from None
 
-        cls = {Keyword.VAR: ASTVarDecl, Keyword.PRIV: ASTPrivDecl}[kw]
+        cls = {SoftKeyword.VAR: ASTVarDecl, SoftKeyword.PRIV: ASTPrivDecl}[soft_kw]
 
         name = self.consume(TokenType.ID, "Expected variable name")
         if not self.check(TokenType.EQ):
@@ -194,13 +198,13 @@ class Parser:
         kw_token = self.advance()
 
         try:
-            kw = Keyword(kw_token.lexeme)
+            soft_kw = SoftKeyword(kw_token.lexeme)
         except ValueError:
-            raise ValueError(
+            raise RuntimeError(
                 f"Unknown func declaration keyword type: {kw_token!r}"
             ) from None
 
-        cls = {Keyword.FUNC: ASTFuncDecl, Keyword.SPEC: ASTSpecDecl}[kw]
+        cls = {SoftKeyword.FUNC: ASTFuncDecl, SoftKeyword.SPEC: ASTSpecDecl}[soft_kw]
 
         name = self.consume(TokenType.ID, "Expected function name")
         self.consume(TokenType.LPAR, "Expected '('")
@@ -229,18 +233,18 @@ class Parser:
     def stmt(self) -> ASTNode:
         if self.check(TokenType.LBRC):
             return self.block()
-        elif self.match(Keyword.IF):
+        elif self.match(TokenType.IF):
             condition = self.expr()
             body = self.block()
             else_branch = None
-            if self.match(Keyword.ELSE):
+            if self.match(SoftKeyword.ELSE):
                 else_branch = self.block()
             return ASTIf(condition, body, else_branch)
-        elif self.match(Keyword.WHILE):
+        elif self.match(TokenType.WHILE):
             condition = self.expr()
             body = self.block()
             return ASTWhile(condition, body)
-        elif self.match(Keyword.FOR):
+        elif self.match(TokenType.FOR):
             var = self.consume(
                 TokenType.ID, "Expected name of variable for loop iteration"
             )
@@ -251,21 +255,21 @@ class Parser:
             body = self.block()
 
             return ASTForLoop(var_name=var, source=src, body=body)
-        elif kwd := self.match(Keyword.RETURN):
+        elif kwd := self.match(TokenType.RETURN):
             expr = None
             if not self.check(TokenType.SEMI):
                 expr = self.expr()
             self.consume(TokenType.SEMI, "Expected ';'")
             return ASTReturn(kwd, expr)
-        elif kwd := self.match(Keyword.BREAK):
+        elif kwd := self.match(TokenType.BREAK):
             expr = None if self.check(TokenType.SEMI) else self.expr()
             self.consume(TokenType.SEMI, "Expected ';'")
             return ASTBreak(kwd, expr)
-        elif kwd := self.match(Keyword.CONTINUE):
+        elif kwd := self.match(TokenType.CONTINUE):
             expr = None if self.check(TokenType.SEMI) else self.expr()
             self.consume(TokenType.SEMI, "Expected ';'")
             return ASTContinue(kwd, expr)
-        elif kwd := self.match(Keyword.REQ):
+        elif kwd := self.match(TokenType.REQ):
             if not self.check(TokenType.ID):
                 token = self.peek()
                 version = self.expr()
@@ -290,28 +294,28 @@ class Parser:
 
             self.consume(TokenType.SEMI, "Expected ';'")
             return ASTImportReq(name=name, source=source)
-        elif kwd := self.match(Keyword.RAISE):
+        elif kwd := self.match(TokenType.RAISE):
             expr = self.expr()
             self.consume(TokenType.SEMI, "Expected ';'")
             return ASTRaise(expr, kwd)
-        elif kwd := self.match(Keyword.DEL):
+        elif kwd := self.match(TokenType.DEL):
             var = self.consume(TokenType.ID, "Expected ID for deletion")
             self.consume(TokenType.SEMI, "Expected ';'")
             return ASTDel(var)
-        elif kwd := self.match(Keyword.TRY):
+        elif kwd := self.match(TokenType.TRY):
             body = self.block()
 
             catch_branch = None
             error_var = None
-            if self.match(Keyword.CATCH):
-                if self.match(Keyword.AS):
+            if self.match(SoftKeyword.CATCH):
+                if self.match(SoftKeyword.AS):
                     error_var = self.consume(
                         TokenType.ID, "Expected variable name after 'catch as'"
                     )
                 catch_branch = self.block()
 
             else_branch = None
-            if self.match(Keyword.ELSE):
+            if self.match(SoftKeyword.ELSE):
                 else_branch = self.block()
             return ASTTryCatch(
                 body=body,
@@ -319,14 +323,14 @@ class Parser:
                 error_var=error_var,
                 else_branch=else_branch,
             )
-        elif kwd := self.match(Keyword.SWITCH):
+        elif kwd := self.match(SoftKeyword.SWITCH):
             switch_expr = self.expr()
             self.consume(TokenType.LBRC, "Expected '{'")
             cases: list[tuple[ASTNode, ASTBlock]] = []
             else_branch = None
 
             while 1:
-                if not self.match(Keyword.CASE):
+                if not self.match(SoftKeyword.CASE):
                     break
 
                 if self.check(TokenType.LBRC):
@@ -416,8 +420,7 @@ class Parser:
             TokenType.GRTREQ,
             TokenType.AND,
             TokenType.OR,
-            Keyword.CONTAINS,
-            Keyword.IN,
+            TokenType.HAS,
         )
 
     def equality(self) -> ASTNode:
@@ -489,7 +492,7 @@ class Parser:
 
         if self.check(TokenType.FSTR_START):
             return self.fstring()
-        elif not self.check(TokenType.NUM, TokenType.STR, TokenType.ID, Keyword.NULL):
+        elif not self.check(TokenType.NUM, TokenType.STR, TokenType.ID):
             raise SafulateSyntaxError("Expected expression", self.peek())
 
         return ASTAtom(self.advance())

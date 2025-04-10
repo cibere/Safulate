@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from packaging.version import Version
@@ -51,7 +50,7 @@ from .errors import (
 )
 from .native_context import NativeContext
 from .py_libs import LibManager
-from .tokens import Keyword, TokenType
+from .tokens import TokenType
 from .values import (
     FuncValue,
     ListValue,
@@ -68,9 +67,9 @@ from .values import (
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-__all__ = ("TreeWalker",)
+__version__ = "v0.1.0"
 
-libs_path = Path(__file__).parent / "libs"
+__all__ = ("TreeWalker", "__version__")
 
 
 class TreeWalker(ASTVisitor):
@@ -79,7 +78,7 @@ class TreeWalker(ASTVisitor):
     def __init__(
         self, *, env: Environment | None = None, lib_manager: LibManager | None = None
     ) -> None:
-        self.version = Version("v0.0.1")
+        self.version = Version(__version__)
         self.import_cache: dict[str, ObjectValue] = {}
         self.libs = lib_manager or LibManager()
 
@@ -248,27 +247,22 @@ class TreeWalker(ASTVisitor):
         left = node.left.accept(self)
         right = node.right.accept(self)
 
-        if node.op.type is TokenType.ID:
-            spec_name = {
-                Keyword.IN.value: "in",
-                Keyword.CONTAINS.value: "contains",
-            }.get(node.op.lexeme)
-        else:
-            spec_name = {
-                TokenType.PLUS: "add",
-                TokenType.MINUS: "sub",
-                TokenType.STAR: "mul",
-                TokenType.STARSTAR: "pow",
-                TokenType.SLASH: "div",
-                TokenType.EQEQ: "eq",
-                TokenType.NEQ: "neq",
-                TokenType.LESS: "less",
-                TokenType.GRTR: "grtr",
-                TokenType.LESSEQ: "lesseq",
-                TokenType.GRTREQ: "grtreq",
-                TokenType.AND: "and",
-                TokenType.OR: "or",
-            }.get(node.op.type)
+        spec_name = {
+            TokenType.PLUS: "add",
+            TokenType.MINUS: "sub",
+            TokenType.STAR: "mul",
+            TokenType.STARSTAR: "pow",
+            TokenType.SLASH: "div",
+            TokenType.EQEQ: "eq",
+            TokenType.NEQ: "neq",
+            TokenType.LESS: "less",
+            TokenType.GRTR: "grtr",
+            TokenType.LESSEQ: "lesseq",
+            TokenType.GRTREQ: "grtreq",
+            TokenType.AND: "and",
+            TokenType.OR: "or",
+            TokenType.HAS: "has_item",
+        }.get(node.op.type)
 
         if spec_name is None:
             raise ValueError(
@@ -309,8 +303,6 @@ class TreeWalker(ASTVisitor):
                 return NumValue(node.token.value)
             case TokenType.STR:
                 return StrValue(node.token.value)
-            case TokenType.ID if node.token.lexeme == Keyword.NULL.value:
-                return NullValue()
             case TokenType.ID:
                 return self.env[node.token]
             case _:

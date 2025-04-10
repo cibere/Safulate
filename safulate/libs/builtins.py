@@ -15,6 +15,7 @@ from safulate import (
 )
 
 exporter = Exporter("builtins")
+exporter["null"] = NullValue()
 
 
 @exporter("print")
