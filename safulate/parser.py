@@ -519,7 +519,7 @@ class Parser:
                 elif orig_type is TokenType.FSTR_START:
                     node.token.lexeme = node.token.lexeme[1:] + node.token.lexeme[1]
             else:
-                parts.append(self.expr())
+                parts.append(self.stmt())
 
         node = parts.pop(0)
         while parts:
