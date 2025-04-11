@@ -28,7 +28,6 @@ from .asts import (
     ASTRaise,
     ASTReturn,
     ASTSpecDecl,
-    ASTStructDecl,
     ASTSwitchCase,
     ASTTryCatch,
     ASTUnary,
@@ -52,7 +51,7 @@ from .errors import (
 )
 from .native_context import NativeContext
 from .py_libs import LibManager
-from .tokens import Token, TokenType
+from .tokens import TokenType
 from .values import (
     FuncValue,
     ListValue,
@@ -121,7 +120,8 @@ class TreeWalker(ASTVisitor):
     def visit_edit_object(self, node: ASTEditObject) -> Value:
         src = node.obj.accept(self)
         with self.scope(source=src):
-            return self._visit_block_unscoped(node.block)
+            self._visit_block_unscoped(node.block)
+        return src
 
     def visit_if(self, node: ASTIf) -> Value:
         if node.condition.accept(self).truthy():
@@ -451,37 +451,6 @@ class TreeWalker(ASTVisitor):
         if node.else_branch:
             node.else_branch.accept(self)
         return NullValue()
-
-    def visit_struct_decl(self, node: ASTStructDecl) -> Value:
-        func = FuncValue(
-            name=node.name,
-            params=node.params,
-            body=ASTBlock(
-                stmts=[
-                    ASTVarDecl(
-                        name=Token(TokenType.ID, "x", node.kw.start),
-                        value=ASTCall(
-                            callee=ASTAtom(
-                                Token(TokenType.ID, "object", node.kw.start)
-                            ),
-                            paren=Token(TokenType.LPAR, "(", node.kw.start),
-                            args=[],
-                        ),
-                    ),
-                    ASTEditObject(
-                        obj=ASTAtom(Token(TokenType.ID, "x", node.kw.start)),
-                        block=node.body,
-                    ),
-                    ASTReturn(
-                        keyword=Token(TokenType.RETURN, "return", node.kw.start),
-                        expr=ASTAtom(Token(TokenType.ID, "x", node.kw.start)),
-                    ),
-                ]
-            ),
-        )
-        self.env.declare(node.name)
-        self.env[node.name] = func
-        return func
 
     def visit_list(self, node: ASTList) -> ListValue:
         return ListValue([child.accept(self) for child in node.children])

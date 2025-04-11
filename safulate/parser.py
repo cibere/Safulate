@@ -25,7 +25,6 @@ from .asts import (
     ASTRaise,
     ASTReturn,
     ASTSpecDecl,
-    ASTStructDecl,
     ASTSwitchCase,
     ASTTryCatch,
     ASTUnary,
@@ -199,19 +198,6 @@ class Parser:
     def func_decl(self) -> ASTNode:
         kw_token = self.advance()
 
-        try:
-            soft_kw = SoftKeyword(kw_token.lexeme)
-        except ValueError:
-            raise RuntimeError(
-                f"Unknown func declaration keyword type: {kw_token!r}"
-            ) from None
-
-        cls = {
-            SoftKeyword.FUNC: ASTFuncDecl,
-            SoftKeyword.SPEC: ASTSpecDecl,
-            SoftKeyword.STRUCT: ASTStructDecl,
-        }[soft_kw]
-
         name = self.consume(TokenType.ID, "Expected function name")
         self.consume(TokenType.LPAR, "Expected '('")
 
@@ -226,7 +212,57 @@ class Parser:
         self.consume(TokenType.RPAR, "Expected ')'")
         body = self.block()
 
-        return cls(name=name, params=params, body=body, kw=kw_token)
+        try:
+            soft_kw = SoftKeyword(kw_token.lexeme)
+        except ValueError:
+            raise RuntimeError(
+                f"Unknown func declaration keyword type: {kw_token!r}"
+            ) from None
+
+        match soft_kw:
+            case SoftKeyword.STRUCT:
+                return ASTFuncDecl(
+                    name=name,
+                    params=params,
+                    kw=kw_token,
+                    body=ASTBlock(
+                        [
+                            ASTReturn(
+                                keyword=Token(
+                                    TokenType.RETURN, "return", kw_token.start
+                                ),
+                                expr=ASTEditObject(
+                                    obj=ASTCall(
+                                        callee=ASTAtom(
+                                            Token(
+                                                TokenType.ID, "object", kw_token.start
+                                            )
+                                        ),
+                                        paren=Token(
+                                            TokenType.LPAR, "(", kw_token.start
+                                        ),
+                                        args=[
+                                            ASTAtom(
+                                                Token(
+                                                    TokenType.STR,
+                                                    f'"{name.lexeme}"',
+                                                    name.start,
+                                                )
+                                            )
+                                        ],
+                                    ),
+                                    block=body,
+                                ),
+                            ),
+                        ]
+                    ),
+                )
+            case SoftKeyword.FUNC:
+                return ASTFuncDecl(name=name, params=params, body=body, kw=kw_token)
+            case SoftKeyword.SPEC:
+                return ASTSpecDecl(name=name, params=params, body=body, kw=kw_token)
+            case _:
+                raise RuntimeError(f"Unknown keyword for func declaration: {soft_kw!r}")
 
     def edit_object(self) -> ASTNode:
         obj = self.version()
