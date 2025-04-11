@@ -19,8 +19,8 @@ exporter["null"] = NullValue()
 
 
 @exporter("print")
-def print_(_: NativeContext, *args: Value) -> Value:
-    print(*[str(arg) for arg in args])
+def print_(ctx: NativeContext, *args: Value) -> Value:
+    print(*[arg.str_spec(ctx) for arg in args])
     return NullValue()
 
 
