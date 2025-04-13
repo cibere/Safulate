@@ -220,13 +220,13 @@ class Value(ABC):
     def call(self, ctx: NativeContext, *args: Value) -> Value:
         raise SafulateValueError("Cannot call this type")
 
-    @special_method("get_item")
-    def get_item(self, ctx: NativeContext, args: ListValue) -> Value:
-        raise SafulateValueError("Cannot get item frim this type")
+    if TYPE_CHECKING:
+        subscript = Callable[Concatenate[Any, NativeContext, ...], "Value"]
+    else:
 
-    @special_method("set_item")
-    def set_item(self, ctx: NativeContext, args: ListValue, value: Value) -> Value:
-        raise SafulateValueError("Cannot set item from set this type")
+        @special_method("subscript")
+        def subscript(self, ctx: NativeContext, args: ListValue) -> Value:
+            raise SafulateValueError("Cannot subscript this type")
 
     @special_method("iter")
     def iter(self, ctx: NativeContext) -> ListValue:
@@ -452,14 +452,8 @@ class StrValue(Value, type=ValueTypeEnum.str):
     def __post_init__(self) -> None:
         self.value = self.value.encode("ascii").decode("unicode_escape")
 
-    @special_method("get_item")
-    def get_item(self, ctx: NativeContext, args: ListValue) -> StrValue:
-        if not len(args.value) == 1:
-            raise SafulateValueError(
-                f"Expected 1 argument to get item, received {len(args.value)} instead."
-            )
-        idx = args.value[0]
-
+    @special_method("subscript")
+    def subscript(self, ctx: NativeContext, idx: Value) -> StrValue:
         if not isinstance(idx, NumValue):
             raise SafulateTypeError(f"Expected num, got {idx.repr_spec(ctx)} instead")
 
@@ -718,14 +712,8 @@ class ListValue(Value, type=ValueTypeEnum.list):
     def bool(self, ctx: NativeContext) -> NumValue:
         return NumValue(int(len(self.value) != 0))
 
-    @special_method("get_item")
-    def get_item(self, ctx: NativeContext, args: ListValue) -> Value:
-        if not len(args.value) == 1:
-            raise SafulateValueError(
-                f"Expected 1 argument to get item, received {len(args.value)} instead."
-            )
-        idx = args.value[0]
-
+    @special_method("subscript")
+    def subscript(self, ctx: NativeContext, idx: Value) -> Value:
         if not isinstance(idx, NumValue):
             raise SafulateTypeError(f"Expected num, got {idx.repr_spec(ctx)} instead.")
 
@@ -919,6 +907,10 @@ class VersionConstraintValue(Value, type=ValueTypeEnum.version_constraint):
         return hash([self.left, self.right, self.constraint])
 
 
+MISSING: Any = object()
+null = NullValue()
+
+
 @dataclass(repr=False)
 class DictValue(Value, type=ValueTypeEnum.dict):
     data: dict[Value, Value]
@@ -937,35 +929,57 @@ class DictValue(Value, type=ValueTypeEnum.dict):
             + "}"
         )
 
-    @special_method("get_item")
-    def get_item(self, ctx: NativeContext, args: ListValue) -> Value:
-        act_args = args.value.copy()
+    @special_method("subscript")
+    def subscript(
+        self, ctx: NativeContext, key: Value, default: Value = MISSING
+    ) -> Value:
+        return self.get(ctx, key, default)
 
-        try:
-            key = act_args.pop(0)
-            default = act_args.pop(0) if act_args else None
-        except IndexError:
-            raise SafulateValueError(
-                f"Expected 1 or 2 arguments to get item, received {len(args.value)} instead."
-            ) from None
-
+    @public_method("get")
+    def get(self, ctx: NativeContext, key: Value, default: Value = null) -> Value:
         try:
             return self.data[key]
         except KeyError:
-            if default is not None:
-                return default
+            if default is MISSING:
+                raise SafulateKeyError(f"Key {key!r} was not found")
+            return default
 
-            raise SafulateKeyError(f"Key {key!r} was not found")
-
-    @special_method("set_item")
-    def set_item(self, ctx: NativeContext, args: ListValue, value: Value) -> Value:
-        if not len(args.value) == 1:
-            raise SafulateValueError(
-                f"Expected 1 argument to get item, received {len(args.value)} instead."
-            )
-
-        self.data[args.value[0]] = value
+    @public_method("set")
+    def set(self, ctx: NativeContext, key: Value, value: Value) -> Value:
+        self.data[key] = value
         return value
 
+    @public_method("keys")
+    def keys(self, ctx: NativeContext) -> ListValue:
+        return ListValue(list(self.data.keys()))
 
-null = NullValue()
+    @public_method("values")
+    def values(self, ctx: NativeContext) -> ListValue:
+        return ListValue(list(self.data.values()))
+
+    @public_method("items")
+    def items(self, ctx: NativeContext) -> ListValue:
+        return ListValue([ListValue([key, value]) for key, value in self.data.items()])
+
+    @public_method("pop")
+    def pop(
+        self, ctx: NativeContext, key: Value, default: Value | None = None
+    ) -> Value:
+        try:
+            return self.data.pop(key)
+        except KeyError:
+            if default is None:
+                raise SafulateKeyError(f"Key {key!r} was not found")
+            return default
+
+    @special_method("iter")
+    def iter(self, ctx: NativeContext) -> ListValue:
+        return self.keys(ctx)
+
+    @special_method("has")
+    def has(self, ctx: NativeContext, key: Value) -> NumValue:
+        return NumValue(int(key in self.data))
+
+    @special_method("bool")
+    def bool(self, ctx: NativeContext) -> NumValue:
+        return NumValue(1 if self.data else 0)

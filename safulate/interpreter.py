@@ -298,14 +298,15 @@ class TreeWalker(ASTVisitor):
 
     def visit_call(self, node: ASTCall) -> Value:
         func = node.callee.accept(self)
-        args = [arg.accept(self) for arg in node.args]
-        kwargs = {name: value.accept(self) for name, value in node.kwargs.items()}
 
         if node.paren.type is TokenType.LSQB:
-            func = func.specs["get_item"]
-            args = [ListValue(args)]
+            func = func.specs["subscript"]
 
-        return self.ctx(node.paren).invoke(func, *args, **kwargs)
+        return self.ctx(node.paren).invoke(
+            func,
+            *[arg.accept(self) for arg in node.args],
+            **{name: value.accept(self) for name, value in node.kwargs.items()},
+        )
 
     def visit_atom(self, node: ASTAtom) -> Value:
         match node.token.type:
