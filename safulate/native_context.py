@@ -59,8 +59,8 @@ class NativeContext:
                 return DictValue(
                     {
                         self.python_to_values(key): self.python_to_values(value)
-                        for key, value in obj.items()
-                    },  # pyright: ignore[reportUnknownVariableType]
+                        for key, value in obj.items()  # pyright: ignore[reportUnknownVariableType]
+                    },
                 )
             case list() as obj:
                 return ListValue([self.python_to_values(child) for child in obj])  # pyright: ignore[reportUnknownVariableType]
