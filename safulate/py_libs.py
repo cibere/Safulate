@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Concatenate
 
 from .errors import SafulateImportError
-from .values import NativeFunc, ObjectValue, Value
+from .values import FuncValue, ObjectValue, Value
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -64,11 +64,11 @@ class Exporter:
     def export(
         self,
         name: str,
-    ) -> Callable[[Callable[Concatenate[NativeContext, ...], Value]], NativeFunc]:
+    ) -> Callable[[Callable[Concatenate[NativeContext, ...], Value]], FuncValue]:
         def deco(
             callback: Callable[Concatenate[NativeContext, ...], Value],
-        ) -> NativeFunc:
-            func = NativeFunc(name, callback)
+        ) -> FuncValue:
+            func = FuncValue.from_native(name, callback)
             self[name] = func
             return func
 

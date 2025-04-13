@@ -2,8 +2,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from .errors import SafulateTypeError
-from .values import ListValue, NullValue, NumValue, ObjectValue, StrValue, Value
+from .errors import ErrorManager, SafulateTypeError
+from .values import (
+    DictValue,
+    FuncValue,
+    ListValue,
+    NullValue,
+    NumValue,
+    ObjectValue,
+    StrValue,
+    Value,
+    null,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -19,6 +29,11 @@ class NativeContext:
     def __init__(self, interpreter: TreeWalker, token: Token) -> None:
         self.interpreter = interpreter
         self.token = token
+
+    def invoke(self, func: Value, *args: Value, **kwargs: Value) -> Value:
+        with ErrorManager(token=self.token):
+            caller = func if isinstance(func, (FuncValue)) else func.specs["call"]
+            return caller.call(self, *args, **kwargs)
 
     @property
     def env(self) -> Environment:
@@ -37,13 +52,15 @@ class NativeContext:
 
     def python_to_values(self, obj: Any) -> Value:
         if obj is None:
-            return NullValue()
+            return null
 
         match obj:
             case dict() as obj:
-                return ObjectValue(
-                    "json-dict",
-                    {key: self.python_to_values(value) for key, value in obj.items()},  # pyright: ignore[reportUnknownVariableType]
+                return DictValue(
+                    {
+                        self.python_to_values(key): self.python_to_values(value)
+                        for key, value in obj.items()
+                    },  # pyright: ignore[reportUnknownVariableType]
                 )
             case list() as obj:
                 return ListValue([self.python_to_values(child) for child in obj])  # pyright: ignore[reportUnknownVariableType]

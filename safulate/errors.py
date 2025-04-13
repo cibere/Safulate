@@ -18,6 +18,7 @@ __all__ = (
     "SafulateError",
     "SafulateInvalidContinue",
     "SafulateInvalidReturn",
+    "SafulateKeyError",
     "SafulateNameError",
     "SafulateSyntaxError",
     "SafulateTypeError",
@@ -179,4 +180,8 @@ class SafulateBreakoutError(SafulateError):
 
 
 class SafulateAssertionError(SafulateError):
+    pass
+
+
+class SafulateKeyError(SafulateError):
     pass

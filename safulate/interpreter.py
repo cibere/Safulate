@@ -51,18 +51,17 @@ from .errors import (
 )
 from .native_context import NativeContext
 from .py_libs import LibManager
-from .tokens import TokenType
+from .tokens import Token, TokenType
 from .values import (
     FuncValue,
     ListValue,
-    NativeFunc,
-    NullValue,
     NumValue,
     ObjectValue,
     StrValue,
     Value,
     VersionConstraintValue,
     VersionValue,
+    null,
 )
 
 if TYPE_CHECKING:
@@ -88,6 +87,9 @@ class TreeWalker(ASTVisitor):
         else:
             self.env = Environment().add_builtins()
 
+    def ctx(self, token: Token) -> NativeContext:
+        return NativeContext(self, token)
+
     @contextmanager
     def scope(self, source: Value | None = None) -> Iterator[Environment]:
         old_env = self.env
@@ -97,7 +99,7 @@ class TreeWalker(ASTVisitor):
 
     def visit_program(self, node: ASTProgram) -> Value:
         if len(node.stmts) <= 0:
-            return NullValue()
+            return null
         for stmt in node.stmts[:-1]:
             stmt.accept(self)
 
@@ -105,7 +107,7 @@ class TreeWalker(ASTVisitor):
 
     def _visit_block_unscoped(self, node: ASTBlock) -> Value:
         if len(node.stmts) <= 0:
-            return NullValue()
+            return null
 
         for stmt in node.stmts[:-1]:
             stmt.accept(self)
@@ -128,10 +130,10 @@ class TreeWalker(ASTVisitor):
             return node.body.accept(self)
         elif node.else_branch:
             return node.else_branch.accept(self)
-        return NullValue()
+        return null
 
     def visit_while(self, node: ASTWhile) -> Value:
-        val = NullValue()
+        val = null
 
         while node.condition.accept(self).truthy():
             try:
@@ -150,12 +152,12 @@ class TreeWalker(ASTVisitor):
             func = src.specs["iter"]
 
             with ErrorManager(token=node.var_name):
-                src = func.call(NativeContext(self, node.var_name))
+                src = self.ctx(node.var_name).invoke(func)
                 if not isinstance(src, ListValue):
                     raise SafulateValueError(f"{src!r} is not iterable")
 
         loops = src.value.copy()
-        val = NullValue()
+        val = null
         while loops:
             item = loops.pop(0)
 
@@ -177,7 +179,7 @@ class TreeWalker(ASTVisitor):
             value = node.expr.accept(self)
             raise SafulateInvalidReturn(value, node.keyword)
 
-        raise SafulateInvalidReturn(NullValue(), node.keyword)
+        raise SafulateInvalidReturn(null, node.keyword)
 
     def _visit_continue_and_break(self, node: ASTBreak | ASTContinue) -> Value:
         is_break = isinstance(node, ASTBreak)
@@ -194,7 +196,7 @@ class TreeWalker(ASTVisitor):
                 amount = int(amount_node.value)
 
             if amount == 0:
-                return NullValue()
+                return null
             elif amount < 0:
                 msg = (
                     "You can't breakout of a negative number of loops"
@@ -219,7 +221,7 @@ class TreeWalker(ASTVisitor):
 
     def _declare_var(self, node: ASTVarDecl | ASTPrivDecl) -> Value:
         self.env.declare(node.name)
-        value = NullValue() if node.value is None else node.value.accept(self)
+        value = null if node.value is None else node.value.accept(self)
         self.env[node.name] = value
         return value
 
@@ -232,7 +234,7 @@ class TreeWalker(ASTVisitor):
 
     def _declare_func(self, node: ASTFuncDecl | ASTSpecDecl) -> Value:
         self.env.declare(node.name)
-        self.env[node.name] = value = FuncValue(node.name, node.params, node.body)
+        self.env[node.name] = value = FuncValue(node.name, node.params, node.body)  # pyright: ignore[reportArgumentType]
         return value
 
     def visit_func_decl(self, node: ASTFuncDecl) -> Value:
@@ -275,7 +277,7 @@ class TreeWalker(ASTVisitor):
 
         with ErrorManager(token=node.op):
             func = left.specs[spec_name]
-            return func.call(NativeContext(self, node.op), right)
+            return self.ctx(node.op).invoke(func, right)
 
     def visit_unary(self, node: ASTUnary) -> Value:
         right = node.right.accept(self)
@@ -292,19 +294,18 @@ class TreeWalker(ASTVisitor):
 
         with ErrorManager(token=node.op):
             func = right.specs[spec_name]
-            assert isinstance(func, NativeFunc)
-            return func.call(NativeContext(self, node.op))
+            return self.ctx(node.op).invoke(func)
 
     def visit_call(self, node: ASTCall) -> Value:
-        callee = node.callee.accept(self)
-        func_name = {TokenType.LPAR: "call", TokenType.LSQB: "subscript"}[
-            node.paren.type
-        ]
+        func = node.callee.accept(self)
+        args = [arg.accept(self) for arg in node.args]
+        kwargs = {name: value.accept(self) for name, value in node.kwargs.items()}
 
-        func = callee.specs[func_name]
-        return func.call(
-            NativeContext(self, node.paren), *[arg.accept(self) for arg in node.args]
-        )
+        if node.paren.type is TokenType.LSQB:
+            func = func.specs["get_item"]
+            args = [ListValue(args)]
+
+        return self.ctx(node.paren).invoke(func, *args, **kwargs)
 
     def visit_atom(self, node: ASTAtom) -> Value:
         match node.token.type:
@@ -330,8 +331,8 @@ class TreeWalker(ASTVisitor):
 
     def visit_version(self, node: ASTVersion) -> VersionValue:
         major = NumValue(node.major)
-        minor = NullValue() if node.minor is None else NumValue(node.minor)
-        micro = NullValue() if node.micro is None else NumValue(node.micro)
+        minor = null if node.minor is None else NumValue(node.minor)
+        micro = null if node.micro is None else NumValue(node.micro)
 
         return VersionValue(major=major, minor=minor, micro=micro)
 
@@ -344,14 +345,14 @@ class TreeWalker(ASTVisitor):
                         raise SafulateVersionConflict(
                             f"Current version (v{self.version}) is not equal to the required version (v{ver})"
                         )
-                case VersionConstraintValue(constraint="-", left=NullValue()) as const:
+                case VersionConstraintValue(constraint="-", left=null) as const:
                     ver = Version(str(const.right))
 
                     if self.version > ver:
                         raise SafulateVersionConflict(
                             f"Current version (v{self.version}) is above the maximum set version allowed (v{ver})"
                         )
-                case VersionConstraintValue(constraint="+", left=NullValue()) as const:
+                case VersionConstraintValue(constraint="+", left=null) as const:
                     ver = Version(str(const.right))
 
                     if self.version < ver:
@@ -368,7 +369,7 @@ class TreeWalker(ASTVisitor):
                         )
                 case _ as x:
                     raise RuntimeError(f"Unknown version req combination: {x!r}")
-            return NullValue()
+            return null  # pyright: ignore[reportPossiblyUnboundVariable] # pyright is high
 
     def visit_import_req(self, node: ASTImportReq) -> Value:
         cached_value = self.import_cache.get(node.source.lexeme)
@@ -401,14 +402,14 @@ class TreeWalker(ASTVisitor):
 
     def visit_del(self, node: ASTDel) -> Value:
         del self.env.values[node.var.lexeme]
-        return NullValue()
+        return null
 
     def visit_try_catch(self, node: ASTTryCatch) -> Value:
         try:
             node.body.accept(self)
         except SafulateError as e:
             if node.catch_branch is None:
-                return NullValue()
+                return null
 
             with self.scope() as env:
                 if node.error_var:
@@ -418,7 +419,7 @@ class TreeWalker(ASTVisitor):
                 return self._visit_block_unscoped(node.catch_branch)
 
         if node.else_branch is None:
-            return NullValue()
+            return null
 
         return node.else_branch.accept(self)
 
@@ -431,7 +432,7 @@ class TreeWalker(ASTVisitor):
             next_loop = e.handle_skips(loops)
 
             if next_loop is None:
-                return NullValue()
+                return null
             return self._visit_switch_case_entry(next_loop[-1], loops)
 
     def visit_switch_case(self, node: ASTSwitchCase) -> Value:
@@ -441,16 +442,16 @@ class TreeWalker(ASTVisitor):
         while cases:
             expr, body = cases.pop(0)
 
-            res = key.specs["eq"].call(NativeContext(self, node.kw), expr.accept(self))
+            res = self.ctx(node.kw).invoke(key.specs["eq"], expr.accept(self))
             if not res.bool_spec():
                 continue
 
             self._visit_switch_case_entry(body, cases)
-            return NullValue()
+            return null
 
         if node.else_branch:
             node.else_branch.accept(self)
-        return NullValue()
+        return null
 
     def visit_list(self, node: ASTList) -> ListValue:
         return ListValue([child.accept(self) for child in node.children])

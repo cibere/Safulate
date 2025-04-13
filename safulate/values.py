@@ -10,25 +10,26 @@ from enum import Enum
 from enum import auto as _enum_auto
 from typing import TYPE_CHECKING, Any, Concatenate, cast, final
 
+from .asts import ASTNode
 from .errors import (
     ErrorManager,
     SafulateAttributeError,
     SafulateInvalidReturn,
+    SafulateKeyError,
     SafulateTypeError,
     SafulateValueError,
 )
 from .mock import MockNativeContext
 from .properties import cached_property
+from .tokens import Token, TokenType
 
 if TYPE_CHECKING:
-    from .asts import ASTNode
     from .native_context import NativeContext
-    from .tokens import Token
 
 __all__ = (
+    "DictValue",
     "FuncValue",
     "ListValue",
-    "NativeFunc",
     "NullValue",
     "NumValue",
     "ObjectValue",
@@ -38,6 +39,7 @@ __all__ = (
     "ValueTypeEnum",
     "VersionConstraintValue",
     "VersionValue",
+    "null",
 )
 
 
@@ -69,6 +71,7 @@ class ValueTypeEnum(Enum):
     version = _enum_auto()
     version_constraint = _enum_auto()
     type = _enum_auto()
+    dict = _enum_auto()
 
 
 class Value(ABC):
@@ -85,18 +88,15 @@ class Value(ABC):
         cls.type = type
 
     @cached_property
-    def _attrs(self) -> defaultdict[str, dict[str, NativeFunc]]:
-        data: defaultdict[str, dict[str, NativeFunc]] = defaultdict(dict)
+    def _attrs(self) -> defaultdict[str, dict[str, FuncValue]]:
+        data: defaultdict[str, dict[str, FuncValue]] = defaultdict(dict)
         for name, _ in inspect.getmembers(
             self.__class__, lambda attr: hasattr(attr, "__safulate_native_method__")
         ):
             value = getattr(self, name)
 
             type_, func_name = getattr(value, "__safulate_native_method__")
-            data[type_][func_name] = NativeFunc(
-                func_name,
-                value,
-            )
+            data[type_][func_name] = FuncValue.from_native(name, value)
         return data
 
     @cached_property
@@ -220,9 +220,13 @@ class Value(ABC):
     def call(self, ctx: NativeContext, *args: Value) -> Value:
         raise SafulateValueError("Cannot call this type")
 
-    @special_method("subscript")
-    def subscript(self, ctx: NativeContext, *args: Value) -> Value:
-        raise SafulateValueError("Cannot subscript this type")
+    @special_method("get_item")
+    def get_item(self, ctx: NativeContext, args: ListValue) -> Value:
+        raise SafulateValueError("Cannot get item frim this type")
+
+    @special_method("set_item")
+    def set_item(self, ctx: NativeContext, args: ListValue, value: Value) -> Value:
+        raise SafulateValueError("Cannot set item from set this type")
 
     @special_method("iter")
     def iter(self, ctx: NativeContext) -> ListValue:
@@ -273,6 +277,9 @@ class Value(ABC):
             )
         return bool(val.value)
 
+    @abstractmethod
+    def __hash__(self) -> int: ...
+
 
 @dataclass(repr=False)
 class TypeValue(Value, type=ValueTypeEnum.type):
@@ -285,6 +292,9 @@ class TypeValue(Value, type=ValueTypeEnum.type):
     @public_method("check")
     def check(self, ctx: NativeContext, obj: Value) -> NumValue:
         return NumValue(int(obj.type is self.enum))
+
+    def __hash__(self) -> int:
+        return hash(self.enum)
 
 
 @dataclass(repr=False)
@@ -299,6 +309,9 @@ class ObjectValue(Value, type=ValueTypeEnum.obj):
     def repr(self, ctx: NativeContext) -> StrValue:
         return StrValue(f"<{self.name}>")
 
+    def __hash__(self) -> int:
+        return hash(id(self))
+
 
 class NullValue(Value, type=ValueTypeEnum.null):
     @special_method("repr")
@@ -312,6 +325,9 @@ class NullValue(Value, type=ValueTypeEnum.null):
     @special_method("bool")
     def bool(self, ctx: NativeContext) -> Value:
         return NumValue(0)
+
+    def __hash__(self) -> int:
+        return hash(id(self))
 
 
 @dataclass(repr=False)
@@ -425,6 +441,9 @@ class NumValue(Value, type=ValueTypeEnum.num):
 
         return StrValue(str(self.value))
 
+    def __hash__(self) -> int:
+        return hash(self.value)
+
 
 @dataclass(repr=False)
 class StrValue(Value, type=ValueTypeEnum.str):
@@ -433,8 +452,14 @@ class StrValue(Value, type=ValueTypeEnum.str):
     def __post_init__(self) -> None:
         self.value = self.value.encode("ascii").decode("unicode_escape")
 
-    @special_method("subscript")
-    def subscript(self, ctx: NativeContext, idx: Value) -> StrValue:  # pyright: ignore[reportIncompatibleMethodOverride]
+    @special_method("get_item")
+    def get_item(self, ctx: NativeContext, args: ListValue) -> StrValue:
+        if not len(args.value) == 1:
+            raise SafulateValueError(
+                f"Expected 1 argument to get item, received {len(args.value)} instead."
+            )
+        idx = args.value[0]
+
         if not isinstance(idx, NumValue):
             raise SafulateTypeError(f"Expected num, got {idx.repr_spec(ctx)} instead")
 
@@ -662,6 +687,9 @@ class StrValue(Value, type=ValueTypeEnum.str):
             )
         return ListValue([StrValue(part) for part in self.value.split(delimiter.value)])
 
+    def __hash__(self) -> int:
+        return hash(self.value)
+
 
 @dataclass(repr=False)
 class ListValue(Value, type=ValueTypeEnum.list):
@@ -670,19 +698,19 @@ class ListValue(Value, type=ValueTypeEnum.list):
     @public_method("append")
     def append(self, ctx: NativeContext, item: Value) -> Value:
         self.value.append(item)
-        return NullValue()
+        return null
 
     @public_method("remove")
     def remove(self, ctx: NativeContext, item: Value) -> Value:
         self.value.remove(item)
-        return NullValue()
+        return null
 
     @public_method("pop")
     def pop(self, ctx: NativeContext, index: Value) -> Value:
         if not isinstance(index, NumValue):
             raise SafulateTypeError(f"expected num, got {index!r} instead")
         if abs(index.value) > len(self.value):
-            return NullValue()
+            return null
 
         return self.value.pop(int(index.value))
 
@@ -690,8 +718,14 @@ class ListValue(Value, type=ValueTypeEnum.list):
     def bool(self, ctx: NativeContext) -> NumValue:
         return NumValue(int(len(self.value) != 0))
 
-    @special_method("subscript")
-    def subscript(self, ctx: NativeContext, idx: Value) -> Value:  # pyright: ignore[reportIncompatibleMethodOverride]
+    @special_method("get_item")
+    def get_item(self, ctx: NativeContext, args: ListValue) -> Value:
+        if not len(args.value) == 1:
+            raise SafulateValueError(
+                f"Expected 1 argument to get item, received {len(args.value)} instead."
+            )
+        idx = args.value[0]
+
         if not isinstance(idx, NumValue):
             raise SafulateTypeError(f"Expected num, got {idx.repr_spec(ctx)} instead.")
 
@@ -714,31 +748,82 @@ class ListValue(Value, type=ValueTypeEnum.list):
             + "]"
         )
 
+    def __hash__(self) -> int:
+        return hash(self.value)
+
 
 @dataclass(repr=False)
 class FuncValue(Value, type=ValueTypeEnum.func):
     name: Token
-    params: list[Token]
-    body: ASTNode
-    parent: Value = _field(default_factory=NullValue)
+    params: list[tuple[Token, ASTNode | Value | None]] | None
+    body: ASTNode | Callable[Concatenate[NativeContext, ...], Value]
+    parent: Value = _field(default_factory=lambda: null)
 
-    @special_method("call")
-    def call(self, ctx: NativeContext, *args: Value) -> Value:
-        ret_value = NullValue()
+    def __hash__(self) -> int:
+        return hash([self.params, self.body, self.parent])
 
-        if len(self.params) != len(args):
-            raise SafulateValueError(
-                f"Function {self.name.lexeme!r} requires {len(self.params)} arguments, but got {len(args)}",
+    @cached_property
+    def required_args(self) -> list[tuple[Token, None]]:
+        if not self.params:
+            return []
+        return [(arg, default) for arg, default in self.params if default is None]
+
+    def _validate_params(
+        self, ctx: NativeContext, args: tuple[Value, ...], kwargs: dict[str, Value]
+    ) -> dict[str, Value]:
+        if self.params is None:
+            if kwargs:
+                raise SafulateValueError(
+                    f"Function {self.name.lexeme!r} does not support keyword arguments",
+                )
+            return {}
+        params = self.params.copy()
+        passable_params: dict[str, Value] = {}
+
+        for arg in args:
+            (param, _default) = params.pop(0)
+            passable_params[param.lexeme] = arg
+
+        for kwarg, value in kwargs.items():
+            param = [p for p in params if p[0].lexeme == kwarg]
+            if not param:
+                raise SafulateValueError(
+                    f"Unknown Keyword argument {kwarg!r}",
+                )
+
+            params.remove(param[0])
+            passable_params[kwarg] = value
+
+        for param, default in params:
+            if default is None:
+                raise SafulateValueError(
+                    f"Required argument {param.lexeme!r} was not passed",
+                )
+            passable_params[param.lexeme] = (
+                default.accept(ctx.interpreter)
+                if isinstance(default, ASTNode)
+                else default
             )
 
+        return passable_params
+
+    @special_method("call")
+    def call(self, ctx: NativeContext, *args: Value, **kwargs: Value) -> Value:
+        params = self._validate_params(ctx, args, kwargs)
+
+        if isinstance(self.body, Callable):
+            with ErrorManager(token=lambda: ctx.token):
+                return self.body(ctx, *args, **kwargs)
+
+        ret_value = null
         with ctx.interpreter.scope():
             ctx.interpreter.env["parent"] = self.parent
             if self.parent:
                 ctx.interpreter.env.values.update(self.parent.private_attrs)
 
-            for param, arg in zip(self.params, args):
+            for param, value in params.items():
                 ctx.interpreter.env.declare(param)
-                ctx.interpreter.env[param] = arg
+                ctx.interpreter.env[param] = value
 
             try:
                 self.body.accept(ctx.interpreter)
@@ -759,42 +844,21 @@ class FuncValue(Value, type=ValueTypeEnum.func):
     def repr(self, ctx: NativeContext) -> StrValue:
         return StrValue(f"<func {self.name.lexeme!r}>")
 
-
-@dataclass(repr=False)
-class NativeFunc(Value, type=ValueTypeEnum.func):
-    name: str
-    callback: Callable[Concatenate[NativeContext, ...], Value]
-
-    @cached_property
-    def args(self) -> list[inspect.Parameter]:
-        """[(name, type, required), ...]"""
-
-        return list(inspect.signature(self.callback).parameters.values())[1:]
-
-    @cached_property
-    def required_arg_count(self) -> int:
-        tally = 0
-        for param in self.args:
-            # rework this to allow for something like: (test1, test2, *other)
-            if param.kind is param.VAR_POSITIONAL:
-                return 0
-            if param.default == param.empty:
-                tally += 1
-        return tally
-
-    @special_method("call")
-    def call(self, ctx: NativeContext, *args: Value) -> Value:
-        if len(args) < self.required_arg_count:
-            raise SafulateValueError(
-                f"Built-in function '{self.name}' requires {self.required_arg_count} arguments, but got {len(args)}",
-            )
-
-        with ErrorManager(token=lambda: ctx.token):
-            return self.callback(ctx, *args)
-
-    @special_method("repr")
-    def repr(self, ctx: NativeContext) -> StrValue:
-        return StrValue(f"<built-in func {self.name!r}>")
+    @classmethod
+    def from_native(
+        cls, name: str, callback: Callable[Concatenate[NativeContext, ...], Value]
+    ) -> FuncValue:
+        return FuncValue(
+            name=Token(TokenType.ID, name, -1),
+            params=[
+                (
+                    Token(TokenType.ID, param.name, -1),
+                    None if param.default is param.empty else param.default,
+                )
+                for param in inspect.signature(callback).parameters.values()
+            ][1:],
+            body=callback,
+        )
 
 
 @dataclass(repr=False)
@@ -802,6 +866,9 @@ class VersionValue(Value, type=ValueTypeEnum.version):
     major: NumValue
     minor: NumValue | NullValue
     micro: NumValue | NullValue
+
+    def __hash__(self) -> int:
+        return hash([self.major, self.minor, self.micro])
 
     def __post_init__(self) -> None:
         self.public_attrs.update(
@@ -823,11 +890,11 @@ class VersionValue(Value, type=ValueTypeEnum.version):
 
     @special_method("uadd")
     def uadd(self, ctx: NativeContext) -> Value:
-        return self._handle_constraint(NullValue(), "+")
+        return self._handle_constraint(null, "+")
 
     @special_method("neg")
     def neg(self, ctx: NativeContext) -> Value:
-        return self._handle_constraint(NullValue(), "-")
+        return self._handle_constraint(null, "-")
 
     @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
@@ -847,3 +914,58 @@ class VersionConstraintValue(Value, type=ValueTypeEnum.version_constraint):
         return StrValue(
             f"{self.left if isinstance(self.left, VersionValue) else ''}{self.constraint}{self.right}"
         )
+
+    def __hash__(self) -> int:
+        return hash([self.left, self.right, self.constraint])
+
+
+@dataclass(repr=False)
+class DictValue(Value, type=ValueTypeEnum.dict):
+    data: dict[Value, Value]
+
+    def __hash__(self) -> int:
+        return hash(self.data)
+
+    @special_method("repr")
+    def repr(self, ctx: NativeContext) -> StrValue:
+        return StrValue(
+            "{"
+            + ", ".join(
+                f"{key.repr_spec(ctx)}:{value.repr_spec(ctx)}"
+                for key, value in self.data.items()
+            )
+            + "}"
+        )
+
+    @special_method("get_item")
+    def get_item(self, ctx: NativeContext, args: ListValue) -> Value:
+        act_args = args.value.copy()
+
+        try:
+            key = act_args.pop(0)
+            default = act_args.pop(0) if act_args else None
+        except IndexError:
+            raise SafulateValueError(
+                f"Expected 1 or 2 arguments to get item, received {len(args.value)} instead."
+            ) from None
+
+        try:
+            return self.data[key]
+        except KeyError:
+            if default is not None:
+                return default
+
+            raise SafulateKeyError(f"Key {key!r} was not found")
+
+    @special_method("set_item")
+    def set_item(self, ctx: NativeContext, args: ListValue, value: Value) -> Value:
+        if not len(args.value) == 1:
+            raise SafulateValueError(
+                f"Expected 1 argument to get item, received {len(args.value)} instead."
+            )
+
+        self.data[args.value[0]] = value
+        return value
+
+
+null = NullValue()

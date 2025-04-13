@@ -4,7 +4,7 @@ from typing import Any, Self
 
 from .errors import SafulateNameError
 from .tokens import Token
-from .values import FuncValue, NullValue, Value
+from .values import FuncValue, Value, null
 
 __all__ = ("Environment",)
 
@@ -65,4 +65,4 @@ class Environment:
             raise SafulateNameError(f"Name {name!r} is not defined", token)
 
     def declare(self, token: Token | str) -> None:
-        self.values[token.lexeme if isinstance(token, Token) else token] = NullValue()
+        self.values[token.lexeme if isinstance(token, Token) else token] = null

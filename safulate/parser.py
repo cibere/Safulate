@@ -201,13 +201,30 @@ class Parser:
         name = self.consume(TokenType.ID, "Expected function name")
         self.consume(TokenType.LPAR, "Expected '('")
 
-        params: list[Token] = []
+        params: list[tuple[Token, ASTNode | None]] = []
+        defaulted = False
+
         if self.check(TokenType.ID):
-            params.append(self.advance())
+            arg = self.advance()
+            default = None
+            if self.match(TokenType.EQ):
+                defaulted = True
+                default = self.expr()
+            params.append((arg, default))
 
         while self.check(TokenType.COMMA) and self.check_next(TokenType.ID):
             self.advance()
-            params.append(self.advance())
+            arg = self.advance()
+            default = None
+            if self.match(TokenType.EQ):
+                defaulted = True
+                default = self.expr()
+            elif defaulted:
+                raise SafulateSyntaxError(
+                    "Non-default arg following a default arg", self.peek()
+                )
+
+            params.append((arg, default))
 
         self.consume(TokenType.RPAR, "Expected ')'")
         body = self.block()
@@ -250,6 +267,7 @@ class Parser:
                                                 )
                                             )
                                         ],
+                                        kwargs={},
                                     ),
                                     block=body,
                                 ),
@@ -491,6 +509,7 @@ class Parser:
             match token.type:
                 case TokenType.LPAR | TokenType.LSQB as open_paren:
                     args: list[ASTNode] = []
+                    kwargs: dict[str, ASTNode] = {}
                     close_paren = {
                         TokenType.LPAR: TokenType.RPAR,
                         TokenType.LSQB: TokenType.RSQB,
@@ -498,12 +517,26 @@ class Parser:
 
                     if not self.match(close_paren):
                         while True:
-                            args.append(self.expr())
+                            expr = self.expr()
+                            is_kwarg = isinstance(expr, ASTAssign)
+
+                            if not is_kwarg and kwargs:
+                                raise SafulateSyntaxError(
+                                    "Positional argument follows keyword argument",
+                                    self.peek(),
+                                )
+                            if is_kwarg:
+                                kwargs[expr.name.lexeme] = expr.value
+                            else:
+                                args.append(expr)
+
                             if self.match(close_paren):
                                 break
                             self.consume(TokenType.COMMA, "Expected ','")
 
-                    callee = ASTCall(callee, token, args)
+                    callee = ASTCall(
+                        callee=callee, paren=token, args=args, kwargs=kwargs
+                    )
                 case _:
                     callee = ASTAttr(
                         callee, self.consume(TokenType.ID, "Expected attribute name")

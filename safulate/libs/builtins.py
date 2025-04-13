@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Never
 
 from safulate import (
+    DictValue,
     Exporter,
     ListValue,
     NativeContext,
@@ -12,16 +13,17 @@ from safulate import (
     SafulateTypeError,
     StrValue,
     Value,
+    null,
 )
 
 exporter = Exporter("builtins")
-exporter["null"] = NullValue()
+exporter["null"] = null
 
 
 @exporter("print")
 def print_(ctx: NativeContext, *args: Value) -> Value:
     print(*[arg.str_spec(ctx) for arg in args])
-    return NullValue()
+    return null
 
 
 @exporter("quit")
@@ -32,6 +34,11 @@ def quit_(_: NativeContext) -> Never:
 @exporter("list")
 def list_(_: NativeContext, *values: Value) -> ListValue:
     return ListValue(list(values))
+
+
+@exporter("dict")
+def dict_(_: NativeContext) -> DictValue:
+    return DictValue({})
 
 
 @exporter("globals")
@@ -45,7 +52,7 @@ def get_locals(ctx: NativeContext) -> Value:
 
 
 @exporter("object")
-def create_object(ctx: NativeContext, name: Value = NullValue()) -> Value:
+def create_object(ctx: NativeContext, name: Value = null) -> Value:
     match name:
         case StrValue():
             obj_name = name.value
@@ -60,10 +67,10 @@ def create_object(ctx: NativeContext, name: Value = NullValue()) -> Value:
 
 
 @exporter("assert")
-def assert_(ctx: NativeContext, obj: Value, message: Value = NullValue()) -> Value:
+def assert_(ctx: NativeContext, obj: Value, message: Value = null) -> Value:
     if not obj.truthy():
         raise SafulateAssertionError(message)
-    return NullValue()
+    return null
 
 
 @exporter("dir")
@@ -79,3 +86,16 @@ def repr_(ctx: NativeContext, obj: Value) -> Value:
 @exporter("str")
 def str_(ctx: NativeContext, obj: Value) -> Value:
     return obj.run_spec("str", StrValue, ctx)
+
+
+@exporter("kwtest")
+def kwtest(
+    ctx: NativeContext,
+    first: Value = null,
+    second: Value = null,
+    third: Value = null,
+    fourth: Value = null,
+    fifth: Value = null,
+    sixth: Value = null,
+) -> Value:
+    return ListValue([first, second, third, fourth, fifth, sixth])

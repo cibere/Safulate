@@ -74,7 +74,7 @@ class ASTPrivDecl(ASTNode):
 @dataclass
 class ASTFuncDecl(ASTNode):
     name: Token
-    params: list[Token]
+    params: list[tuple[Token, ASTNode | None]]
     body: ASTNode
     kw: Token
 
@@ -85,7 +85,7 @@ class ASTFuncDecl(ASTNode):
 @dataclass
 class ASTSpecDecl(ASTNode):
     name: Token
-    params: list[Token]
+    params: list[tuple[Token, ASTNode | None]]
     body: ASTNode
     kw: Token
 
@@ -197,6 +197,7 @@ class ASTCall(ASTNode):
     callee: ASTNode
     paren: Token
     args: list[ASTNode]
+    kwargs: dict[str, ASTNode]
 
     def accept(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_call(self)
