@@ -20,6 +20,7 @@ __all__ = (
     "ASTEditObject",
     "ASTExprStmt",
     "ASTForLoop",
+    "ASTFormat",
     "ASTFuncDecl",
     "ASTIf",
     "ASTImportReq",
@@ -305,6 +306,15 @@ class ASTList(ASTNode):
         return visitor.visit_list(self)
 
 
+@dataclass
+class ASTFormat(ASTNode):
+    obj: ASTNode
+    spec: Token
+
+    def accept(self, visitor: ASTVisitor) -> Value:
+        return visitor.visit_format(self)
+
+
 class ASTVisitor(ABC):
     @abstractmethod
     def visit_program(self, node: ASTProgram) -> Value: ...
@@ -362,3 +372,5 @@ class ASTVisitor(ABC):
     def visit_continue(self, node: ASTContinue) -> Value: ...
     @abstractmethod
     def visit_list(self, node: ASTList) -> Value: ...
+    @abstractmethod
+    def visit_format(self, node: ASTFormat) -> Value: ...

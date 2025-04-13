@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 
 from packaging.version import Version
 
+from safulate.asts import ASTFormat
+
 from .asts import (
     ASTAssign,
     ASTAtom,
@@ -456,3 +458,11 @@ class TreeWalker(ASTVisitor):
 
     def visit_list(self, node: ASTList) -> ListValue:
         return ListValue([child.accept(self) for child in node.children])
+
+    def visit_format(self, node: ASTFormat) -> Value:
+        spec = {"r": "repr", "s": "str"}.get(node.spec.lexeme)
+
+        if spec is None:
+            raise SafulateValueError(f"Unknown format option {node.spec.lexeme!r}")
+
+        return self.ctx(node.spec).invoke(node.obj.accept(self).specs[spec])

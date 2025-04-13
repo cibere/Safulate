@@ -43,6 +43,7 @@ class Lexer:
             TokenType.NOT,
             TokenType.AND,
             TokenType.OR,
+            TokenType.COLON,
         )
     }
     bisymbol_tokens: ClassVar[dict[str, TokenType]] = {

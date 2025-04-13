@@ -15,6 +15,7 @@ from .asts import (
     ASTEditObject,
     ASTExprStmt,
     ASTForLoop,
+    ASTFormat,
     ASTFuncDecl,
     ASTIf,
     ASTImportReq,
@@ -505,7 +506,9 @@ class Parser:
     def call(self) -> ASTNode:
         callee = self.version()
 
-        while token := self.match(TokenType.LPAR, TokenType.DOT, TokenType.LSQB):
+        while token := self.match(
+            TokenType.LPAR, TokenType.DOT, TokenType.LSQB, TokenType.COLON
+        ):
             match token.type:
                 case TokenType.LPAR | TokenType.LSQB as open_paren:
                     args: list[ASTNode] = []
@@ -537,10 +540,16 @@ class Parser:
                     callee = ASTCall(
                         callee=callee, paren=token, args=args, kwargs=kwargs
                     )
-                case _:
+                case TokenType.DOT:
                     callee = ASTAttr(
                         callee, self.consume(TokenType.ID, "Expected attribute name")
                     )
+                case TokenType.COLON:
+                    callee = ASTFormat(
+                        callee, self.consume(TokenType.ID, "Expected spec abbreviation")
+                    )
+                case _:
+                    raise RuntimeError(f"Unknown call parsing for {self.peek()}")
 
         return callee
 

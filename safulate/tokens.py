@@ -54,6 +54,7 @@ class TokenType(Enum):
     AND = "&"
     OR = "|"
     AT = "@"
+    COLON = ":"
 
     # hard keywords
 
