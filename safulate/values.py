@@ -240,6 +240,10 @@ class Value(ABC):
     def str(self, ctx: NativeContext) -> Value:
         return ctx.invoke_spec(self, "repr")
 
+    @special_method("format")
+    def format(self, ctx: NativeContext, val: Value) -> Value:
+        raise SafulateValueError(f"Unknown format type {val.repr_spec(ctx)}")
+
     @final
     def truthy(self) -> bool:
         return self.bool_spec()

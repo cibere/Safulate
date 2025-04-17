@@ -456,8 +456,10 @@ class TreeWalker(ASTVisitor):
 
     def visit_format(self, node: ASTFormat) -> Value:
         spec = {"r": "repr", "s": "str"}.get(node.spec.lexeme)
+        args: tuple[Value, ...] = ()
 
         if spec is None:
-            raise SafulateValueError(f"Unknown format option {node.spec.lexeme!r}")
+            args = (StrValue(node.spec.lexeme),)
+            spec = "format"
 
-        return self.ctx(node.spec).invoke_spec(node.obj.accept(self), spec)
+        return self.ctx(node.spec).invoke_spec(node.obj.accept(self), spec, *args)
