@@ -5,8 +5,6 @@ from typing import TYPE_CHECKING
 
 from packaging.version import Version
 
-from safulate.asts import ASTFormat
-
 from .asts import (
     ASTAssign,
     ASTAtom,
@@ -20,6 +18,7 @@ from .asts import (
     ASTEditObject,
     ASTExprStmt,
     ASTForLoop,
+    ASTFormat,
     ASTFuncDecl,
     ASTIf,
     ASTImportReq,
@@ -151,10 +150,8 @@ class TreeWalker(ASTVisitor):
     def visit_for_loop(self, node: ASTForLoop) -> Value:
         src = node.source.accept(self)
         if not isinstance(src, ListValue):
-            func = src.specs["iter"]
-
             with ErrorManager(token=node.var_name):
-                src = self.ctx(node.var_name).invoke(func)
+                src = self.ctx(node.var_name).invoke_spec(src, "iter")
                 if not isinstance(src, ListValue):
                     raise SafulateValueError(f"{src!r} is not iterable")
 
@@ -278,8 +275,7 @@ class TreeWalker(ASTVisitor):
             )
 
         with ErrorManager(token=node.op):
-            func = left.specs[spec_name]
-            return self.ctx(node.op).invoke(func, right)
+            return self.ctx(node.op).invoke_spec(left, spec_name, right)
 
     def visit_unary(self, node: ASTUnary) -> Value:
         right = node.right.accept(self)
@@ -295,8 +291,7 @@ class TreeWalker(ASTVisitor):
             )
 
         with ErrorManager(token=node.op):
-            func = right.specs[spec_name]
-            return self.ctx(node.op).invoke(func)
+            return self.ctx(node.op).invoke_spec(right, spec_name)
 
     def visit_call(self, node: ASTCall) -> Value:
         func = node.callee.accept(self)
@@ -330,7 +325,7 @@ class TreeWalker(ASTVisitor):
                     f"Invalid token type {node.attr.type.name} for attribute access"
                 )
 
-            return obj[node.attr.lexeme]
+            return obj.public_attrs[node.attr.lexeme]
 
     def visit_version(self, node: ASTVersion) -> VersionValue:
         major = NumValue(node.major)
@@ -445,7 +440,7 @@ class TreeWalker(ASTVisitor):
         while cases:
             expr, body = cases.pop(0)
 
-            res = self.ctx(node.kw).invoke(key.specs["eq"], expr.accept(self))
+            res = self.ctx(node.kw).invoke_spec(key, "eq", expr.accept(self))
             if not res.bool_spec():
                 continue
 
@@ -465,4 +460,4 @@ class TreeWalker(ASTVisitor):
         if spec is None:
             raise SafulateValueError(f"Unknown format option {node.spec.lexeme!r}")
 
-        return self.ctx(node.spec).invoke(node.obj.accept(self).specs[spec])
+        return self.ctx(node.spec).invoke_spec(node.obj.accept(self), spec)

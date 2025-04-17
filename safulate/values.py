@@ -170,14 +170,14 @@ class Value(ABC):
 
     @special_method("neq")
     def neq(self, ctx: NativeContext, other: Value) -> Value:
-        val = self.specs["eq"].call(ctx, other)
+        val = ctx.invoke_spec(self, "eq", other)
         if not isinstance(val, NumValue):
             raise SafulateValueError(f"equality spec returned {val!r}, expected number")
         return NumValue(not val.value)
 
     @special_method("has_item")
     def has_item(self, ctx: NativeContext, other: Value) -> Value:
-        val = self.specs["iter"].call(ctx)
+        val = ctx.invoke_spec(self, "iter")
         if not isinstance(val, ListValue):
             raise SafulateValueError(f"iter spec returned {val!r}, expected list")
         return NumValue(other in val.value)
@@ -238,7 +238,7 @@ class Value(ABC):
 
     @special_method("str")
     def str(self, ctx: NativeContext) -> Value:
-        return self.specs["repr"].call(ctx)
+        return ctx.invoke_spec(self, "repr")
 
     @final
     def truthy(self) -> bool:
@@ -254,8 +254,7 @@ class Value(ABC):
     def run_spec[T: Value](
         self, spec_name: str, return_value: type[T], ctx: NativeContext
     ) -> T:
-        func = self.specs[spec_name]
-        value = func.call(ctx)
+        value = ctx.invoke_spec(self, spec_name)
         if not isinstance(value, return_value):
             raise SafulateValueError(
                 f"expected return for {spec_name!r} is str, not {value!r}", ctx.token
@@ -462,7 +461,7 @@ class StrValue(Value, type=ValueTypeEnum.str):
     @special_method("add")
     def add(self, ctx: NativeContext, other: Value) -> StrValue:
         if not isinstance(other, StrValue):
-            other = other.specs["str"].call(ctx)
+            other = ctx.invoke_spec(other, "str")
         if not isinstance(other, StrValue):
             raise SafulateValueError(f"{other!r} could not be converted into a string")
 
@@ -729,7 +728,7 @@ class ListValue(Value, type=ValueTypeEnum.list):
             "["
             + ", ".join(
                 [
-                    cast("StrValue", val.specs["repr"].call(ctx)).value
+                    cast("StrValue", ctx.invoke_spec(val, "repr")).value
                     for val in self.value
                 ]
             )

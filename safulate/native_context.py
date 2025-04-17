@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
 
 from .errors import ErrorManager, SafulateTypeError
@@ -35,6 +36,11 @@ class NativeContext:
             caller = func if isinstance(func, (FuncValue)) else func.specs["call"]
             return caller.call(self, *args, **kwargs)
 
+    def invoke_spec(
+        self, func: Value, spec_name: str, *args: Value, **kwargs: Value
+    ) -> Value:
+        return self.invoke(func.specs[spec_name], *args, **kwargs)
+
     @property
     def env(self) -> Environment:
         return self.interpreter.env
@@ -47,7 +53,6 @@ class NativeContext:
                 yield env
             else:
                 break
-
             env = env.parent
 
     def python_to_values(self, obj: Any) -> Value:
