@@ -23,6 +23,7 @@ from .asts import (
     ASTNode,
     ASTPrivDecl,
     ASTProgram,
+    ASTProperty,
     ASTRaise,
     ASTReturn,
     ASTSpecDecl,
@@ -165,7 +166,7 @@ class Parser:
         ):
             return self.var_decl()
         elif self.check(
-            SoftKeyword.FUNC, SoftKeyword.SPEC, SoftKeyword.STRUCT
+            SoftKeyword.FUNC, SoftKeyword.SPEC, SoftKeyword.STRUCT, SoftKeyword.PROP
         ) and self.check_next(TokenType.ID):
             return self.func_decl()
         elif self.check_next(TokenType.TILDE):
@@ -276,6 +277,10 @@ class Parser:
                         ]
                     ),
                 )
+            case SoftKeyword.PROP:
+                if params:
+                    raise SafulateSyntaxError("Properties can't take arguments")
+                return ASTProperty(body=body, name=name)
             case SoftKeyword.FUNC:
                 return ASTFuncDecl(name=name, params=params, body=body, kw=kw_token)
             case SoftKeyword.SPEC:

@@ -28,6 +28,7 @@ __all__ = (
     "ASTNode",
     "ASTPrivDecl",
     "ASTProgram",
+    "ASTProperty",
     "ASTRaise",
     "ASTReturn",
     "ASTSpecDecl",
@@ -315,6 +316,15 @@ class ASTFormat(ASTNode):
         return visitor.visit_format(self)
 
 
+@dataclass
+class ASTProperty(ASTNode):
+    body: ASTNode
+    name: Token
+
+    def accept(self, visitor: ASTVisitor) -> Value:
+        return visitor.visit_property(self)
+
+
 class ASTVisitor(ABC):
     @abstractmethod
     def visit_program(self, node: ASTProgram) -> Value: ...
@@ -374,3 +384,5 @@ class ASTVisitor(ABC):
     def visit_list(self, node: ASTList) -> Value: ...
     @abstractmethod
     def visit_format(self, node: ASTFormat) -> Value: ...
+    @abstractmethod
+    def visit_property(self, node: ASTProperty) -> Value: ...

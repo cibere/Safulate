@@ -82,6 +82,7 @@ class SoftKeyword(Enum):
     SPEC = "spec"
     FUNC = "func"
     STRUCT = "struct"
+    PROP = "prop"
 
 
 @dataclass

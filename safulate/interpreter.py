@@ -26,6 +26,7 @@ from .asts import (
     ASTNode,
     ASTPrivDecl,
     ASTProgram,
+    ASTProperty,
     ASTRaise,
     ASTReturn,
     ASTSpecDecl,
@@ -58,6 +59,7 @@ from .values import (
     ListValue,
     NumValue,
     ObjectValue,
+    PropertyValue,
     StrValue,
     Value,
     VersionConstraintValue,
@@ -325,7 +327,9 @@ class TreeWalker(ASTVisitor):
                     f"Invalid token type {node.attr.type.name} for attribute access"
                 )
 
-            return obj.public_attrs[node.attr.lexeme]
+            return self.ctx(node.attr).invoke_spec(
+                obj.public_attrs[node.attr.lexeme], "get"
+            )
 
     def visit_version(self, node: ASTVersion) -> VersionValue:
         major = NumValue(node.major)
@@ -463,3 +467,9 @@ class TreeWalker(ASTVisitor):
             spec = "format"
 
         return self.ctx(node.spec).invoke_spec(node.obj.accept(self), spec, *args)
+
+    def visit_property(self, node: ASTProperty) -> Value:
+        val = PropertyValue(FuncValue(name=node.name, params=[], body=node.body))
+        self.env.declare(node.name)
+        self.env[node.name] = val
+        return val

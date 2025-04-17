@@ -33,6 +33,7 @@ __all__ = (
     "NullValue",
     "NumValue",
     "ObjectValue",
+    "PropertyValue",
     "StrValue",
     "TypeValue",
     "Value",
@@ -72,6 +73,7 @@ class ValueTypeEnum(Enum):
     version_constraint = _enum_auto()
     type = _enum_auto()
     dict = _enum_auto()
+    property = _enum_auto()
 
 
 class Value(ABC):
@@ -231,6 +233,10 @@ class Value(ABC):
     @special_method("iter")
     def iter(self, ctx: NativeContext) -> ListValue:
         raise SafulateValueError("This type is not iterable")
+
+    @special_method("get")
+    def get_spec(self, ctx: NativeContext) -> Value:
+        return self
 
     @special_method("repr")
     @abstractmethod
@@ -839,14 +845,18 @@ class FuncValue(Value, type=ValueTypeEnum.func):
     def from_native(
         cls, name: str, callback: Callable[Concatenate[NativeContext, ...], Value]
     ) -> FuncValue:
+        params = list(inspect.signature(callback).parameters.values())
+
         return FuncValue(
             name=Token(TokenType.ID, name, -1),
-            params=[
+            params=None
+            if len(params) > 1 and params[1].kind is params[1].VAR_POSITIONAL
+            else [
                 (
                     Token(TokenType.ID, param.name, -1),
                     None if param.default is param.empty else param.default,
                 )
-                for param in inspect.signature(callback).parameters.values()
+                for param in params
             ][1:],
             body=callback,
         )
@@ -986,3 +996,19 @@ class DictValue(Value, type=ValueTypeEnum.dict):
     @special_method("bool")
     def bool(self, ctx: NativeContext) -> NumValue:
         return NumValue(1 if self.data else 0)
+
+
+class PropertyValue(Value, type=ValueTypeEnum.property):
+    def __init__(self, func: FuncValue) -> None:
+        self.func = func
+
+    @special_method("repr")
+    def repr(self, ctx: NativeContext) -> StrValue:
+        return StrValue(f"<Property {self.func.repr_spec(ctx)}>")
+
+    def __hash__(self) -> int:
+        return hash((f"property-{id(self)}", self.func))
+
+    @special_method("get")
+    def get_spec(self, ctx: NativeContext) -> Value:
+        return ctx.invoke(self.func)
