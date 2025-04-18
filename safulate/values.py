@@ -253,6 +253,15 @@ class Value(ABC):
     def format(self, ctx: NativeContext, val: Value) -> Value:
         raise SafulateValueError(f"Unknown format type {val.repr_spec(ctx)}")
 
+    @special_method("get_attr")
+    def get_attr(self, ctx: NativeContext, name: Value) -> Value:
+        if not isinstance(name, StrValue):
+            raise SafulateValueError(f"Expected str, got {name.repr_spec(ctx)} instead")
+        val = self.public_attrs.get(name.value)
+        if val is None:
+            raise SafulateAttributeError(f"Attribute Not Found: {name.repr_spec(ctx)}")
+        return ctx.invoke_spec(val, "get")
+
     @final
     def truthy(self) -> bool:
         return self.bool_spec()

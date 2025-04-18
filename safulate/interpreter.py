@@ -328,7 +328,7 @@ class TreeWalker(ASTVisitor):
                 )
 
             return self.ctx(node.attr).invoke_spec(
-                obj.public_attrs[node.attr.lexeme], "get"
+                obj, "get_attr", StrValue(node.attr.lexeme)
             )
 
     def visit_version(self, node: ASTVersion) -> VersionValue:
