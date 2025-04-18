@@ -436,3 +436,44 @@ del x;
         return x;
     }
 }
+
+##### properties #####
+# properties exist, and you ca use the `prop` soft keyword to create one, or make one yourself using the `get` spec.
+# here are two examples that do basically the same thing, however one uses the `prop` soft keyword, and the other uses the `get` spec.
+{
+    var x = object();
+
+    var hello;
+    x ~ {
+        prop foo(){
+            return hello;
+        }
+    }
+
+    print("first", x.foo);
+    hello = "no";
+    print("second", x.foo);
+}
+
+{
+    struct test_prop(func){
+        priv func = func;
+
+        spec get(){
+            return $func();
+        }
+    }
+
+    var hello;
+    var x = object();
+    x ~ {
+        func _foo(){
+            return hello;
+        }
+        var foo = test_prop(_foo);
+    }
+
+    print("first", x.foo);
+    hello = "no";
+    print("second", x.foo);
+}
