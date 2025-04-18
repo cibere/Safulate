@@ -45,11 +45,11 @@ __all__ = (
 
 
 def __method_deco[T: Callable[Concatenate[Any, NativeContext, ...], "Value"]](
-    char: str,
+    char: str, is_prop: bool
 ) -> Callable[[str], Callable[[T], T]]:
     def deco(name: str) -> Callable[[T], T]:
         def decorator(func: T) -> T:
-            setattr(func, "__safulate_native_method__", (char, name))
+            setattr(func, "__safulate_native_method__", (char, name, is_prop))
             return func
 
         return decorator
@@ -57,9 +57,11 @@ def __method_deco[T: Callable[Concatenate[Any, NativeContext, ...], "Value"]](
     return deco
 
 
-public_method = __method_deco("")
-private_method = __method_deco("$")
-special_method = __method_deco("%")
+public_method = __method_deco("", is_prop=False)
+private_method = __method_deco("$", is_prop=False)
+special_method = __method_deco("%", is_prop=False)
+public_property = __method_deco("", is_prop=True)
+private_property = __method_deco("$", is_prop=True)
 
 
 class ValueTypeEnum(Enum):
@@ -90,15 +92,16 @@ class Value(ABC):
         cls.type = type
 
     @cached_property
-    def _attrs(self) -> defaultdict[str, dict[str, FuncValue]]:
-        data: defaultdict[str, dict[str, FuncValue]] = defaultdict(dict)
+    def _attrs(self) -> defaultdict[str, dict[str, FuncValue | PropertyValue]]:
+        data: defaultdict[str, dict[str, FuncValue | PropertyValue]] = defaultdict(dict)
         for name, _ in inspect.getmembers(
             self.__class__, lambda attr: hasattr(attr, "__safulate_native_method__")
         ):
             value = getattr(self, name)
 
-            type_, func_name = getattr(value, "__safulate_native_method__")
-            data[type_][func_name] = FuncValue.from_native(name, value)
+            type_, func_name, is_prop = getattr(value, "__safulate_native_method__")
+            func = FuncValue.from_native(name, value)
+            data[type_][func_name] = PropertyValue(func) if is_prop else func
         return data
 
     @cached_property
@@ -744,6 +747,10 @@ class ListValue(Value, type=ValueTypeEnum.list):
             )
             + "]"
         )
+
+    @public_property("len")
+    def len(self, ctx: NativeContext) -> NumValue:
+        return NumValue(len(self.value))
 
     def __hash__(self) -> int:
         return hash(self.value)
