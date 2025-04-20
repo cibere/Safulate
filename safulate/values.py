@@ -10,7 +10,7 @@ from enum import Enum
 from enum import auto as _enum_auto
 from typing import TYPE_CHECKING, Any, Concatenate, cast, final
 
-from .asts import ASTNode
+from .asts import ASTBlock, ASTNode
 from .errors import (
     ErrorManager,
     SafulateAttributeError,
@@ -769,8 +769,14 @@ class ListValue(Value, type=ValueTypeEnum.list):
 class FuncValue(Value, type=ValueTypeEnum.func):
     name: Token
     params: list[tuple[Token, ASTNode | Value | None]] | None
-    body: ASTNode | Callable[Concatenate[NativeContext, ...], Value]
-    parent: Value = _field(default_factory=lambda: null)
+    body: ASTBlock | Callable[Concatenate[NativeContext, ...], Value]
+    parent: Value | None = None
+
+    @property
+    def arity(self) -> int:
+        if self.params is None:
+            return -1
+        return len(self.params)
 
     def __hash__(self) -> int:
         return hash([self.params, self.body, self.parent])
@@ -824,34 +830,24 @@ class FuncValue(Value, type=ValueTypeEnum.func):
     def call(self, ctx: NativeContext, *args: Value, **kwargs: Value) -> Value:
         params = self._validate_params(ctx, args, kwargs)
 
-        if isinstance(self.body, Callable):
-            with ErrorManager(token=lambda: ctx.token):
+        with ErrorManager(token=lambda: ctx.token):
+            if isinstance(self.body, Callable):
                 return self.body(ctx, *args, **kwargs)
 
-        ret_value = null
-        with ctx.interpreter.scope():
-            ctx.interpreter.env["parent"] = self.parent
-            if self.parent:
-                ctx.interpreter.env.values.update(self.parent.private_attrs)
+            ret_value = null
+            with ctx.interpreter.scope(source=self.parent):
+                ctx.interpreter.env["parent"] = self.parent or null
 
-            for param, value in params.items():
-                ctx.interpreter.env.declare(param)
-                ctx.interpreter.env[param] = value
+                for param, value in params.items():
+                    ctx.interpreter.env.declare(param)
+                    ctx.interpreter.env[param] = value
 
-            try:
-                self.body.accept(ctx.interpreter)
-            except SafulateInvalidReturn as r:
-                ret_value = r.value
+                try:
+                    self.body.accept_unscoped(ctx.interpreter)
+                except SafulateInvalidReturn as r:
+                    ret_value = r.value
 
-            self.parent.private_attrs.update(
-                {
-                    key: value
-                    for key, value in ctx.interpreter.env.values.items()
-                    if key.startswith("$")
-                }
-            )
-
-        return ret_value
+            return ret_value
 
     @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:

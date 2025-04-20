@@ -24,12 +24,10 @@ from .asts import (
     ASTImportReq,
     ASTList,
     ASTNode,
-    ASTPrivDecl,
     ASTProgram,
     ASTProperty,
     ASTRaise,
     ASTReturn,
-    ASTSpecDecl,
     ASTSwitchCase,
     ASTTryCatch,
     ASTUnary,
@@ -47,13 +45,14 @@ from .errors import (
     SafulateImportError,
     SafulateInvalidContinue,
     SafulateInvalidReturn,
+    SafulateScopeError,
     SafulateTypeError,
     SafulateValueError,
     SafulateVersionConflict,
 )
 from .native_context import NativeContext
 from .py_libs import LibManager
-from .tokens import Token, TokenType
+from .tokens import SoftKeyword, Token, TokenType
 from .values import (
     FuncValue,
     ListValue,
@@ -108,7 +107,7 @@ class TreeWalker(ASTVisitor):
 
         return node.stmts[-1].accept(self)
 
-    def _visit_block_unscoped(self, node: ASTBlock) -> Value:
+    def visit_unscoped_block(self, node: ASTBlock) -> Value:
         if len(node.stmts) <= 0:
             return null
 
@@ -120,12 +119,12 @@ class TreeWalker(ASTVisitor):
 
     def visit_block(self, node: ASTBlock) -> Value:
         with self.scope():
-            return self._visit_block_unscoped(node)
+            return self.visit_unscoped_block(node)
 
     def visit_edit_object(self, node: ASTEditObject) -> Value:
         src = node.obj.accept(self)
         with self.scope(source=src):
-            self._visit_block_unscoped(node.block)
+            self.visit_unscoped_block(node.block)
         return src
 
     def visit_if(self, node: ASTIf) -> Value:
@@ -220,30 +219,57 @@ class TreeWalker(ASTVisitor):
         value = node.expr.accept(self)
         return value
 
-    def _declare_var(self, node: ASTVarDecl | ASTPrivDecl) -> Value:
-        self.env.declare(node.name)
-        value = null if node.value is None else node.value.accept(self)
-        self.env[node.name] = value
-        return value
-
     def visit_var_decl(self, node: ASTVarDecl) -> Value:
-        return self._declare_var(node)
-
-    def visit_priv_decl(self, node: ASTPrivDecl) -> Value:
-        node.name.lexeme = f"${node.name.lexeme}"
-        return self._declare_var(node)
-
-    def _declare_func(self, node: ASTFuncDecl | ASTSpecDecl) -> Value:
-        self.env.declare(node.name)
-        self.env[node.name] = value = FuncValue(node.name, node.params, node.body)  # pyright: ignore[reportArgumentType]
+        value = null if node.value is None else node.value.accept(self)
+        match node.kw:
+            case SoftKeyword.PUB:
+                self.env.declare(node.name)
+                self.env[node.name] = value
+            case SoftKeyword.PRIV:
+                self.env.set_priv(node.name, value)
+            case _:
+                raise RuntimeError(f"Unknown var decl keyword: {node.kw!r}")
         return value
 
     def visit_func_decl(self, node: ASTFuncDecl) -> Value:
-        return self._declare_func(node)
+        value = FuncValue(
+            name=node.name,
+            params=node.params,  # pyright: ignore[reportArgumentType]
+            body=node.body,
+        )
+        match node.soft_kw:
+            case SoftKeyword.PUB:
+                self.env.declare(node.name)
+                self.env[node.name] = value
+            case SoftKeyword.PRIV:
+                self.env.set_priv(node.name, value)
+            case SoftKeyword.SPEC:
+                if self.env.scope is None:
+                    raise SafulateScopeError(
+                        "specs can only be set in an edit object statement",
+                        node.kw_token,
+                    )
 
-    def visit_spec_decl(self, node: ASTSpecDecl) -> Value:
-        node.name.lexeme = f"%{node.name.lexeme}"
-        return self._declare_func(node)
+                try:
+                    current_spec = self.env.scope.specs[node.name.lexeme]
+                    assert isinstance(current_spec, FuncValue)
+                except KeyError:
+                    raise SafulateValueError(
+                        f"there is no spec named {node.name.lexeme!r}", node.name
+                    ) from None
+
+                if value.arity != current_spec.arity:
+                    raise SafulateValueError(
+                        f"number of params for {node.name.lexeme!r} spec do not compare",
+                        node.paren_token,
+                    )
+
+                self.env.scope.specs[node.name.lexeme] = value
+                self.env._set_parent(value)
+                return value
+            case _:
+                raise RuntimeError(f"Unknown func decl keyword: {node.soft_kw!r}")
+        return value
 
     def visit_assign(self, node: ASTAssign) -> Value:
         value = node.value.accept(self)
@@ -315,6 +341,8 @@ class TreeWalker(ASTVisitor):
                 return StrValue(node.token.value)
             case TokenType.ID:
                 return self.env[node.token]
+            case TokenType.PRIV_ID:
+                return self.env.get_priv(node.token)
             case _:
                 raise ValueError(f"Invalid atom type {node.token.type.name}")
 
@@ -400,7 +428,8 @@ class TreeWalker(ASTVisitor):
             return value
 
     def visit_raise(self, node: ASTRaise) -> Value:
-        raise SafulateError(node.expr.accept(self), node.kw)
+        val = node.expr.accept(self)
+        raise SafulateError(val.repr_spec(self.ctx(node.kw)), token=node.kw, obj=val)
 
     def visit_del(self, node: ASTDel) -> Value:
         del self.env.values[node.var.lexeme]
@@ -418,7 +447,7 @@ class TreeWalker(ASTVisitor):
                     env.declare(node.error_var)
                     env[node.error_var] = e.obj
 
-                return self._visit_block_unscoped(node.catch_branch)
+                return self.visit_unscoped_block(node.catch_branch)
 
         if node.else_branch is None:
             return null

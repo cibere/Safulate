@@ -12,6 +12,7 @@ class TokenType(Enum):
     EOF = "EOF"
     STR = "STR"
     ID = "ID"
+    PRIV_ID = "PRIV_ID"
     NUM = "NUM"
     VER = "VER"
     FSTR_START = "FSTR_START"
@@ -77,12 +78,14 @@ class SoftKeyword(Enum):
     CATCH = "catch"
     AS = "as"
     CASE = "case"
-    VAR = "var"
+    PUB = "pub"
     PRIV = "priv"
     SPEC = "spec"
-    FUNC = "func"
     STRUCT = "struct"
     PROP = "prop"
+
+    def __repr__(self) -> str:
+        return repr(super().__repr__())
 
 
 @dataclass

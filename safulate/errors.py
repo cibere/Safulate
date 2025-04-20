@@ -47,12 +47,8 @@ class ErrorManager:
         exc_value: BaseException | None,
         traceback: TracebackType | None,
     ) -> Literal[False]:
-        if not exc_type and not exc_value and not traceback:
-            return False
-
-        mock_token = getattr(exc_value, "token", None)
-        if not isinstance(exc_value, SafulateError) or not isinstance(
-            mock_token, MockToken
+        if (not exc_type and not exc_value and not traceback) or not isinstance(
+            exc_value, SafulateError
         ):
             return False
 
@@ -61,31 +57,36 @@ class ErrorManager:
         elif self.start:
             token = Token(
                 TokenType.ERR,
-                getattr(mock_token, "__error_text__"),
+                "",
                 self.start if isinstance(self.start, int) else self.start(),
             )
         else:
             raise RuntimeError("Error manager got no way of getting token")
 
-        exc_value.token = token
+        exc_value.tokens.insert(0, token)
 
         return False
 
 
 class SafulateError(BaseException):
-    def __init__(self, obj: str | Value, token: Token = MockToken()) -> None:
-        self.message = str(obj)
+    def __init__(
+        self, msg: str, token: Token | None = None, obj: Value | None = None
+    ) -> None:
+        self.message = msg
         self.obj = obj
-        self.token = token
+        self.tokens: list[Token] = []
+
+        if token:
+            self.tokens.append(token)
 
         super().__init__(self.message)
 
-    def make_report(self, source: str) -> str:
-        line = source[: self.token.start].count("\n") + 1
+    def _make_subreport(self, token: Token, source: str) -> str:
+        line = source[: token.start].count("\n") + 1
         if line > 1:
-            col = source[self.token.start - 1 :: -1].index("\n") + 1
+            col = source[token.start - 1 :: -1].index("\n") + 1
         else:
-            col = self.token.start + 1
+            col = token.start + 1
 
         src = source.splitlines()[line - 1]
         ws = len(src) - len(src.lstrip())
@@ -98,10 +99,13 @@ class SafulateError(BaseException):
             + "-" * (len(src) - col)
             + "-"
         )
+        return res
+
+    def make_report(self, source: str) -> str:
         return (
-            res
+            "\n".join(self._make_subreport(token, source) for token in self.tokens)
             + "\033[31m\n"
-            + type(self).__name__.lstrip("Test")
+            + self.__class__.__name__.removeprefix("Safulate")
             + ": "
             + self.message
             + "\033[0m"
@@ -184,4 +188,8 @@ class SafulateAssertionError(SafulateError):
 
 
 class SafulateKeyError(SafulateError):
+    pass
+
+
+class SafulateScopeError(SafulateError):
     pass

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Self
 
-from .errors import SafulateNameError
+from .errors import SafulateAttributeError, SafulateNameError, SafulateScopeError
 from .tokens import Token
 from .values import FuncValue, Value, null
 
@@ -31,9 +31,6 @@ class Environment:
     def __getitem__(self, token: Token) -> Value:
         name = token.lexeme
 
-        if name.startswith("$") and self.scope and name in self.scope.private_attrs:
-            return self.scope.private_attrs[name]
-
         if name in self.values:
             return self.values[name]
         if self.parent:
@@ -44,17 +41,6 @@ class Environment:
     def __setitem__(self, token: Token | str, value: Any) -> None:
         name = token.lexeme if isinstance(token, Token) else token
 
-        if self.scope:
-            if isinstance(value, FuncValue):
-                value.parent = self.scope
-
-            if name.startswith("%"):
-                self.scope.specs[name.removeprefix("%")] = value
-                return
-            if name.startswith("$"):
-                self.scope.private_attrs[name] = value
-                return
-
         if name in self.values:
             self.values[name] = value
         elif self.parent:
@@ -63,6 +49,34 @@ class Environment:
             self.values[name] = value
         else:
             raise SafulateNameError(f"Name {name!r} is not defined", token)
+        self._set_parent(value)
 
     def declare(self, token: Token | str) -> None:
         self.values[token.lexeme if isinstance(token, Token) else token] = null
+
+    def set_priv(self, name: Token, value: Any) -> None:
+        if self.scope is None:
+            raise SafulateScopeError(
+                "private vars can only be set in an edit object statement", token=name
+            )
+
+        self.scope.private_attrs[name.lexeme] = value
+        self._set_parent(value)
+
+    def get_priv(self, name: Token) -> Value:
+        if self.scope is None:
+            raise SafulateScopeError(
+                "no private vars are being exposed in the current scope", name
+            )
+
+        val = self.scope.private_attrs.get(name.lexeme)
+        if val is None:
+            raise SafulateAttributeError(
+                f"Private Var Not Found: {name.lexeme!r}", name
+            )
+
+        return val
+
+    def _set_parent(self, val: Value) -> None:
+        if isinstance(val, FuncValue):
+            val.parent = self.scope

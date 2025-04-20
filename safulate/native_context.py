@@ -121,4 +121,6 @@ class NativeContext:
             case _ as x if repr_fallback:
                 return x.repr_spec()
             case _ as x:
-                raise SafulateTypeError(f"Unable to convert {x.repr_spec()} to value")
+                raise SafulateTypeError(
+                    f"Unable to convert {x.repr_spec(self)} to value"
+                )

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .lexer import Token
+    from .tokens import SoftKeyword, Token
     from .values import Value
 
 __all__ = (
@@ -26,12 +26,10 @@ __all__ = (
     "ASTImportReq",
     "ASTList",
     "ASTNode",
-    "ASTPrivDecl",
     "ASTProgram",
     "ASTProperty",
     "ASTRaise",
     "ASTReturn",
-    "ASTSpecDecl",
     "ASTSwitchCase",
     "ASTTryCatch",
     "ASTUnary",
@@ -59,40 +57,23 @@ class ASTProgram(ASTNode):
 class ASTVarDecl(ASTNode):
     name: Token
     value: ASTNode | None
+    kw: SoftKeyword
 
     def accept(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_var_decl(self)
 
 
 @dataclass
-class ASTPrivDecl(ASTNode):
-    name: Token
-    value: ASTNode | None
-
-    def accept(self, visitor: ASTVisitor) -> Value:
-        return visitor.visit_priv_decl(self)
-
-
-@dataclass
 class ASTFuncDecl(ASTNode):
     name: Token
     params: list[tuple[Token, ASTNode | None]]
-    body: ASTNode
-    kw: Token
+    body: ASTBlock
+    soft_kw: SoftKeyword
+    kw_token: Token
+    paren_token: Token
 
     def accept(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_func_decl(self)
-
-
-@dataclass
-class ASTSpecDecl(ASTNode):
-    name: Token
-    params: list[tuple[Token, ASTNode | None]]
-    body: ASTNode
-    kw: Token
-
-    def accept(self, visitor: ASTVisitor) -> Value:
-        return visitor.visit_spec_decl(self)
 
 
 @dataclass
@@ -101,6 +82,9 @@ class ASTBlock(ASTNode):
 
     def accept(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_block(self)
+
+    def accept_unscoped(self, visistor: ASTVisitor) -> Value:
+        return visistor.visit_unscoped_block(self)
 
 
 @dataclass
@@ -318,7 +302,7 @@ class ASTFormat(ASTNode):
 
 @dataclass
 class ASTProperty(ASTNode):
-    body: ASTNode
+    body: ASTBlock
     name: Token
 
     def accept(self, visitor: ASTVisitor) -> Value:
@@ -330,6 +314,8 @@ class ASTVisitor(ABC):
     def visit_program(self, node: ASTProgram) -> Value: ...
     @abstractmethod
     def visit_block(self, node: ASTBlock) -> Value: ...
+    @abstractmethod
+    def visit_unscoped_block(self, node: ASTBlock) -> Value: ...
     @abstractmethod
     def visit_if(self, node: ASTIf) -> Value: ...
     @abstractmethod
@@ -358,10 +344,6 @@ class ASTVisitor(ABC):
     def visit_attr(self, node: ASTAttr) -> Value: ...
     @abstractmethod
     def visit_edit_object(self, node: ASTEditObject) -> Value: ...
-    @abstractmethod
-    def visit_spec_decl(self, node: ASTSpecDecl) -> Value: ...
-    @abstractmethod
-    def visit_priv_decl(self, node: ASTPrivDecl) -> Value: ...
     @abstractmethod
     def visit_version(self, node: ASTVersion) -> Value: ...
     @abstractmethod

@@ -21,12 +21,10 @@ from .asts import (
     ASTImportReq,
     ASTList,
     ASTNode,
-    ASTPrivDecl,
     ASTProgram,
     ASTProperty,
     ASTRaise,
     ASTReturn,
-    ASTSpecDecl,
     ASTSwitchCase,
     ASTTryCatch,
     ASTUnary,
@@ -126,6 +124,9 @@ class Parser:
     def check_next(self, *types: TokenType | SoftKeyword) -> bool:
         return any(self.compare(self.peek_next(), type) for type in types)
 
+    def check_after_next(self, *types: TokenType | SoftKeyword) -> bool:
+        return any(self.compare(self.tokens[self.current + 2], type) for type in types)
+
     def match(self, *types: TokenType | SoftKeyword) -> Token | None:
         if self.check(*types):
             return self.advance()
@@ -161,13 +162,23 @@ class Parser:
         return ASTProgram(stmts)
 
     def decl(self) -> ASTNode:
-        if self.check(SoftKeyword.VAR, SoftKeyword.PRIV) and self.check_next(
-            TokenType.ID
+        if (
+            self.check(SoftKeyword.PUB, SoftKeyword.PRIV)
+            and self.check_next(TokenType.ID)
+            and self.check_after_next(TokenType.EQ)
         ):
             return self.var_decl()
-        elif self.check(
-            SoftKeyword.FUNC, SoftKeyword.SPEC, SoftKeyword.STRUCT, SoftKeyword.PROP
-        ) and self.check_next(TokenType.ID):
+        elif (
+            self.check(
+                SoftKeyword.PUB,
+                SoftKeyword.PRIV,
+                SoftKeyword.STRUCT,
+                SoftKeyword.PROP,
+                SoftKeyword.SPEC,
+            )
+            and self.check_next(TokenType.ID)
+            and self.check_after_next(TokenType.LPAR)
+        ):
             return self.func_decl()
         elif self.check_next(TokenType.TILDE):
             return self.edit_object()
@@ -184,24 +195,22 @@ class Parser:
                 f"Unknown var declaration keyword type: {kw_token!r}"
             ) from None
 
-        cls = {SoftKeyword.VAR: ASTVarDecl, SoftKeyword.PRIV: ASTPrivDecl}[soft_kw]
-
         name = self.consume(TokenType.ID, "Expected variable name")
         if not self.check(TokenType.EQ):
             self.consume(TokenType.SEMI, "Expected assignment or ';'")
-            return cls(name, None)
+            return ASTVarDecl(name=name, value=None, kw=soft_kw)
 
-        self.advance()  # Eat `=`
+        self.consume(TokenType.EQ, "Expected '='")
         value = self.expr()
         self.consume(TokenType.SEMI, "Expected ';'")
 
-        return cls(name, value)
+        return ASTVarDecl(name=name, value=value, kw=soft_kw)
 
     def func_decl(self) -> ASTNode:
         kw_token = self.advance()
 
         name = self.consume(TokenType.ID, "Expected function name")
-        self.consume(TokenType.LPAR, "Expected '('")
+        paren_token = self.consume(TokenType.LPAR, "Expected '('")
 
         params: list[tuple[Token, ASTNode | None]] = []
         defaulted = False
@@ -243,7 +252,9 @@ class Parser:
                 return ASTFuncDecl(
                     name=name,
                     params=params,
-                    kw=kw_token,
+                    soft_kw=soft_kw,
+                    kw_token=kw_token,
+                    paren_token=paren_token,
                     body=ASTBlock(
                         [
                             ASTReturn(
@@ -281,10 +292,15 @@ class Parser:
                 if params:
                     raise SafulateSyntaxError("Properties can't take arguments")
                 return ASTProperty(body=body, name=name)
-            case SoftKeyword.FUNC:
-                return ASTFuncDecl(name=name, params=params, body=body, kw=kw_token)
-            case SoftKeyword.SPEC:
-                return ASTSpecDecl(name=name, params=params, body=body, kw=kw_token)
+            case SoftKeyword.PRIV | SoftKeyword.SPEC | SoftKeyword.PUB:
+                return ASTFuncDecl(
+                    name=name,
+                    params=params,
+                    body=body,
+                    soft_kw=soft_kw,
+                    kw_token=kw_token,
+                    paren_token=paren_token,
+                )
             case _:
                 raise RuntimeError(f"Unknown keyword for func declaration: {soft_kw!r}")
 
@@ -606,7 +622,9 @@ class Parser:
 
         if self.check(TokenType.FSTR_START):
             return self.fstring()
-        elif not self.check(TokenType.NUM, TokenType.STR, TokenType.ID):
+        elif not self.check(
+            TokenType.NUM, TokenType.STR, TokenType.ID, TokenType.PRIV_ID
+        ):
             raise SafulateSyntaxError("Expected expression", self.peek())
 
         return ASTAtom(self.advance())
