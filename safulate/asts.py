@@ -101,6 +101,7 @@ class ASTIf(ASTNode):
     condition: ASTNode
     body: ASTNode
     else_branch: ASTNode | None
+    kw_token: Token
 
     def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_if(self)
@@ -110,6 +111,7 @@ class ASTIf(ASTNode):
 class ASTWhile(ASTNode):
     condition: ASTNode
     body: ASTNode
+    kw_token: Token
 
     def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_while(self)

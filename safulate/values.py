@@ -12,14 +12,12 @@ from typing import TYPE_CHECKING, Any, Concatenate, cast, final
 
 from .asts import ASTBlock, ASTNode
 from .errors import (
-    ErrorManager,
     SafulateAttributeError,
     SafulateInvalidReturn,
     SafulateKeyError,
     SafulateTypeError,
     SafulateValueError,
 )
-from .mock import MockNativeContext
 from .properties import cached_property
 from .tokens import Token, TokenType
 
@@ -177,14 +175,18 @@ class Value(ABC):
     def neq(self, ctx: NativeContext, other: Value) -> Value:
         val = ctx.invoke_spec(self, "eq", other)
         if not isinstance(val, NumValue):
-            raise SafulateValueError(f"equality spec returned {val!r}, expected number")
+            raise SafulateValueError(
+                f"equality spec returned {val.repr_spec(ctx)}, expected number"
+            )
         return NumValue(not val.value)
 
     @special_method("has_item")
     def has_item(self, ctx: NativeContext, other: Value) -> Value:
         val = ctx.invoke_spec(self, "iter")
         if not isinstance(val, ListValue):
-            raise SafulateValueError(f"iter spec returned {val!r}, expected list")
+            raise SafulateValueError(
+                f"iter spec returned {val.repr_spec(ctx)}, expected list"
+            )
         return NumValue(other in val.value)
 
     @special_method("less")
@@ -263,15 +265,12 @@ class Value(ABC):
         return ctx.invoke_spec(val, "get")
 
     @final
-    def truthy(self) -> bool:
-        return self.bool_spec()
+    def __str__(self) -> str:
+        raise RuntimeError("use str_spec instead")
 
     @final
-    def __str__(self) -> str:
-        return self.str_spec()
-
     def __repr__(self) -> str:
-        return self.repr_spec()
+        raise RuntimeError("use repr_spec instead")
 
     def run_spec[T: Value](
         self, spec_name: str, return_value: type[T], ctx: NativeContext
@@ -279,22 +278,23 @@ class Value(ABC):
         value = ctx.invoke_spec(self, spec_name)
         if not isinstance(value, return_value):
             raise SafulateValueError(
-                f"expected return for {spec_name!r} is str, not {value!r}", ctx.token
+                f"expected return for {spec_name!r} is str, not {value.repr_spec(ctx)}",
+                ctx.token,
             )
 
         return value
 
-    def repr_spec(self, ctx: NativeContext = MockNativeContext()) -> str:
+    def repr_spec(self, ctx: NativeContext) -> str:
         return self.run_spec("repr", StrValue, ctx).value
 
-    def str_spec(self, ctx: NativeContext = MockNativeContext()) -> str:
+    def str_spec(self, ctx: NativeContext) -> str:
         return self.run_spec("str", StrValue, ctx).value
 
-    def bool_spec(self, ctx: NativeContext = MockNativeContext()) -> bool:
+    def bool_spec(self, ctx: NativeContext) -> bool:
         val = self.run_spec("bool", NumValue, ctx)
         if int(val.value) not in (1, 0):
             raise SafulateValueError(
-                f"expected return for bool spec to be 1 or 0, got {val!r} instead"
+                f"expected return for bool spec to be 1 or 0, got {val.repr_spec(ctx)} instead"
             )
         return bool(val.value)
 
@@ -485,7 +485,9 @@ class StrValue(Value, type=ValueTypeEnum.str):
         if not isinstance(other, StrValue):
             other = ctx.invoke_spec(other, "str")
         if not isinstance(other, StrValue):
-            raise SafulateValueError(f"{other!r} could not be converted into a string")
+            raise SafulateValueError(
+                f"{other.repr_spec(ctx)} could not be converted into a string"
+            )
 
         return StrValue(self.value + other.value)
 
@@ -723,7 +725,7 @@ class ListValue(Value, type=ValueTypeEnum.list):
     @public_method("pop")
     def pop(self, ctx: NativeContext, index: Value) -> Value:
         if not isinstance(index, NumValue):
-            raise SafulateTypeError(f"expected num, got {index!r} instead")
+            raise SafulateTypeError(f"expected num, got {index.repr_spec(ctx)} instead")
         if abs(index.value) > len(self.value):
             return null
 
@@ -830,24 +832,24 @@ class FuncValue(Value, type=ValueTypeEnum.func):
     def call(self, ctx: NativeContext, *args: Value, **kwargs: Value) -> Value:
         params = self._validate_params(ctx, args, kwargs)
 
-        with ErrorManager(token=lambda: ctx.token):
-            if isinstance(self.body, Callable):
-                return self.body(ctx, *args, **kwargs)
+        # with ErrorManager(token=lambda: ctx.token):
+        if isinstance(self.body, Callable):
+            return self.body(ctx, *args, **kwargs)
 
-            ret_value = null
-            with ctx.interpreter.scope(source=self.parent):
-                ctx.interpreter.env["parent"] = self.parent or null
+        ret_value = null
+        with ctx.interpreter.scope(source=self.parent):
+            ctx.interpreter.env["parent"] = self.parent or null
 
-                for param, value in params.items():
-                    ctx.interpreter.env.declare(param)
-                    ctx.interpreter.env[param] = value
+            for param, value in params.items():
+                ctx.interpreter.env.declare(param)
+                ctx.interpreter.env[param] = value
 
-                try:
-                    self.body.visit_unscoped(ctx.interpreter)
-                except SafulateInvalidReturn as r:
-                    ret_value = r.value
+            try:
+                self.body.visit_unscoped(ctx.interpreter)
+            except SafulateInvalidReturn as r:
+                ret_value = r.value
 
-            return ret_value
+        return ret_value
 
     @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
@@ -966,7 +968,7 @@ class DictValue(Value, type=ValueTypeEnum.dict):
             return self.data[key]
         except KeyError:
             if default is MISSING:
-                raise SafulateKeyError(f"Key {key!r} was not found")
+                raise SafulateKeyError(f"Key {key.repr_spec(ctx)} was not found")
             return default
 
     @public_method("set")
@@ -994,7 +996,7 @@ class DictValue(Value, type=ValueTypeEnum.dict):
             return self.data.pop(key)
         except KeyError:
             if default is None:
-                raise SafulateKeyError(f"Key {key!r} was not found")
+                raise SafulateKeyError(f"Key {key.repr_spec(ctx)} was not found")
             return default
 
     @special_method("iter")

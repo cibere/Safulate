@@ -72,14 +72,14 @@ class SafulateError(BaseException):
     def __init__(
         self, msg: str, token: Token | None = None, obj: Value | None = None
     ) -> None:
-        self.message = msg
+        self.msg = msg
         self.obj = obj
         self.tokens: list[Token] = []
 
         if token:
             self.tokens.append(token)
 
-        super().__init__(self.message)
+        super().__init__(self.msg)
 
     def _make_subreport(self, token: Token, source: str) -> str:
         line = source[: token.start].count("\n") + 1
@@ -107,7 +107,7 @@ class SafulateError(BaseException):
             + "\033[31m\n"
             + self.__class__.__name__.removeprefix("Safulate")
             + ": "
-            + self.message
+            + self.msg
             + "\033[0m"
         )
 

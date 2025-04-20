@@ -119,7 +119,7 @@ class NativeContext:
             case NullValue():
                 return None
             case _ as x if repr_fallback:
-                return x.repr_spec()
+                return x.repr_spec(self)
             case _ as x:
                 raise SafulateTypeError(
                     f"Unable to convert {x.repr_spec(self)} to value"

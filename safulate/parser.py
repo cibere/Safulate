@@ -314,17 +314,22 @@ class Parser:
     def stmt(self) -> ASTNode:
         if self.check(TokenType.LBRC):
             return self.block()
-        elif self.match(TokenType.IF):
+        elif kw_token := self.match(TokenType.IF):
             condition = self.expr()
             body = self.block()
             else_branch = None
             if self.match(SoftKeyword.ELSE):
                 else_branch = self.block()
-            return ASTIf(condition, body, else_branch)
-        elif self.match(TokenType.WHILE):
+            return ASTIf(
+                condition=condition,
+                body=body,
+                else_branch=else_branch,
+                kw_token=kw_token,
+            )
+        elif kw_token := self.match(TokenType.WHILE):
             condition = self.expr()
             body = self.block()
-            return ASTWhile(condition, body)
+            return ASTWhile(condition=condition, body=body, kw_token=kw_token)
         elif self.match(TokenType.FOR):
             var = self.consume(
                 TokenType.ID, "Expected name of variable for loop iteration"

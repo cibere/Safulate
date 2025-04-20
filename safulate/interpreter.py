@@ -128,7 +128,7 @@ class TreeWalker(ASTVisitor):
         return src
 
     def visit_if(self, node: ASTIf) -> Value:
-        if node.condition.visit(self).truthy():
+        if node.condition.visit(self).bool_spec(self.ctx(node.kw_token)):
             return node.body.visit(self)
         elif node.else_branch:
             return node.else_branch.visit(self)
@@ -137,7 +137,7 @@ class TreeWalker(ASTVisitor):
     def visit_while(self, node: ASTWhile) -> Value:
         val = null
 
-        while node.condition.visit(self).truthy():
+        while node.condition.visit(self).bool_spec(self.ctx(node.kw_token)):
             try:
                 val = node.body.visit(self)
             except SafulateBreakoutError as e:
@@ -154,7 +154,9 @@ class TreeWalker(ASTVisitor):
             with ErrorManager(token=node.var_name):
                 src = self.ctx(node.var_name).invoke_spec(src, "iter")
                 if not isinstance(src, ListValue):
-                    raise SafulateValueError(f"{src!r} is not iterable")
+                    raise SafulateValueError(
+                        f"{src.repr_spec(self.ctx(node.var_name))} is not iterable"
+                    )
 
         loops = src.value.copy()
         val = null
@@ -191,7 +193,7 @@ class TreeWalker(ASTVisitor):
                 amount_node = node.amount.visit(self)
                 if not isinstance(amount_node, NumValue):
                     raise SafulateTypeError(
-                        f"Expected a number for {'break' if is_break else 'continue'} amount, got {amount_node!r} instead.",
+                        f"Expected a number for {'break' if is_break else 'continue'} amount, got {amount_node.repr_spec(self.ctx(node.keyword))} instead.",
                     )
                 amount = int(amount_node.value)
 
@@ -472,9 +474,10 @@ class TreeWalker(ASTVisitor):
 
         while cases:
             expr, body = cases.pop(0)
+            ctx = self.ctx(node.kw)
 
-            res = self.ctx(node.kw).invoke_spec(key, "eq", expr.visit(self))
-            if not res.bool_spec():
+            res = ctx.invoke_spec(key, "eq", expr.visit(self))
+            if not res.bool_spec(ctx):
                 continue
 
             self._visit_switch_case_entry(body, cases)
