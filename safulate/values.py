@@ -526,7 +526,7 @@ class StrValue(Value, type=ValueTypeEnum.str):
         val = self.value
         for arg in args:
             if not isinstance(arg, StrValue):
-                raise SafulateTypeError("Format can only accept str values")
+                raise SafulateTypeError("Format can only visit str values")
 
             val = val.replace("{}", arg.value, 1)
 
@@ -819,7 +819,7 @@ class FuncValue(Value, type=ValueTypeEnum.func):
                     f"Required argument {param.lexeme!r} was not passed",
                 )
             passable_params[param.lexeme] = (
-                default.accept(ctx.interpreter)
+                default.visit(ctx.interpreter)
                 if isinstance(default, ASTNode)
                 else default
             )
@@ -843,7 +843,7 @@ class FuncValue(Value, type=ValueTypeEnum.func):
                     ctx.interpreter.env[param] = value
 
                 try:
-                    self.body.accept_unscoped(ctx.interpreter)
+                    self.body.visit_unscoped(ctx.interpreter)
                 except SafulateInvalidReturn as r:
                     ret_value = r.value
 

@@ -42,14 +42,14 @@ __all__ = (
 
 class ASTNode(ABC):
     @abstractmethod
-    def accept(self, visitor: ASTVisitor) -> Value: ...
+    def visit(self, visitor: ASTVisitor) -> Value: ...
 
 
 @dataclass
 class ASTProgram(ASTNode):
     stmts: list[ASTNode]
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_program(self)
 
 
@@ -59,7 +59,7 @@ class ASTVarDecl(ASTNode):
     value: ASTNode | None
     kw: SoftKeyword
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_var_decl(self)
 
 
@@ -72,7 +72,7 @@ class ASTFuncDecl(ASTNode):
     kw_token: Token
     paren_token: Token
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_func_decl(self)
 
 
@@ -80,10 +80,10 @@ class ASTFuncDecl(ASTNode):
 class ASTBlock(ASTNode):
     stmts: list[ASTNode]
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_block(self)
 
-    def accept_unscoped(self, visistor: ASTVisitor) -> Value:
+    def visit_unscoped(self, visistor: ASTVisitor) -> Value:
         return visistor.visit_unscoped_block(self)
 
 
@@ -92,7 +92,7 @@ class ASTEditObject(ASTNode):
     obj: ASTNode
     block: ASTBlock
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_edit_object(self)
 
 
@@ -102,7 +102,7 @@ class ASTIf(ASTNode):
     body: ASTNode
     else_branch: ASTNode | None
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_if(self)
 
 
@@ -111,7 +111,7 @@ class ASTWhile(ASTNode):
     condition: ASTNode
     body: ASTNode
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_while(self)
 
 
@@ -120,7 +120,7 @@ class ASTReturn(ASTNode):
     keyword: Token
     expr: ASTNode | None
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_return(self)
 
 
@@ -129,7 +129,7 @@ class ASTBreak(ASTNode):
     keyword: Token
     amount: ASTNode | None
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_break(self)
 
 
@@ -138,7 +138,7 @@ class ASTContinue(ASTNode):
     keyword: Token
     amount: ASTNode | None
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_continue(self)
 
 
@@ -146,7 +146,7 @@ class ASTContinue(ASTNode):
 class ASTExprStmt(ASTNode):
     expr: ASTNode
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_expr_stmt(self)
 
 
@@ -155,7 +155,7 @@ class ASTAssign(ASTNode):
     name: Token
     value: ASTNode
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_assign(self)
 
 
@@ -165,7 +165,7 @@ class ASTBinary(ASTNode):
     op: Token
     right: ASTNode
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_binary(self)
 
 
@@ -174,7 +174,7 @@ class ASTUnary(ASTNode):
     op: Token
     right: ASTNode
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_unary(self)
 
 
@@ -185,7 +185,7 @@ class ASTCall(ASTNode):
     args: list[ASTNode]
     kwargs: dict[str, ASTNode]
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_call(self)
 
 
@@ -193,7 +193,7 @@ class ASTCall(ASTNode):
 class ASTAtom(ASTNode):
     token: Token
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_atom(self)
 
 
@@ -202,7 +202,7 @@ class ASTAttr(ASTNode):
     expr: ASTNode
     attr: Token
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_attr(self)
 
 
@@ -212,7 +212,7 @@ class ASTVersion(ASTNode):
     minor: float | None
     micro: float | None
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_version(self)
 
 
@@ -221,7 +221,7 @@ class ASTImportReq(ASTNode):
     source: Token
     name: Token
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_import_req(self)
 
 
@@ -230,7 +230,7 @@ class ASTVersionReq(ASTNode):
     version: ASTNode
     token: Token
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_version_req(self)
 
 
@@ -239,7 +239,7 @@ class ASTRaise(ASTNode):
     expr: ASTNode
     kw: Token
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_raise(self)
 
 
@@ -249,7 +249,7 @@ class ASTForLoop(ASTNode):
     source: ASTNode
     body: ASTNode
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_for_loop(self)
 
 
@@ -257,7 +257,7 @@ class ASTForLoop(ASTNode):
 class ASTDel(ASTNode):
     var: Token
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_del(self)
 
 
@@ -268,7 +268,7 @@ class ASTTryCatch(ASTNode):
     error_var: Token | None
     else_branch: ASTBlock | None
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_try_catch(self)
 
 
@@ -279,7 +279,7 @@ class ASTSwitchCase(ASTNode):
     expr: ASTNode
     kw: Token
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_switch_case(self)
 
 
@@ -287,7 +287,7 @@ class ASTSwitchCase(ASTNode):
 class ASTList(ASTNode):
     children: list[ASTBlock]
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_list(self)
 
 
@@ -296,7 +296,7 @@ class ASTFormat(ASTNode):
     obj: ASTNode
     spec: Token
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_format(self)
 
 
@@ -305,7 +305,7 @@ class ASTProperty(ASTNode):
     body: ASTBlock
     name: Token
 
-    def accept(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_property(self)
 
 

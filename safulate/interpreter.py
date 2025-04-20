@@ -103,17 +103,17 @@ class TreeWalker(ASTVisitor):
         if len(node.stmts) <= 0:
             return null
         for stmt in node.stmts[:-1]:
-            stmt.accept(self)
+            stmt.visit(self)
 
-        return node.stmts[-1].accept(self)
+        return node.stmts[-1].visit(self)
 
     def visit_unscoped_block(self, node: ASTBlock) -> Value:
         if len(node.stmts) <= 0:
             return null
 
         for stmt in node.stmts[:-1]:
-            stmt.accept(self)
-        res = node.stmts[-1].accept(self)
+            stmt.visit(self)
+        res = node.stmts[-1].visit(self)
 
         return res
 
@@ -122,24 +122,24 @@ class TreeWalker(ASTVisitor):
             return self.visit_unscoped_block(node)
 
     def visit_edit_object(self, node: ASTEditObject) -> Value:
-        src = node.obj.accept(self)
+        src = node.obj.visit(self)
         with self.scope(source=src):
             self.visit_unscoped_block(node.block)
         return src
 
     def visit_if(self, node: ASTIf) -> Value:
-        if node.condition.accept(self).truthy():
-            return node.body.accept(self)
+        if node.condition.visit(self).truthy():
+            return node.body.visit(self)
         elif node.else_branch:
-            return node.else_branch.accept(self)
+            return node.else_branch.visit(self)
         return null
 
     def visit_while(self, node: ASTWhile) -> Value:
         val = null
 
-        while node.condition.accept(self).truthy():
+        while node.condition.visit(self).truthy():
             try:
-                val = node.body.accept(self)
+                val = node.body.visit(self)
             except SafulateBreakoutError as e:
                 e.check()
                 break
@@ -149,7 +149,7 @@ class TreeWalker(ASTVisitor):
         return val
 
     def visit_for_loop(self, node: ASTForLoop) -> Value:
-        src = node.source.accept(self)
+        src = node.source.visit(self)
         if not isinstance(src, ListValue):
             with ErrorManager(token=node.var_name):
                 src = self.ctx(node.var_name).invoke_spec(src, "iter")
@@ -165,7 +165,7 @@ class TreeWalker(ASTVisitor):
                 with self.scope() as env:
                     env.declare(node.var_name)
                     env[node.var_name] = item
-                    val = node.body.accept(self)
+                    val = node.body.visit(self)
             except SafulateInvalidContinue as e:
                 e.handle_skips(loops)
             except SafulateBreakoutError as e:
@@ -176,7 +176,7 @@ class TreeWalker(ASTVisitor):
 
     def visit_return(self, node: ASTReturn) -> Value:
         if node.expr:
-            value = node.expr.accept(self)
+            value = node.expr.visit(self)
             raise SafulateInvalidReturn(value, node.keyword)
 
         raise SafulateInvalidReturn(null, node.keyword)
@@ -188,7 +188,7 @@ class TreeWalker(ASTVisitor):
             if node.amount is None:
                 amount = 1
             else:
-                amount_node = node.amount.accept(self)
+                amount_node = node.amount.visit(self)
                 if not isinstance(amount_node, NumValue):
                     raise SafulateTypeError(
                         f"Expected a number for {'break' if is_break else 'continue'} amount, got {amount_node!r} instead.",
@@ -216,11 +216,11 @@ class TreeWalker(ASTVisitor):
         return self._visit_continue_and_break(node)
 
     def visit_expr_stmt(self, node: ASTExprStmt) -> Value:
-        value = node.expr.accept(self)
+        value = node.expr.visit(self)
         return value
 
     def visit_var_decl(self, node: ASTVarDecl) -> Value:
-        value = null if node.value is None else node.value.accept(self)
+        value = null if node.value is None else node.value.visit(self)
         match node.kw:
             case SoftKeyword.PUB:
                 self.env.declare(node.name)
@@ -272,13 +272,13 @@ class TreeWalker(ASTVisitor):
         return value
 
     def visit_assign(self, node: ASTAssign) -> Value:
-        value = node.value.accept(self)
+        value = node.value.visit(self)
         self.env[node.name] = value
         return value
 
     def visit_binary(self, node: ASTBinary) -> Value:
-        left = node.left.accept(self)
-        right = node.right.accept(self)
+        left = node.left.visit(self)
+        right = node.right.visit(self)
 
         spec_name = {
             TokenType.PLUS: "add",
@@ -306,7 +306,7 @@ class TreeWalker(ASTVisitor):
             return self.ctx(node.op).invoke_spec(left, spec_name, right)
 
     def visit_unary(self, node: ASTUnary) -> Value:
-        right = node.right.accept(self)
+        right = node.right.visit(self)
 
         spec_name = {
             TokenType.PLUS: "uadd",
@@ -322,15 +322,15 @@ class TreeWalker(ASTVisitor):
             return self.ctx(node.op).invoke_spec(right, spec_name)
 
     def visit_call(self, node: ASTCall) -> Value:
-        func = node.callee.accept(self)
+        func = node.callee.visit(self)
 
         if node.paren.type is TokenType.LSQB:
             func = func.specs["subscript"]
 
         return self.ctx(node.paren).invoke(
             func,
-            *[arg.accept(self) for arg in node.args],
-            **{name: value.accept(self) for name, value in node.kwargs.items()},
+            *[arg.visit(self) for arg in node.args],
+            **{name: value.visit(self) for name, value in node.kwargs.items()},
         )
 
     def visit_atom(self, node: ASTAtom) -> Value:
@@ -347,7 +347,7 @@ class TreeWalker(ASTVisitor):
                 raise ValueError(f"Invalid atom type {node.token.type.name}")
 
     def visit_attr(self, node: ASTAttr) -> Value:
-        obj = node.expr.accept(self)
+        obj = node.expr.visit(self)
 
         with ErrorManager(token=node.attr):
             if node.attr.type is not TokenType.ID:
@@ -368,7 +368,7 @@ class TreeWalker(ASTVisitor):
 
     def visit_version_req(self, node: ASTVersionReq) -> Value:
         with ErrorManager(token=node.token):
-            match node.version.accept(self):
+            match node.version.visit(self):
                 case VersionValue() as ver_value:
                     ver = Version(str(ver_value))
                     if ver != self.version:
@@ -428,7 +428,7 @@ class TreeWalker(ASTVisitor):
             return value
 
     def visit_raise(self, node: ASTRaise) -> Value:
-        val = node.expr.accept(self)
+        val = node.expr.visit(self)
         raise SafulateError(val.repr_spec(self.ctx(node.kw)), token=node.kw, obj=val)
 
     def visit_del(self, node: ASTDel) -> Value:
@@ -437,7 +437,7 @@ class TreeWalker(ASTVisitor):
 
     def visit_try_catch(self, node: ASTTryCatch) -> Value:
         try:
-            node.body.accept(self)
+            node.body.visit(self)
         except SafulateError as e:
             if node.catch_branch is None:
                 return null
@@ -452,13 +452,13 @@ class TreeWalker(ASTVisitor):
         if node.else_branch is None:
             return null
 
-        return node.else_branch.accept(self)
+        return node.else_branch.visit(self)
 
     def _visit_switch_case_entry(
         self, body: ASTBlock, loops: list[tuple[ASTNode, ASTBlock]]
     ) -> Value:
         try:
-            return body.accept(self)
+            return body.visit(self)
         except SafulateInvalidContinue as e:
             next_loop = e.handle_skips(loops)
 
@@ -467,13 +467,13 @@ class TreeWalker(ASTVisitor):
             return self._visit_switch_case_entry(next_loop[-1], loops)
 
     def visit_switch_case(self, node: ASTSwitchCase) -> Value:
-        key = node.expr.accept(self)
+        key = node.expr.visit(self)
         cases = node.cases.copy()
 
         while cases:
             expr, body = cases.pop(0)
 
-            res = self.ctx(node.kw).invoke_spec(key, "eq", expr.accept(self))
+            res = self.ctx(node.kw).invoke_spec(key, "eq", expr.visit(self))
             if not res.bool_spec():
                 continue
 
@@ -481,11 +481,11 @@ class TreeWalker(ASTVisitor):
             return null
 
         if node.else_branch:
-            node.else_branch.accept(self)
+            node.else_branch.visit(self)
         return null
 
     def visit_list(self, node: ASTList) -> ListValue:
-        return ListValue([child.accept(self) for child in node.children])
+        return ListValue([child.visit(self) for child in node.children])
 
     def visit_format(self, node: ASTFormat) -> Value:
         spec = {"r": "repr", "s": "str"}.get(node.spec.lexeme)
@@ -495,7 +495,7 @@ class TreeWalker(ASTVisitor):
             args = (StrValue(node.spec.lexeme),)
             spec = "format"
 
-        return self.ctx(node.spec).invoke_spec(node.obj.accept(self), spec, *args)
+        return self.ctx(node.spec).invoke_spec(node.obj.visit(self), spec, *args)
 
     def visit_property(self, node: ASTProperty) -> Value:
         val = PropertyValue(FuncValue(name=node.name, params=[], body=node.body))

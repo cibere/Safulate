@@ -28,7 +28,7 @@ def run_code(source: str, opts: CliOptions, *, env: Environment | None = None) -
         if opts.ast:
             print(ast)
             quit(1)
-        return ast.accept(TreeWalker(env=env))
+        return ast.visit(TreeWalker(env=env))
     except SafulateError as error:
         error.print_report(source)
         raise
