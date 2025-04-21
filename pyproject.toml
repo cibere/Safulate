@@ -72,8 +72,7 @@ line-ending = "auto"
 
 [tool.pyright]
 include = [
-    "tests",
-    "flogin",
+    "safulate",
     "examples",
 ]
 pythonPlatform = "Windows"
