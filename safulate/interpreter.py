@@ -404,21 +404,17 @@ class TreeWalker(ASTVisitor):
             return null  # pyright: ignore[reportPossiblyUnboundVariable] # pyright is high
 
     def visit_import_req(self, node: ASTImportReq) -> Value:
-        cached_value = self.import_cache.get(node.source.lexeme)
-        if cached_value:
-            return cached_value
-
         with ErrorManager(token=node.source):
-            value = None
+            value = self.import_cache.get(node.source.lexeme)
 
-            match node.source.type:
-                case TokenType.ID:
-                    value = self.libs[node.source.lexeme]
-                case TokenType.STR:
-                    raise SafulateImportError("Url imports are not allowed yet")
-                case other:
-                    raise RuntimeError(f"Unknown import source: {other.name!r}")
-
+            if value is None:
+                match node.source.type:
+                    case TokenType.ID:
+                        value = self.libs[node.source.lexeme]
+                    case TokenType.STR:
+                        raise SafulateImportError("Url imports are not allowed yet")
+                    case other:
+                        raise RuntimeError(f"Unknown import source: {other.name!r}")
             if value is None:
                 raise SafulateImportError(
                     f"{node.source.lexeme!r} could not be located"
@@ -426,7 +422,7 @@ class TreeWalker(ASTVisitor):
 
             self.env.declare(node.name)
             self.env[node.name] = value
-            self.import_cache[node.name.lexeme] = value
+            self.import_cache[node.source.lexeme] = value
             return value
 
     def visit_raise(self, node: ASTRaise) -> Value:
