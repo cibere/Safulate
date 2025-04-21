@@ -20,4 +20,4 @@ jobs:
             fetch-depth: 0
       - uses: astral-sh/setup-uv@v5
       - run: |
-            uv run -p ${{ matrix.python-version }} ruff format --check
+            uvx -p ${{ matrix.python-version }} ruff format --check

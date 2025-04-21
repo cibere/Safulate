@@ -48,4 +48,4 @@ jobs:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v5
       - run: |
-            uv run -p ${{ matrix.python-version }} build
+            uvx -p ${{ matrix.python-version }} build

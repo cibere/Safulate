@@ -20,7 +20,7 @@ jobs:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v5
       - run: |
-            uv run -p ${{ matrix.python-version }} pyright
+            uvx -p ${{ matrix.python-version }} pyright
 
   ruff:
     runs-on: ubuntu-latest
@@ -36,4 +36,4 @@ jobs:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v5
       - run: |
-            uv run -p ${{ matrix.python-version }} ruff check
+            uvx -p ${{ matrix.python-version }} ruff check
