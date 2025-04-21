@@ -24,7 +24,8 @@ jobs:
         with:
             python-version: ${{ matrix.python-version }}
       - run: |
-            py -m pip install .
+            python -m pip install --upgrade pip
+            pip install .
       - name: Setup node.js
         uses: actions/setup-node@v3
         with:
