@@ -360,18 +360,28 @@ class Parser:
             self.consume(TokenType.SEMI, "Expected ';'")
             return ASTContinue(kwd, expr)
         elif kwd := self.match(TokenType.REQ):
-            if not self.check(TokenType.ID):
+            names: list[Token] | Token | None = None
+            specific_import_open_paren = self.peek()
+            if specific_import_open_paren := self.match(TokenType.LPAR):
+                names = []
+                names.append(self.consume(TokenType.ID, "Expected ID"))
+
+                while self.check(TokenType.COMMA) and self.check_next(TokenType.ID):
+                    self.advance()
+                    names.append(self.consume(TokenType.ID, "Expected ID"))
+
+                self.consume(TokenType.RPAR, "Expected ')'")
+            elif self.check(TokenType.ID):
+                names = self.match(TokenType.ID)
+                if not names:
+                    raise SafulateSyntaxError("Expected name of import", self.peek())
+            else:
                 token = self.peek()
                 version = self.expr()
                 self.consume(TokenType.SEMI, "Expected ';'")
                 return ASTVersionReq(version, token)
 
-            name = self.match(TokenType.ID)
-            if not name:
-                raise SafulateSyntaxError("Expected name of import", self.peek())
-
             source: Token | None = None
-
             if self.match(TokenType.AT):
                 source = self.match(TokenType.ID, TokenType.STR)
                 if not source:
@@ -379,11 +389,40 @@ class Parser:
                         "Expected Source after @ symbol in req statement", self.peek()
                     )
 
-            if source is None:
-                source = name
-
             self.consume(TokenType.SEMI, "Expected ';'")
-            return ASTImportReq(name=name, source=source)
+
+            if isinstance(names, Token):
+                if source is None:
+                    source = names
+
+                return ASTImportReq(name=names, source=source)
+            else:
+                if source is None:
+                    raise SafulateSyntaxError(
+                        "Expected '@ source' for specific imports",
+                        specific_import_open_paren,
+                    )
+
+                name_token = Token(
+                    TokenType.ID,
+                    f"##SAFULATE-SPECIFIC-REQ-BLOCK##:{source.lexeme}",
+                    kwd.start,
+                )
+                return ASTBlock(
+                    [
+                        ASTImportReq(source=source, name=name_token),
+                        *[
+                            ASTVarDecl(
+                                name=name,
+                                kw=SoftKeyword.PUB,
+                                value=ASTAttr(expr=ASTAtom(name_token), attr=name),
+                            )
+                            for name in names
+                        ],
+                        ASTDel(name_token),
+                    ],
+                    force_unscoped=True,
+                )
         elif kwd := self.match(TokenType.RAISE):
             expr = self.expr()
             self.consume(TokenType.SEMI, "Expected ';'")

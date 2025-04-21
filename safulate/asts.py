@@ -79,8 +79,11 @@ class ASTFuncDecl(ASTNode):
 @dataclass
 class ASTBlock(ASTNode):
     stmts: list[ASTNode]
+    force_unscoped: bool = False
 
     def visit(self, visitor: ASTVisitor) -> Value:
+        if self.force_unscoped:
+            return self.visit_unscoped(visitor)
         return visitor.visit_block(self)
 
     def visit_unscoped(self, visistor: ASTVisitor) -> Value:
