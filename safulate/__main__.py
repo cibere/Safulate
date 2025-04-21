@@ -39,7 +39,7 @@ def run_file(args: CliOptions) -> None:
     run_code(source, args)
 
 
-def repl() -> None:
+def repl(args: CliOptions) -> None:
     print(REPL_GREETING)
 
     env = Environment().add_builtins()
@@ -62,7 +62,7 @@ def repl() -> None:
         print()
 
 
-if __name__ == "__main__":
+def main() -> None:
     args = parse_cli_args()
 
     try:
@@ -71,13 +71,12 @@ if __name__ == "__main__":
         elif args.code:
             run_code(args.code, args)
         else:
-            repl()
+            repl(args)
     except SafulateError:
         if args.python_errors:
             raise
         sys.exit(1)
 
-    # run("18/2+1**2;")
-    # run("18/(2+1)**;")
-    # run("1+null;")
-    # run_file("test.test")
+
+if __name__ == "__main__":
+    main()
