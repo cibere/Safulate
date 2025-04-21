@@ -166,6 +166,10 @@ class Parser:
             self.check(SoftKeyword.PUB, SoftKeyword.PRIV)
             and self.check_next(TokenType.ID)
             and self.check_after_next(TokenType.EQ)
+        ) or (
+            self.check(SoftKeyword.PUB)
+            and self.check_next(TokenType.ID)
+            and self.check_after_next(TokenType.SEMI)
         ):
             return self.var_decl()
         elif (
