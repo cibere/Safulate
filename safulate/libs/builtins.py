@@ -68,7 +68,7 @@ def create_object(ctx: NativeContext, name: Value = null) -> Value:
 
 @exporter("assert")
 def assert_(ctx: NativeContext, obj: Value, msg: Value = null) -> Value:
-    if not obj.truthy():
+    if not obj.bool_spec(ctx):
         raise SafulateAssertionError(msg.str_spec(ctx), obj=msg)
     return null
 
