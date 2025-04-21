@@ -18,23 +18,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Set up CPython ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install dependencies
-        id: install-deps
-        run: |
-          pip install .
-          pip install pyright
-      
-      - name: Run pyright
-        id: run-pyright
-        if: ${{ always() && steps.install-deps.outcome == 'success' }}
-        run: |
-          pyright --pythonversion ${{ matrix.python-version }} --warnings
+      - uses: astral-sh/setup-uv@v5
+      - run: |
+            uv run -p ${{ matrix.python-version }} pyright
 
   ruff:
     runs-on: ubuntu-latest
@@ -48,18 +34,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Set up CPython ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install dependencies
-        id: install-deps
-        run: |
-          pip install .
-          pip install ruff
-      
-      - name: Run Ruff Linter
-        if: ${{ always() && steps.install-deps.outcome == 'success' }}
-        uses: astral-sh/ruff-action@v3
+      - uses: astral-sh/setup-uv@v5
+      - run: |
+            uv run -p ${{ matrix.python-version }} ruff check
