@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
@@ -27,6 +28,7 @@ from .asts import (
     ASTProgram,
     ASTProperty,
     ASTRaise,
+    ASTRegex,
     ASTReturn,
     ASTSwitchCase,
     ASTTryCatch,
@@ -58,6 +60,7 @@ from .values import (
     ListValue,
     NumValue,
     ObjectValue,
+    PatternValue,
     PropertyValue,
     StrValue,
     Value,
@@ -501,3 +504,6 @@ class TreeWalker(ASTVisitor):
         self.env.declare(node.name)
         self.env[node.name] = val
         return val
+
+    def visit_regex(self, node: ASTRegex) -> Value:
+        return PatternValue(re.compile(node.value.lexeme[2:-1]))

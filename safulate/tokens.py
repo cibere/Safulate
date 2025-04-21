@@ -18,6 +18,7 @@ class TokenType(Enum):
     FSTR_START = "FSTR_START"
     FSTR_MIDDLE = "FSTR_MIDDLE"
     FSTR_END = "FSTR_END"
+    RSTRING = "RSTRING"
 
     # trisymbols
     STARSTAREQ = "**="

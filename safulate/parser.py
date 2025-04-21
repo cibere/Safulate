@@ -24,6 +24,7 @@ from .asts import (
     ASTProgram,
     ASTProperty,
     ASTRaise,
+    ASTRegex,
     ASTReturn,
     ASTSwitchCase,
     ASTTryCatch,
@@ -670,6 +671,8 @@ class Parser:
 
         if self.check(TokenType.FSTR_START):
             return self.fstring()
+        elif token := self.match(TokenType.RSTRING):
+            return ASTRegex(value=token)
         elif not self.check(
             TokenType.NUM, TokenType.STR, TokenType.ID, TokenType.PRIV_ID
         ):

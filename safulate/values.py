@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import sys
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable
@@ -22,15 +23,19 @@ from .properties import cached_property
 from .tokens import Token, TokenType
 
 if TYPE_CHECKING:
+    import re
+
     from .native_context import NativeContext
 
 __all__ = (
     "DictValue",
     "FuncValue",
     "ListValue",
+    "MatchValue",
     "NullValue",
     "NumValue",
     "ObjectValue",
+    "PatternValue",
     "PropertyValue",
     "StrValue",
     "TypeValue",
@@ -74,6 +79,8 @@ class ValueTypeEnum(Enum):
     type = _enum_auto()
     dict = _enum_auto()
     property = _enum_auto()
+    re_pattern = _enum_auto()
+    re_match = _enum_auto()
 
 
 class Value(ABC):
@@ -1026,3 +1033,230 @@ class PropertyValue(Value, type=ValueTypeEnum.property):
     @special_method("get")
     def get_spec(self, ctx: NativeContext) -> Value:
         return ctx.invoke(self.func)
+
+
+# region Regex
+
+
+class PatternValue(Value, type=ValueTypeEnum.re_pattern):
+    def __init__(self, pattern: re.Pattern[str]) -> None:
+        self.pattern = pattern
+
+    @special_method("repr")
+    def repr(self, ctx: NativeContext) -> StrValue:
+        return StrValue(f"<Pattern {self.pattern.pattern!r}>")
+
+    @special_method("str")
+    def str(self, ctx: NativeContext) -> StrValue:
+        return self.get_pattern_prop(ctx)
+
+    def __hash__(self) -> int:
+        return hash(self.pattern)
+
+    @public_property("pattern")
+    def get_pattern_prop(self, ctx: NativeContext) -> StrValue:
+        return StrValue(self.pattern.pattern)
+
+    @public_method("search")
+    def search(
+        self, ctx: NativeContext, sub: Value, start: Value = null, end: Value = null
+    ) -> MatchValue | NullValue:
+        if not isinstance(sub, StrValue):
+            raise SafulateTypeError(
+                f"Expected str for substring, got {sub.repr_spec(ctx)} instead"
+            )
+        if not isinstance(start, NullValue | NumValue):
+            raise SafulateTypeError(
+                f"Expected num or null for start pos, got {start.repr_spec(ctx)} instead"
+            )
+        if not isinstance(end, NullValue | NumValue):
+            raise SafulateTypeError(
+                f"Expected num or null for end pos, got {end.repr_spec(ctx)} instead"
+            )
+
+        match = self.pattern.search(
+            sub.value,
+            0 if isinstance(start, NullValue) else int(start.value),
+            sys.maxsize if isinstance(end, NullValue) else int(end.value),
+        )
+        if match is None:
+            return null
+
+        return MatchValue(match, self)
+
+    @public_method("match")
+    def match(
+        self, ctx: NativeContext, sub: Value, start: Value = null, end: Value = null
+    ) -> MatchValue | NullValue:
+        if not isinstance(sub, StrValue):
+            raise SafulateTypeError(
+                f"Expected str for substring, got {sub.repr_spec(ctx)} instead"
+            )
+        if not isinstance(start, NullValue | NumValue):
+            raise SafulateTypeError(
+                f"Expected num or null for start pos, got {start.repr_spec(ctx)} instead"
+            )
+        if not isinstance(end, NullValue | NumValue):
+            raise SafulateTypeError(
+                f"Expected num or null for end pos, got {end.repr_spec(ctx)} instead"
+            )
+
+        match = self.pattern.match(
+            sub.value,
+            0 if isinstance(start, NullValue) else int(start.value),
+            sys.maxsize if isinstance(end, NullValue) else int(end.value),
+        )
+        if match is None:
+            return null
+
+        return MatchValue(match, self)
+
+    @public_method("fullmatch")
+    def fullmatch(
+        self, ctx: NativeContext, sub: Value, start: Value = null, end: Value = null
+    ) -> MatchValue | NullValue:
+        if not isinstance(sub, StrValue):
+            raise SafulateTypeError(
+                f"Expected str for substring, got {sub.repr_spec(ctx)} instead"
+            )
+        if not isinstance(start, NullValue | NumValue):
+            raise SafulateTypeError(
+                f"Expected num or null for start pos, got {start.repr_spec(ctx)} instead"
+            )
+        if not isinstance(end, NullValue | NumValue):
+            raise SafulateTypeError(
+                f"Expected num or null for end pos, got {end.repr_spec(ctx)} instead"
+            )
+
+        match = self.pattern.fullmatch(
+            sub.value,
+            0 if isinstance(start, NullValue) else int(start.value),
+            sys.maxsize if isinstance(end, NullValue) else int(end.value),
+        )
+        if match is None:
+            return null
+
+        return MatchValue(match, self)
+
+    @public_method("find_all")
+    def find_all(
+        self, ctx: NativeContext, sub: Value, start: Value = null, end: Value = null
+    ) -> ListValue:
+        if not isinstance(sub, StrValue):
+            raise SafulateTypeError(
+                f"Expected str for sub, got {sub.repr_spec(ctx)} instead"
+            )
+        if not isinstance(start, NullValue | NumValue):
+            raise SafulateTypeError(
+                f"Expected num or null for start pos, got {start.repr_spec(ctx)} instead"
+            )
+        if not isinstance(end, NullValue | NumValue):
+            raise SafulateTypeError(
+                f"Expected num or null for end pos, got {end.repr_spec(ctx)} instead"
+            )
+
+        return ListValue(
+            [
+                MatchValue(match, self)
+                for match in self.pattern.findall(
+                    sub.value,
+                    0 if isinstance(start, NullValue) else int(start.value),
+                    sys.maxsize if isinstance(end, NullValue) else int(end.value),
+                )
+            ]
+        )
+
+    @public_method("split")
+    def split(self, ctx: NativeContext, sub: Value, max: Value = null) -> Value:
+        if not isinstance(sub, StrValue):
+            raise SafulateTypeError(
+                f"Expected str for sub, got {sub.repr_spec(ctx)} instead"
+            )
+        if not isinstance(max, NumValue | NullValue):
+            raise SafulateTypeError(
+                f"Expected str for max, got {max.repr_spec(ctx)} instead"
+            )
+
+        return ListValue(
+            [
+                StrValue(val)
+                for val in self.pattern.split(
+                    sub.value, 0 if isinstance(max, NullValue) else 1
+                )
+            ]
+        )
+
+    # @public_method("sub")
+    # def sub(self, ctx: NativeContext, sub: Value) -> Value:
+    #     if not isinstance(sub, StrValue):
+    #         raise SafulateTypeError(f"Expected str for sub, got {sub.repr_spec(ctx)} instead")
+    #     self.pattern.sub()
+
+    @public_property("groups")
+    def groups(self, ctx: NativeContext) -> ListValue:
+        return ListValue([StrValue(group) for group in self.pattern.groupindex])
+
+
+class MatchValue(Value, type=ValueTypeEnum.re_match):
+    def __init__(self, match: re.Match[str], pattern: PatternValue) -> None:
+        self.match = match
+        self.pattern = pattern
+
+    def __hash__(self) -> int:
+        return hash([self.match, self.pattern])
+
+    @special_method("repr")
+    def repr(self, ctx: NativeContext) -> StrValue:
+        return StrValue(f"<Match groups={self.groups(ctx).repr_spec(ctx)}>")
+
+    @public_property("pattern")
+    def get_pattern_prop(self, ctx: NativeContext) -> PatternValue:
+        return self.pattern
+
+    @public_property("start_pos")
+    def start_pos(self, ctx: NativeContext) -> NumValue:
+        return NumValue(self.match.pos)
+
+    @public_property("end_pos")
+    def end_pos(self, ctx: NativeContext) -> NumValue:
+        return NumValue(self.match.endpos)
+
+    @public_method("groups")
+    def groups(self, ctx: NativeContext) -> ListValue:
+        return ListValue(
+            [
+                StrValue(val) if isinstance(val, str) else null
+                for val in self.match.groups()
+            ]
+        )
+
+    @public_method("as_dict")
+    def as_dict(self, ctx: NativeContext) -> DictValue:
+        return DictValue(
+            {
+                item.value[0]: item.value[1]
+                for item in self.groups(ctx).value
+                if isinstance(item, ListValue)
+            }
+        )
+
+    @special_method("iter")
+    def iter(self, ctx: NativeContext) -> ListValue:
+        return self.groups(ctx)
+
+    @special_method("bool")
+    def bool(self, ctx: NativeContext) -> NumValue:
+        return NumValue(1 if self.match else 0)
+
+    @special_method("subscript")
+    def subscript(self, ctx: NativeContext, key: Value) -> Value:
+        match key:
+            case StrValue():
+                val = self.match[key.value]
+                return StrValue(val) if isinstance(val, str) else null
+            case NumValue():
+                return self.groups(ctx).value[int(key.value)]
+            case _:
+                raise SafulateTypeError(
+                    f"Expected num or str, got {key.repr_spec(ctx)} instead"
+                )

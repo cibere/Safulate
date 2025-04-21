@@ -161,6 +161,17 @@ class Lexer:
 
         self.add_token(token_type)
 
+    def handle_rstring(self, enclosing_char: str) -> None:
+        self.current += 2
+        while self.not_eof() and self.char != enclosing_char:
+            self.current += 1
+
+        if self.is_eof():
+            raise SafulateSyntaxError("Unterminated string")
+
+        self.current += 1
+        self.add_token(TokenType.RSTRING)
+
     def handle_str(self, enclosing_char: str) -> None:
         self.current += 1
         while self.not_eof() and self.char != enclosing_char:
@@ -246,6 +257,10 @@ class Lexer:
                 enclosing_char := self.source[idx]
             ) in "\"'`":
                 return self.handle_fstring(enclosing_char)
+            case "r" | "R" if (idx := self.current + 1) < len(self.source) and (
+                enclosing_char := self.source[idx]
+            ) in "\"'`":
+                return self.handle_rstring(enclosing_char)
             case '"' | "'" | "`" as enclosing_char:
                 return self.handle_str(enclosing_char)
             case _ as x if tok := self.trisymbol_tokens.get(

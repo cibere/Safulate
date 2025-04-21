@@ -29,6 +29,7 @@ __all__ = (
     "ASTProgram",
     "ASTProperty",
     "ASTRaise",
+    "ASTRegex",
     "ASTReturn",
     "ASTSwitchCase",
     "ASTTryCatch",
@@ -314,6 +315,14 @@ class ASTProperty(ASTNode):
         return visitor.visit_property(self)
 
 
+@dataclass
+class ASTRegex(ASTNode):
+    value: Token
+
+    def visit(self, visitor: ASTVisitor) -> Value:
+        return visitor.visit_regex(self)
+
+
 class ASTVisitor(ABC):
     @abstractmethod
     def visit_program(self, node: ASTProgram) -> Value: ...
@@ -373,3 +382,5 @@ class ASTVisitor(ABC):
     def visit_format(self, node: ASTFormat) -> Value: ...
     @abstractmethod
     def visit_property(self, node: ASTProperty) -> Value: ...
+    @abstractmethod
+    def visit_regex(self, node: ASTRegex) -> Value: ...
