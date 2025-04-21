@@ -4,3 +4,4 @@ __pycache__
 *.lock
 *.python-version
 temp.saf
+*.egg-info
