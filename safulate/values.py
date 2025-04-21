@@ -89,12 +89,8 @@ class ValueTypeEnum(Enum):
 
 class Value(ABC):
     __safulate_public_attrs__: dict[str, Value] | None = None
-    __safulate_private_attrs__: dict[str, Value] | None = (
-        None  # __safulate_private_method_info__
-    )
-    __safulate_specs__: dict[str, Value] | None = (
-        None  # __safulate_special_method_info__
-    )
+    __safulate_private_attrs__: dict[str, Value] | None = None
+    __safulate_specs__: dict[str, Value] | None = None
     type: ValueTypeEnum
 
     def __init_subclass__(cls, type: ValueTypeEnum) -> None:

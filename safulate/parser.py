@@ -646,7 +646,7 @@ class Parser:
         if not self.check(TokenType.LSQB):
             return self.atom()
 
-        self.advance()  # eat '['
+        self.consume(TokenType.LSQB, "Expected '['")
         parts: list[ASTBlock] = []
         temp: list[ASTNode] = []
 
@@ -659,7 +659,7 @@ class Parser:
                 temp.append(self.expr())
 
         parts.append(ASTBlock(temp))
-        self.advance()  # eat ']'
+        self.consume(TokenType.RSQB, "Expected ']'")
 
         return ASTList(parts)
 
