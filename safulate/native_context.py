@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from .errors import ErrorManager, SafulateTypeError
 from .values import (
@@ -59,22 +59,23 @@ class NativeContext:
         if obj is None:
             return null
 
-        match obj:
-            case dict() as obj:
-                return DictValue(
-                    {
-                        self.python_to_values(key): self.python_to_values(value)
-                        for key, value in obj.items()  # pyright: ignore[reportUnknownVariableType]
-                    },
-                )
-            case list() as obj:
-                return ListValue([self.python_to_values(child) for child in obj])  # pyright: ignore[reportUnknownVariableType]
-            case str():
-                return StrValue(obj)
-            case int() | float():
-                return NumValue(float(obj))
-            case _ as x:
-                raise SafulateTypeError(f"Unable to convert {x!r} to value")
+        if isinstance(obj, dict):
+            return DictValue(
+                {
+                    self.python_to_values(key): self.python_to_values(value)
+                    for key, value in cast("dict[Any, Any]", obj).items()
+                },
+            )
+        elif isinstance(obj, list):
+            return ListValue(
+                [self.python_to_values(child) for child in cast("list[Any]", obj)]
+            )
+        elif isinstance(obj, str):
+            return StrValue(obj)
+        elif isinstance(obj, int | float):
+            return NumValue(float(obj))
+        else:
+            raise SafulateTypeError(f"Unable to convert {obj!r} to value")
 
     def value_to_python(
         self,

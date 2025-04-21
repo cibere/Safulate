@@ -96,9 +96,8 @@ class Token:
     start: int
 
     def __repr__(self) -> str:
-        return (
-            f'"<{self.type.name},{repr(self.lexeme).replace('"', '\\"')},{self.start}>"'
-        )
+        mid = repr(self.lexeme).replace('"', '\\"')
+        return f'"<{self.type.name},{mid},{self.start}>"'
 
     @property
     def value(self) -> Any:

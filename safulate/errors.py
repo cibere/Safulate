@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, TypeVar
+
 from .mock import MockToken
 from .tokens import Token, TokenType
 
-TYPE_CHECKING = False
 if TYPE_CHECKING:
     from collections.abc import Callable
     from types import TracebackType
     from typing import Literal
 
     from .values import Value
+
+T = TypeVar("T")
 
 __all__ = (
     "ErrorManager",
@@ -156,7 +159,7 @@ class SafulateInvalidContinue(SafulateError):
 
         super().__init__("Continue used in a context where it isn't allowed", token)
 
-    def handle_skips[T](self, loops: list[T]) -> T | None:
+    def handle_skips(self, loops: list[T]) -> T | None:
         next_loop = None
 
         while self.amount != 0:

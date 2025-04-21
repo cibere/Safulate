@@ -6,10 +6,9 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
-from dataclasses import field as _field
 from enum import Enum
 from enum import auto as _enum_auto
-from typing import TYPE_CHECKING, Any, Concatenate, cast, final
+from typing import TYPE_CHECKING, Any, Concatenate, TypeVar, cast, final
 
 from .asts import ASTBlock, ASTNode
 from .errors import (
@@ -26,6 +25,11 @@ if TYPE_CHECKING:
     import re
 
     from .native_context import NativeContext
+
+ValueT = TypeVar("ValueT")
+NativeMethodT = TypeVar(
+    "NativeMethodT", bound=Callable[Concatenate[Any, "NativeContext", ...], "Value"]
+)
 
 __all__ = (
     "DictValue",
@@ -47,11 +51,11 @@ __all__ = (
 )
 
 
-def __method_deco[T: Callable[Concatenate[Any, NativeContext, ...], "Value"]](
+def __method_deco(
     char: str, is_prop: bool
-) -> Callable[[str], Callable[[T], T]]:
-    def deco(name: str) -> Callable[[T], T]:
-        def decorator(func: T) -> T:
+) -> Callable[[str], Callable[[NativeMethodT], NativeMethodT]]:
+    def deco(name: str) -> Callable[[NativeMethodT], NativeMethodT]:
+        def decorator(func: NativeMethodT) -> NativeMethodT:
             setattr(func, "__safulate_native_method__", (char, name, is_prop))
             return func
 
@@ -279,9 +283,9 @@ class Value(ABC):
     def __repr__(self) -> str:
         raise RuntimeError("use repr_spec instead")
 
-    def run_spec[T: Value](
-        self, spec_name: str, return_value: type[T], ctx: NativeContext
-    ) -> T:
+    def run_spec(
+        self, spec_name: str, return_value: type[ValueT], ctx: NativeContext
+    ) -> ValueT:
         value = ctx.invoke_spec(self, spec_name)
         if not isinstance(value, return_value):
             raise SafulateValueError(
@@ -328,7 +332,7 @@ class TypeValue(Value, type=ValueTypeEnum.type):
 @dataclass(repr=False)
 class ObjectValue(Value, type=ValueTypeEnum.obj):
     name: str
-    attrs: dict[str, Value] = _field(default_factory=dict)
+    attrs: dict[str, Value]
 
     def __post_init__(self) -> None:
         self.public_attrs.update(self.attrs)
@@ -659,9 +663,7 @@ class StrValue(Value, type=ValueTypeEnum.str):
             raise SafulateTypeError(
                 f"Expected int for cont, received {count.repr_spec(ctx)} instead"
             )
-        return StrValue(
-            self.value.replace(before.value, after.value, count=int(count.value))
-        )
+        return StrValue(self.value.replace(before.value, after.value, int(count.value)))
 
     @public_method("remove_prefix")
     def remove_prefix(self, ctx: NativeContext, prefix: Value) -> Value:

@@ -63,7 +63,7 @@ def create_object(ctx: NativeContext, name: Value = null) -> Value:
                 f"Expected str or null for object name, received {x.repr_spec(ctx)} instead"
             )
 
-    return ObjectValue(name=obj_name)
+    return ObjectValue(name=obj_name, attrs={})
 
 
 @exporter("assert")
