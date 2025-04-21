@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from packaging.version import Version
 
+from ._version import __version__
 from .asts import (
     ASTAssign,
     ASTAtom,
@@ -72,9 +73,7 @@ from .values import (
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-__version__ = "v0.1.0"
-
-__all__ = ("TreeWalker", "__version__")
+__all__ = ("TreeWalker",)
 
 
 class TreeWalker(ASTVisitor):
