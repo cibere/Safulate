@@ -236,17 +236,18 @@ class Value(ABC):
     def bool(self, ctx: NativeContext) -> Value:
         return NumValue(1)
 
-    @special_method("call")
-    def call(self, ctx: NativeContext, *args: Value) -> Value:
-        raise SafulateValueError("Cannot call this type")
-
     if TYPE_CHECKING:
         altcall = Callable[Concatenate[Any, NativeContext, ...], "Value"]
+        call = Callable[Concatenate[Any, NativeContext, ...], "Value"]
     else:
 
         @special_method("altcall")
         def altcall(self, ctx: NativeContext, *args: Value, **kwargs: Value) -> Value:
             raise SafulateValueError("Cannot altcall this type")
+
+        @special_method("call")
+        def call(self, ctx: NativeContext, *args: Value, **kwargs: Value) -> Value:
+            raise SafulateValueError("Cannot call this type")
 
     @special_method("iter")
     def iter(self, ctx: NativeContext) -> ListValue:
