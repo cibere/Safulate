@@ -85,7 +85,9 @@ class ValueTypeEnum(Enum):
     re_pattern = _enum_auto()
     re_match = _enum_auto()
 
+
 # region Base
+
 
 class Value(ABC):
     __safulate_public_attrs__: dict[str, Value] | None = None
@@ -208,6 +210,10 @@ class Value(ABC):
     def lesseq(self, ctx: NativeContext, _other: Value) -> Value:
         raise SafulateValueError("Less than or equal to is not defined for this type")
 
+    @special_method("deco")
+    def deco(self, ctx: NativeContext, _other: Value) -> Value:
+        raise SafulateValueError("deco is not defined for this type")
+
     @special_method("grtreq")
     def grtreq(self, ctx: NativeContext, _other: Value) -> Value:
         raise SafulateValueError(
@@ -305,9 +311,6 @@ class Value(ABC):
             )
         return bool(val.value)
 
-    @abstractmethod
-    def __hash__(self) -> int: ...
-
 
 class TypeValue(Value, type=ValueTypeEnum.type):
     def __init__(self, enum: ValueTypeEnum) -> None:
@@ -321,9 +324,6 @@ class TypeValue(Value, type=ValueTypeEnum.type):
     def check(self, ctx: NativeContext, obj: Value) -> NumValue:
         return NumValue(int(obj.type is self.enum))
 
-    def __hash__(self) -> int:
-        return hash(self.enum)
-
 
 class ObjectValue(Value, type=ValueTypeEnum.obj):
     def __init__(self, name: str, attrs: dict[str, Value]) -> None:
@@ -334,9 +334,6 @@ class ObjectValue(Value, type=ValueTypeEnum.obj):
     @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
         return StrValue(f"<{self.name}>")
-
-    def __hash__(self) -> int:
-        return hash(id(self))
 
 
 # region Atoms
@@ -354,9 +351,6 @@ class NullValue(Value, type=ValueTypeEnum.null):
     @special_method("bool")
     def bool(self, ctx: NativeContext) -> Value:
         return NumValue(0)
-
-    def __hash__(self) -> int:
-        return hash(id(self))
 
 
 class NumValue(Value, type=ValueTypeEnum.num):
@@ -470,15 +464,10 @@ class NumValue(Value, type=ValueTypeEnum.num):
 
         return StrValue(str(self.value))
 
-    def __hash__(self) -> int:
-        return hash(self.value)
-
 
 class StrValue(Value, type=ValueTypeEnum.str):
     def __init__(self, value: str) -> None:
         self.value = value
-
-    def __post_init__(self) -> None:
         self.value = self.value.encode("ascii").decode("unicode_escape")
 
     @special_method("subscript")
@@ -710,9 +699,6 @@ class StrValue(Value, type=ValueTypeEnum.str):
             )
         return ListValue([StrValue(part) for part in self.value.split(delimiter.value)])
 
-    def __hash__(self) -> int:
-        return hash(self.value)
-
 
 # region Structures
 
@@ -772,9 +758,6 @@ class ListValue(Value, type=ValueTypeEnum.list):
     def len(self, ctx: NativeContext) -> NumValue:
         return NumValue(len(self.value))
 
-    def __hash__(self) -> int:
-        return hash(self.value)
-
 
 class FuncValue(Value, type=ValueTypeEnum.func):
     def __init__(
@@ -783,20 +766,19 @@ class FuncValue(Value, type=ValueTypeEnum.func):
         params: list[tuple[Token, ASTNode | Value | None]] | None,
         body: ASTBlock | Callable[Concatenate[NativeContext, ...], Value],
         parent: Value | None = None,
+        extra_vars: dict[str, Value] | None = None,
     ) -> None:
         self.name = name
         self.params = params
         self.body = body
         self.parent = parent
+        self.extra_vars = extra_vars or {}
 
     @property
     def arity(self) -> int:
         if self.params is None:
             return -1
         return len(self.params)
-
-    def __hash__(self) -> int:
-        return hash([self.params, self.body, self.parent])
 
     @cached_property
     def required_args(self) -> list[tuple[Token, None]]:
@@ -855,7 +837,7 @@ class FuncValue(Value, type=ValueTypeEnum.func):
         with ctx.interpreter.scope(source=self.parent):
             ctx.interpreter.env["parent"] = self.parent or null
 
-            for param, value in params.items():
+            for param, value in [*params.items(), *self.extra_vars.items()]:
                 ctx.interpreter.env.declare(param)
                 ctx.interpreter.env[param] = value
 
@@ -899,9 +881,6 @@ class PropertyValue(Value, type=ValueTypeEnum.property):
     def repr(self, ctx: NativeContext) -> StrValue:
         return StrValue(f"<Property {self.func.repr_spec(ctx)}>")
 
-    def __hash__(self) -> int:
-        return hash((f"property-{id(self)}", self.func))
-
     @special_method("get")
     def get_spec(self, ctx: NativeContext) -> Value:
         return ctx.invoke(self.func)
@@ -912,19 +891,15 @@ null = NullValue()
 
 
 class DictValue(Value, type=ValueTypeEnum.dict):
-    def __init__(self, data: dict[Value, Value]) -> None:
+    def __init__(self, data: dict[str, Value]) -> None:
         self.data = data
-
-    def __hash__(self) -> int:
-        return hash(self.data)
 
     @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
         return StrValue(
             "{"
             + ", ".join(
-                f"{key.repr_spec(ctx)}:{value.repr_spec(ctx)}"
-                for key, value in self.data.items()
+                f"{key!r}:{value.repr_spec(ctx)}" for key, value in self.data.items()
             )
             + "}"
         )
@@ -938,7 +913,7 @@ class DictValue(Value, type=ValueTypeEnum.dict):
     @public_method("get")
     def get(self, ctx: NativeContext, key: Value, default: Value = null) -> Value:
         try:
-            return self.data[key]
+            return self.data[key.repr_spec(ctx)]
         except KeyError:
             if default is MISSING:
                 raise SafulateKeyError(f"Key {key.repr_spec(ctx)} was not found")
@@ -946,12 +921,12 @@ class DictValue(Value, type=ValueTypeEnum.dict):
 
     @public_method("set")
     def set(self, ctx: NativeContext, key: Value, value: Value) -> Value:
-        self.data[key] = value
+        self.data[key.repr_spec(ctx)] = value
         return value
 
     @public_method("keys")
     def keys(self, ctx: NativeContext) -> ListValue:
-        return ListValue(list(self.data.keys()))
+        return ListValue([StrValue(x) for x in list(self.data.keys())])
 
     @public_method("values")
     def values(self, ctx: NativeContext) -> ListValue:
@@ -959,14 +934,16 @@ class DictValue(Value, type=ValueTypeEnum.dict):
 
     @public_method("items")
     def items(self, ctx: NativeContext) -> ListValue:
-        return ListValue([ListValue([key, value]) for key, value in self.data.items()])
+        return ListValue(
+            [ListValue([StrValue(key), value]) for key, value in self.data.items()]
+        )
 
     @public_method("pop")
     def pop(
         self, ctx: NativeContext, key: Value, default: Value | None = None
     ) -> Value:
         try:
-            return self.data.pop(key)
+            return self.data.pop(key.repr_spec(ctx))
         except KeyError:
             if default is None:
                 raise SafulateKeyError(f"Key {key.repr_spec(ctx)} was not found")
@@ -998,9 +975,6 @@ class VersionValue(Value, type=ValueTypeEnum.version):
         self.major = major
         self.minor = minor
         self.micro = micro
-
-    def __hash__(self) -> int:
-        return hash([self.major, self.minor, self.micro])
 
     def __post_init__(self) -> None:
         self.public_attrs.update(
@@ -1049,9 +1023,6 @@ class VersionConstraintValue(Value, type=ValueTypeEnum.version_constraint):
             f"{self.left if isinstance(self.left, VersionValue) else ''}{self.constraint}{self.right}"
         )
 
-    def __hash__(self) -> int:
-        return hash([self.left, self.right, self.constraint])
-
 
 # region Regex
 
@@ -1067,9 +1038,6 @@ class PatternValue(Value, type=ValueTypeEnum.re_pattern):
     @special_method("str")
     def str(self, ctx: NativeContext) -> StrValue:
         return self.get_pattern_prop(ctx)
-
-    def __hash__(self) -> int:
-        return hash(self.pattern)
 
     @public_property("pattern")
     def get_pattern_prop(self, ctx: NativeContext) -> StrValue:
@@ -1220,9 +1188,6 @@ class MatchValue(Value, type=ValueTypeEnum.re_match):
         self.match = match
         self.pattern = pattern
 
-    def __hash__(self) -> int:
-        return hash([self.match, self.pattern])
-
     @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
         return StrValue(f"<Match groups={self.groups(ctx).repr_spec(ctx)}>")
@@ -1252,7 +1217,7 @@ class MatchValue(Value, type=ValueTypeEnum.re_match):
     def as_dict(self, ctx: NativeContext) -> DictValue:
         return DictValue(
             {
-                item.value[0]: item.value[1]
+                item.value[0].str_spec(ctx): item.value[1]
                 for item in self.groups(ctx).value
                 if isinstance(item, ListValue)
             }

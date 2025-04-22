@@ -243,6 +243,19 @@ class Parser:
             params.append((arg, default))
 
         self.consume(TokenType.RPAR, "Expected ')'")
+
+        decos: list[tuple[Token, ASTNode]] = []
+        if self.match(TokenType.LSQB):
+            check_for_comma = False
+            while not self.match(TokenType.RSQB):
+                if check_for_comma:
+                    self.consume(TokenType.COMMA, "Expected ','")
+                check_for_comma = True
+
+                start_token = self.peek()
+                deco = self.expr()
+                decos.insert(0, (start_token, deco))
+
         body = self.block()
 
         try:
@@ -254,7 +267,7 @@ class Parser:
 
         match soft_kw:
             case SoftKeyword.STRUCT:
-                return ASTFuncDecl(
+                func = ASTFuncDecl(
                     name=name,
                     params=params,
                     soft_kw=soft_kw,
@@ -296,9 +309,11 @@ class Parser:
             case SoftKeyword.PROP:
                 if params:
                     raise SafulateSyntaxError("Properties can't take arguments")
+                if decos:
+                    raise SafulateSyntaxError("Properties can't take decorators")
                 return ASTProperty(body=body, name=name)
             case SoftKeyword.PRIV | SoftKeyword.SPEC | SoftKeyword.PUB:
-                return ASTFuncDecl(
+                func = ASTFuncDecl(
                     name=name,
                     params=params,
                     body=body,
@@ -308,6 +323,25 @@ class Parser:
                 )
             case _:
                 raise RuntimeError(f"Unknown keyword for func declaration: {soft_kw!r}")
+
+        if not decos:
+            return func
+
+        for token, deco in decos:
+            func = ASTCall(
+                callee=ASTAttr(
+                    deco, Token(TokenType.ID, "deco", token.start), is_spec=True
+                ),
+                paren=Token(TokenType.LPAR, "(", token.start),
+                args=[func],
+                kwargs={},
+            )
+
+        return ASTVarDecl(
+            name=name,
+            value=func,
+            kw=soft_kw if soft_kw is SoftKeyword.PRIV else SoftKeyword.PUB,
+        )
 
     def edit_object(self) -> ASTNode:
         obj = self.version()

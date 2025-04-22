@@ -43,12 +43,19 @@ def dict_(_: NativeContext) -> DictValue:
 
 @exporter("globals")
 def get_globals(ctx: NativeContext) -> Value:
-    return ObjectValue("globals", list(ctx.walk_envs())[-1].values)
+    return DictValue(dict(list(ctx.walk_envs())[-1].values.items()))
 
 
 @exporter("locals")
 def get_locals(ctx: NativeContext) -> Value:
-    return ObjectValue("locals", next(ctx.walk_envs()).values)
+    return DictValue(dict(next(ctx.walk_envs()).values.items()))
+
+
+@exporter("rollback_scope")
+def rollback_scope(ctx: NativeContext) -> Value:
+    if ctx.env.parent:
+        ctx.interpreter.env = ctx.env.parent
+    return null
 
 
 @exporter("object")

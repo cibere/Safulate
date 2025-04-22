@@ -43,6 +43,7 @@ from .asts import (
 from .environment import Environment
 from .errors import (
     ErrorManager,
+    SafulateAttributeError,
     SafulateBreakoutError,
     SafulateError,
     SafulateImportError,
@@ -240,7 +241,10 @@ class TreeWalker(ASTVisitor):
             name=node.name,
             params=node.params,  # pyright: ignore[reportArgumentType]
             body=node.body,
+            extra_vars=self.env.values.copy(),
         )
+        self.env._set_parent(value)
+
         match node.soft_kw:
             case SoftKeyword.PUB:
                 self.env.declare(node.name)
@@ -262,14 +266,13 @@ class TreeWalker(ASTVisitor):
                         f"there is no spec named {node.name.lexeme!r}", node.name
                     ) from None
 
-                if value.arity != current_spec.arity:
+                if node.name.lexeme != "call" and value.arity != current_spec.arity:
                     raise SafulateValueError(
                         f"number of params for {node.name.lexeme!r} spec do not compare",
                         node.paren_token,
                     )
 
                 self.env.scope.specs[node.name.lexeme] = value
-                self.env._set_parent(value)
                 return value
             case _:
                 raise RuntimeError(f"Unknown func decl keyword: {node.soft_kw!r}")
@@ -358,6 +361,14 @@ class TreeWalker(ASTVisitor):
                 raise ValueError(
                     f"Invalid token type {node.attr.type.name} for attribute access"
                 )
+
+            if node.is_spec:
+                try:
+                    return obj.specs[node.attr.lexeme]
+                except KeyError:
+                    raise SafulateAttributeError(
+                        f"No spec named {node.attr.lexeme!r}", node.attr
+                    )
 
             return self.ctx(node.attr).invoke_spec(
                 obj, "get_attr", StrValue(node.attr.lexeme)
