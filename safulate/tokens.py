@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
 
 __all__ = "SoftKeyword", "Token", "TokenType"
 
@@ -98,16 +97,3 @@ class Token:
     def __repr__(self) -> str:
         mid = repr(self.lexeme).replace('"', '\\"')
         return f'"<{self.type.name},{mid},{self.start}>"'
-
-    @property
-    def value(self) -> Any:
-        match self.type:
-            case TokenType.STR:
-                return self.lexeme[1:-1]
-            case TokenType.NUM:
-                try:
-                    return int(self.lexeme)
-                except ValueError:
-                    return float(self.lexeme)
-            case _:
-                raise ValueError(f"Cannot get value of {self.type.name} token")

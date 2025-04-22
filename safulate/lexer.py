@@ -174,14 +174,15 @@ class Lexer:
 
     def handle_str(self, enclosing_char: str) -> None:
         self.current += 1
+        self.start += 1
         while self.not_eof() and self.char != enclosing_char:
             self.current += 1
 
         if self.is_eof():
             raise SafulateSyntaxError("Unterminated string")
 
-        self.current += 1
         self.add_token(TokenType.STR)
+        self.current += 1
 
     def handle_token_symbols(self, tok: TokenType) -> None:
         self.current += len(tok.value)

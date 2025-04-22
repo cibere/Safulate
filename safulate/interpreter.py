@@ -340,9 +340,9 @@ class TreeWalker(ASTVisitor):
     def visit_atom(self, node: ASTAtom) -> Value:
         match node.token.type:
             case TokenType.NUM:
-                return NumValue(node.token.value)
+                return NumValue(float(node.token.lexeme))
             case TokenType.STR:
-                return StrValue(node.token.value)
+                return StrValue(node.token.lexeme)
             case TokenType.ID:
                 return self.env[node.token]
             case TokenType.PRIV_ID:

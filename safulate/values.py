@@ -5,7 +5,6 @@ import sys
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable
-from dataclasses import dataclass
 from enum import Enum
 from enum import auto as _enum_auto
 from typing import TYPE_CHECKING, Any, Concatenate, TypeVar, cast, final
@@ -86,6 +85,7 @@ class ValueTypeEnum(Enum):
     re_pattern = _enum_auto()
     re_match = _enum_auto()
 
+# region Base
 
 class Value(ABC):
     __safulate_public_attrs__: dict[str, Value] | None = None
@@ -309,9 +309,9 @@ class Value(ABC):
     def __hash__(self) -> int: ...
 
 
-@dataclass(repr=False)
 class TypeValue(Value, type=ValueTypeEnum.type):
-    enum: ValueTypeEnum
+    def __init__(self, enum: ValueTypeEnum) -> None:
+        self.enum = enum
 
     @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
@@ -325,12 +325,10 @@ class TypeValue(Value, type=ValueTypeEnum.type):
         return hash(self.enum)
 
 
-@dataclass(repr=False)
 class ObjectValue(Value, type=ValueTypeEnum.obj):
-    name: str
-    attrs: dict[str, Value]
-
-    def __post_init__(self) -> None:
+    def __init__(self, name: str, attrs: dict[str, Value]) -> None:
+        self.name = name
+        self.attrs = attrs
         self.public_attrs.update(self.attrs)
 
     @special_method("repr")
@@ -339,6 +337,9 @@ class ObjectValue(Value, type=ValueTypeEnum.obj):
 
     def __hash__(self) -> int:
         return hash(id(self))
+
+
+# region Atoms
 
 
 class NullValue(Value, type=ValueTypeEnum.null):
@@ -358,9 +359,9 @@ class NullValue(Value, type=ValueTypeEnum.null):
         return hash(id(self))
 
 
-@dataclass(repr=False)
 class NumValue(Value, type=ValueTypeEnum.num):
-    value: float
+    def __init__(self, value: float) -> None:
+        self.value = value
 
     @special_method("add")
     def add(self, ctx: NativeContext, other: Value) -> NumValue:
@@ -473,9 +474,9 @@ class NumValue(Value, type=ValueTypeEnum.num):
         return hash(self.value)
 
 
-@dataclass(repr=False)
 class StrValue(Value, type=ValueTypeEnum.str):
-    value: str
+    def __init__(self, value: str) -> None:
+        self.value = value
 
     def __post_init__(self) -> None:
         self.value = self.value.encode("ascii").decode("unicode_escape")
@@ -713,9 +714,12 @@ class StrValue(Value, type=ValueTypeEnum.str):
         return hash(self.value)
 
 
-@dataclass(repr=False)
+# region Structures
+
+
 class ListValue(Value, type=ValueTypeEnum.list):
-    value: list[Value]
+    def __init__(self, value: list[Value]) -> None:
+        self.value = value
 
     @public_method("append")
     def append(self, ctx: NativeContext, item: Value) -> Value:
@@ -772,12 +776,18 @@ class ListValue(Value, type=ValueTypeEnum.list):
         return hash(self.value)
 
 
-@dataclass(repr=False)
 class FuncValue(Value, type=ValueTypeEnum.func):
-    name: Token
-    params: list[tuple[Token, ASTNode | Value | None]] | None
-    body: ASTBlock | Callable[Concatenate[NativeContext, ...], Value]
-    parent: Value | None = None
+    def __init__(
+        self,
+        name: Token,
+        params: list[tuple[Token, ASTNode | Value | None]] | None,
+        body: ASTBlock | Callable[Concatenate[NativeContext, ...], Value],
+        parent: Value | None = None,
+    ) -> None:
+        self.name = name
+        self.params = params
+        self.body = body
+        self.parent = parent
 
     @property
     def arity(self) -> int:
@@ -881,71 +891,29 @@ class FuncValue(Value, type=ValueTypeEnum.func):
         )
 
 
-@dataclass(repr=False)
-class VersionValue(Value, type=ValueTypeEnum.version):
-    major: NumValue
-    minor: NumValue | NullValue
-    micro: NumValue | NullValue
-
-    def __hash__(self) -> int:
-        return hash([self.major, self.minor, self.micro])
-
-    def __post_init__(self) -> None:
-        self.public_attrs.update(
-            {"major": self.major, "minor": self.minor, "micro": self.micro}
-        )
-
-    def _handle_constraint(self, other: Value, constraint: str) -> Value:
-        if isinstance(other, VersionValue):
-            return VersionConstraintValue(left=self, right=other, constraint=constraint)
-        if isinstance(other, NullValue):
-            return VersionConstraintValue(left=other, right=self, constraint=constraint)
-        raise SafulateValueError(
-            f"{constraint!r} operation is not defined for version and this type"
-        )
-
-    @special_method("sub")
-    def sub(self, ctx: NativeContext, other: Value) -> Value:
-        return self._handle_constraint(other, "-")
-
-    @special_method("uadd")
-    def uadd(self, ctx: NativeContext) -> Value:
-        return self._handle_constraint(null, "+")
-
-    @special_method("neg")
-    def neg(self, ctx: NativeContext) -> Value:
-        return self._handle_constraint(null, "-")
+class PropertyValue(Value, type=ValueTypeEnum.property):
+    def __init__(self, func: FuncValue) -> None:
+        self.func = func
 
     @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
-        return StrValue(
-            f"v{self.major}{f'.{self.minor}' if isinstance(self.minor, NumValue) else ''}{f'.{self.micro}' if isinstance(self.micro, NumValue) else ''}"
-        )
-
-
-@dataclass(repr=False)
-class VersionConstraintValue(Value, type=ValueTypeEnum.version_constraint):
-    left: VersionValue | NullValue
-    right: VersionValue
-    constraint: str
-
-    @special_method("repr")
-    def repr(self, ctx: NativeContext) -> StrValue:
-        return StrValue(
-            f"{self.left if isinstance(self.left, VersionValue) else ''}{self.constraint}{self.right}"
-        )
+        return StrValue(f"<Property {self.func.repr_spec(ctx)}>")
 
     def __hash__(self) -> int:
-        return hash([self.left, self.right, self.constraint])
+        return hash((f"property-{id(self)}", self.func))
+
+    @special_method("get")
+    def get_spec(self, ctx: NativeContext) -> Value:
+        return ctx.invoke(self.func)
 
 
 MISSING: Any = object()
 null = NullValue()
 
 
-@dataclass(repr=False)
 class DictValue(Value, type=ValueTypeEnum.dict):
-    data: dict[Value, Value]
+    def __init__(self, data: dict[Value, Value]) -> None:
+        self.data = data
 
     def __hash__(self) -> int:
         return hash(self.data)
@@ -1017,20 +985,72 @@ class DictValue(Value, type=ValueTypeEnum.dict):
         return NumValue(1 if self.data else 0)
 
 
-class PropertyValue(Value, type=ValueTypeEnum.property):
-    def __init__(self, func: FuncValue) -> None:
-        self.func = func
+# region Versions
+
+
+class VersionValue(Value, type=ValueTypeEnum.version):
+    def __init__(
+        self,
+        major: NumValue,
+        minor: NumValue | NullValue,
+        micro: NumValue | NullValue,
+    ) -> None:
+        self.major = major
+        self.minor = minor
+        self.micro = micro
+
+    def __hash__(self) -> int:
+        return hash([self.major, self.minor, self.micro])
+
+    def __post_init__(self) -> None:
+        self.public_attrs.update(
+            {"major": self.major, "minor": self.minor, "micro": self.micro}
+        )
+
+    def _handle_constraint(self, other: Value, constraint: str) -> Value:
+        if isinstance(other, VersionValue):
+            return VersionConstraintValue(left=self, right=other, constraint=constraint)
+        if isinstance(other, NullValue):
+            return VersionConstraintValue(left=other, right=self, constraint=constraint)
+        raise SafulateValueError(
+            f"{constraint!r} operation is not defined for version and this type"
+        )
+
+    @special_method("sub")
+    def sub(self, ctx: NativeContext, other: Value) -> Value:
+        return self._handle_constraint(other, "-")
+
+    @special_method("uadd")
+    def uadd(self, ctx: NativeContext) -> Value:
+        return self._handle_constraint(null, "+")
+
+    @special_method("neg")
+    def neg(self, ctx: NativeContext) -> Value:
+        return self._handle_constraint(null, "-")
 
     @special_method("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
-        return StrValue(f"<Property {self.func.repr_spec(ctx)}>")
+        return StrValue(
+            f"v{self.major}{f'.{self.minor}' if isinstance(self.minor, NumValue) else ''}{f'.{self.micro}' if isinstance(self.micro, NumValue) else ''}"
+        )
+
+
+class VersionConstraintValue(Value, type=ValueTypeEnum.version_constraint):
+    def __init__(
+        self, left: VersionValue | NullValue, right: VersionValue, constraint: str
+    ) -> None:
+        self.left = left
+        self.right = right
+        self.constraint = constraint
+
+    @special_method("repr")
+    def repr(self, ctx: NativeContext) -> StrValue:
+        return StrValue(
+            f"{self.left if isinstance(self.left, VersionValue) else ''}{self.constraint}{self.right}"
+        )
 
     def __hash__(self) -> int:
-        return hash((f"property-{id(self)}", self.func))
-
-    @special_method("get")
-    def get_spec(self, ctx: NativeContext) -> Value:
-        return ctx.invoke(self.func)
+        return hash([self.left, self.right, self.constraint])
 
 
 # region Regex
