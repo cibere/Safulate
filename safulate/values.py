@@ -237,8 +237,8 @@ class Value(ABC):
         return NumValue(1)
 
     if TYPE_CHECKING:
-        altcall = Callable[Concatenate[Any, NativeContext, ...], "Value"]
-        call = Callable[Concatenate[Any, NativeContext, ...], "Value"]
+        altcall: Callable[Concatenate[Any, NativeContext, ...], Value]
+        call: Callable[Concatenate[Any, NativeContext, ...], Value]
     else:
 
         @special_method("altcall")

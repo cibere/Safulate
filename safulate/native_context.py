@@ -34,7 +34,7 @@ class NativeContext:
     def invoke(self, func: Value, *args: Value, **kwargs: Value) -> Value:
         with ErrorManager(token=self.token):
             caller = func if isinstance(func, (FuncValue)) else func.specs["call"]
-            return caller.call(self, *args, **kwargs)
+            return caller.call(self, *args, **kwargs)  # pyright: ignore[reportArgumentType]
 
     def invoke_spec(
         self, func: Value, spec_name: str, *args: Value, **kwargs: Value
@@ -62,7 +62,7 @@ class NativeContext:
         if isinstance(obj, dict):
             return DictValue(
                 {
-                    self.python_to_values(key): self.python_to_values(value)
+                    key: self.python_to_values(value)
                     for key, value in cast("dict[Any, Any]", obj).items()
                 },
             )
