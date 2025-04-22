@@ -332,7 +332,7 @@ class TreeWalker(ASTVisitor):
         func = node.callee.visit(self)
 
         if node.paren.type is TokenType.LSQB:
-            func = func.specs["subscript"]
+            func = func.specs["altcall"]
 
         return self.ctx(node.paren).invoke(
             func,

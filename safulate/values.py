@@ -241,12 +241,12 @@ class Value(ABC):
         raise SafulateValueError("Cannot call this type")
 
     if TYPE_CHECKING:
-        subscript = Callable[Concatenate[Any, NativeContext, ...], "Value"]
+        altcall = Callable[Concatenate[Any, NativeContext, ...], "Value"]
     else:
 
-        @special_method("subscript")
-        def subscript(self, ctx: NativeContext, args: ListValue) -> Value:
-            raise SafulateValueError("Cannot subscript this type")
+        @special_method("altcall")
+        def altcall(self, ctx: NativeContext, *args: Value, **kwargs: Value) -> Value:
+            raise SafulateValueError("Cannot altcall this type")
 
     @special_method("iter")
     def iter(self, ctx: NativeContext) -> ListValue:
@@ -470,8 +470,8 @@ class StrValue(Value, type=ValueTypeEnum.str):
         self.value = value
         self.value = self.value.encode("ascii").decode("unicode_escape")
 
-    @special_method("subscript")
-    def subscript(self, ctx: NativeContext, idx: Value) -> StrValue:
+    @special_method("altcall")
+    def altcall(self, ctx: NativeContext, idx: Value) -> StrValue:
         if not isinstance(idx, NumValue):
             raise SafulateTypeError(f"Expected num, got {idx.repr_spec(ctx)} instead")
 
@@ -730,8 +730,8 @@ class ListValue(Value, type=ValueTypeEnum.list):
     def bool(self, ctx: NativeContext) -> NumValue:
         return NumValue(int(len(self.value) != 0))
 
-    @special_method("subscript")
-    def subscript(self, ctx: NativeContext, idx: Value) -> Value:
+    @special_method("altcall")
+    def altcall(self, ctx: NativeContext, idx: Value) -> Value:
         if not isinstance(idx, NumValue):
             raise SafulateTypeError(f"Expected num, got {idx.repr_spec(ctx)} instead.")
 
@@ -759,47 +759,75 @@ class ListValue(Value, type=ValueTypeEnum.list):
         return NumValue(len(self.value))
 
 
+class SpecialFuncParams(Enum):
+    kwargs_only = 1
+    args_only = 2
+    both = 3
+
+
 class FuncValue(Value, type=ValueTypeEnum.func):
     def __init__(
         self,
         name: Token,
-        params: list[tuple[Token, ASTNode | Value | None]] | None,
+        params: list[tuple[Token, ASTNode | Value | None]] | SpecialFuncParams,
         body: ASTBlock | Callable[Concatenate[NativeContext, ...], Value],
         parent: Value | None = None,
         extra_vars: dict[str, Value] | None = None,
+        partial_args: tuple[Value, ...] | None = None,
+        partial_kwargs: dict[str, Value] | None = None,
     ) -> None:
         self.name = name
         self.params = params
         self.body = body
         self.parent = parent
         self.extra_vars = extra_vars or {}
+        self.partial_args = partial_args or ()
+        self.partial_kwargs = partial_kwargs or {}
 
     @property
     def arity(self) -> int:
-        if self.params is None:
+        if isinstance(self.params, SpecialFuncParams):
             return -1
         return len(self.params)
 
     @cached_property
     def required_args(self) -> list[tuple[Token, None]]:
-        if not self.params:
+        if isinstance(self.params, SpecialFuncParams):
             return []
         return [(arg, default) for arg, default in self.params if default is None]
 
     def _validate_params(
-        self, ctx: NativeContext, args: tuple[Value, ...], kwargs: dict[str, Value]
+        self, ctx: NativeContext, *args: Value, **kwargs: Value
     ) -> dict[str, Value]:
-        if self.params is None:
-            if kwargs:
-                raise SafulateValueError(
-                    f"Function {self.name.lexeme!r} does not support keyword arguments",
-                )
-            return {}
+        match self.params:
+            case SpecialFuncParams.args_only:
+                if kwargs:
+                    raise SafulateValueError(
+                        f"Function {self.name.lexeme!r} does not support keyword arguments",
+                    )
+                return {}
+            case SpecialFuncParams.kwargs_only:
+                if args:
+                    raise SafulateValueError(
+                        f"Function {self.name.lexeme!r} does not support positional arguments",
+                    )
+                return {}
+            case SpecialFuncParams.both:
+                return {}
+            case _:
+                pass
+
         params = self.params.copy()
         passable_params: dict[str, Value] = {}
 
         for arg in args:
-            (param, _default) = params.pop(0)
+            try:
+                (param, _default) = params.pop(0)
+            except IndexError:
+                raise SafulateValueError(
+                    f"Extra positional argument was passed: {arg.repr_spec(ctx)}"
+                )
+
             passable_params[param.lexeme] = arg
 
         for kwarg, value in kwargs.items():
@@ -825,11 +853,33 @@ class FuncValue(Value, type=ValueTypeEnum.func):
 
         return passable_params
 
+    @special_method("altcall")
+    def altcall(self, ctx: NativeContext, *args: Value, **kwargs: Value) -> Value:
+        if ctx.token.lexeme == "ADD-TO-START":
+            args = (*args, *self.partial_args)
+        else:
+            args = (*self.partial_args, *args)
+
+        return FuncValue(
+            name=self.name,
+            params=self.params,
+            body=self.body,
+            parent=self.parent,
+            extra_vars=self.extra_vars,
+            partial_args=args,
+            partial_kwargs=self.partial_kwargs | kwargs,
+        )
+
     @special_method("call")
     def call(self, ctx: NativeContext, *args: Value, **kwargs: Value) -> Value:
-        params = self._validate_params(ctx, args, kwargs)
+        params = self._validate_params(
+            ctx,
+            *self.partial_args,
+            *args,
+            **self.partial_kwargs,
+            **kwargs,
+        )
 
-        # with ErrorManager(token=lambda: ctx.token):
         if isinstance(self.body, Callable):
             return self.body(ctx, *args, **kwargs)
 
@@ -856,19 +906,28 @@ class FuncValue(Value, type=ValueTypeEnum.func):
     def from_native(
         cls, name: str, callback: Callable[Concatenate[NativeContext, ...], Value]
     ) -> FuncValue:
-        params = list(inspect.signature(callback).parameters.values())
-
-        return FuncValue(
-            name=Token(TokenType.ID, name, -1),
-            params=None
-            if len(params) > 1 and params[1].kind is params[1].VAR_POSITIONAL
-            else [
+        raw_params = list(inspect.signature(callback).parameters.values())
+        if (
+            len(raw_params) > 2
+            and raw_params[1].kind is raw_params[1].VAR_POSITIONAL
+            and raw_params[2].kind is raw_params[2].VAR_KEYWORD
+        ):
+            params = SpecialFuncParams.both
+        elif len(raw_params) > 1 and raw_params[1].kind is raw_params[1].VAR_POSITIONAL:
+            params = SpecialFuncParams.args_only
+        elif len(raw_params) > 1 and raw_params[1].kind is raw_params[1].VAR_KEYWORD:
+            params = SpecialFuncParams.kwargs_only
+        else:
+            params = [
                 (
                     Token(TokenType.ID, param.name, -1),
                     None if param.default is param.empty else param.default,
                 )
-                for param in params
-            ][1:],
+                for param in raw_params
+            ][1:]
+        return FuncValue(
+            name=Token(TokenType.ID, name, -1),
+            params=params,
             body=callback,
         )
 
@@ -904,8 +963,8 @@ class DictValue(Value, type=ValueTypeEnum.dict):
             + "}"
         )
 
-    @special_method("subscript")
-    def subscript(
+    @special_method("altcall")
+    def altcall(
         self, ctx: NativeContext, key: Value, default: Value = MISSING
     ) -> Value:
         return self.get(ctx, key, default)
@@ -1231,8 +1290,8 @@ class MatchValue(Value, type=ValueTypeEnum.re_match):
     def bool(self, ctx: NativeContext) -> NumValue:
         return NumValue(1 if self.match else 0)
 
-    @special_method("subscript")
-    def subscript(self, ctx: NativeContext, key: Value) -> Value:
+    @special_method("altcall")
+    def altcall(self, ctx: NativeContext, key: Value) -> Value:
         match key:
             case StrValue():
                 val = self.match[key.value]

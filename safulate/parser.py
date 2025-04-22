@@ -329,11 +329,14 @@ class Parser:
 
         for token, deco in decos:
             func = ASTCall(
-                callee=ASTAttr(
-                    deco, Token(TokenType.ID, "deco", token.start), is_spec=True
+                callee=ASTCall(
+                    callee=deco,
+                    paren=Token(TokenType.LSQB, "ADD-TO-START", token.start),
+                    args=[func],
+                    kwargs={},
                 ),
                 paren=Token(TokenType.LPAR, "(", token.start),
-                args=[func],
+                args=[],
                 kwargs={},
             )
 
