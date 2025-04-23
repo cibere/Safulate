@@ -6,7 +6,6 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable
 from enum import Enum
-from enum import auto as _enum_auto
 from typing import TYPE_CHECKING, Any, Concatenate, TypeVar, cast, final
 
 from .asts import ASTBlock, ASTNode
@@ -43,10 +42,13 @@ __all__ = (
     "StrValue",
     "TypeValue",
     "Value",
-    "ValueTypeEnum",
-    "VersionConstraintValue",
-    "VersionValue",
     "null",
+    "private_method",
+    "private_property",
+    "public_method",
+    "public_property",
+    "spec_meth",
+    "spec_prop",
 )
 
 
@@ -64,27 +66,11 @@ def __method_deco(
 
 
 public_method = __method_deco("", is_prop=False)
-private_method = __method_deco("$", is_prop=False)
-special_method = __method_deco("%", is_prop=False)
 public_property = __method_deco("", is_prop=True)
+private_method = __method_deco("$", is_prop=False)
 private_property = __method_deco("$", is_prop=True)
-
-
-class ValueTypeEnum(Enum):
-    str = _enum_auto()
-    obj = _enum_auto()
-    null = _enum_auto()
-    num = _enum_auto()
-    list = _enum_auto()
-    func = _enum_auto()
-    version = _enum_auto()
-    version_constraint = _enum_auto()
-    type = _enum_auto()
-    dict = _enum_auto()
-    property = _enum_auto()
-    re_pattern = _enum_auto()
-    re_match = _enum_auto()
-
+spec_meth = __method_deco("%", is_prop=False)
+spec_prop = __method_deco("%", is_prop=True)
 
 # region Base
 
@@ -93,14 +79,13 @@ class Value(ABC):
     __safulate_public_attrs__: dict[str, Value] | None = None
     __safulate_private_attrs__: dict[str, Value] | None = None
     __safulate_specs__: dict[str, Value] | None = None
-    type: ValueTypeEnum
 
-    def __init_subclass__(cls, type: ValueTypeEnum) -> None:
-        cls.type = type
+    def _attrs_hook(self, attrs: defaultdict[str, dict[str, Value]]) -> None:
+        return
 
     @cached_property
-    def _attrs(self) -> defaultdict[str, dict[str, FuncValue | PropertyValue]]:
-        data: defaultdict[str, dict[str, FuncValue | PropertyValue]] = defaultdict(dict)
+    def _attrs(self) -> defaultdict[str, dict[str, Value]]:
+        data: defaultdict[str, dict[str, Value]] = defaultdict(dict)
         for name, _ in inspect.getmembers(
             self.__class__, lambda attr: hasattr(attr, "__safulate_native_method__")
         ):
@@ -109,6 +94,7 @@ class Value(ABC):
             type_, func_name, is_prop = getattr(value, "__safulate_native_method__")
             func = FuncValue.from_native(name, value)
             data[type_][func_name] = PropertyValue(func) if is_prop else func
+        self._attrs_hook(data)
         return data
 
     @cached_property
@@ -144,43 +130,43 @@ class Value(ABC):
     def __setitem__(self, key: str, value: Value) -> None:
         self.public_attrs[key] = value
 
-    @private_method("$get_specs")
+    @private_method("get_specs")
     def get_specs(self, ctx: NativeContext) -> Value:
-        return ObjectValue(f"{self}'s specs", self.specs.copy())
+        return DictValue(self.specs.copy())
 
-    @special_method("add")
+    @spec_meth("add")
     def add(self, ctx: NativeContext, _other: Value) -> Value:
         raise SafulateValueError("Add is not defined for this type")
 
-    @special_method("sub")
+    @spec_meth("sub")
     def sub(self, ctx: NativeContext, _other: Value) -> Value:
         raise SafulateValueError("Subtract is not defined for this type")
 
-    @special_method("mul")
+    @spec_meth("mul")
     def mul(self, ctx: NativeContext, _other: Value) -> Value:
         raise SafulateValueError("Multiply is not defined for this type")
 
-    @special_method("div")
+    @spec_meth("div")
     def div(self, ctx: NativeContext, _other: Value) -> Value:
         raise SafulateValueError("Divide is not defined for this type")
 
-    @special_method("pow")
+    @spec_meth("pow")
     def pow(self, ctx: NativeContext, _other: Value) -> Value:
         raise SafulateValueError("Exponentiation is not defined for this type")
 
-    @special_method("uadd")
+    @spec_meth("uadd")
     def uadd(self, ctx: NativeContext) -> Value:
         raise SafulateValueError("Unary add is not defined for this type")
 
-    @special_method("neg")
+    @spec_meth("neg")
     def neg(self, ctx: NativeContext) -> Value:
         raise SafulateValueError("Unary minus is not defined for this type")
 
-    @special_method("eq")
+    @spec_meth("eq")
     def eq(self, ctx: NativeContext, other: Value) -> Value:
         return NumValue(int(self == other))
 
-    @special_method("neq")
+    @spec_meth("neq")
     def neq(self, ctx: NativeContext, other: Value) -> Value:
         val = ctx.invoke_spec(self, "eq", other)
         if not isinstance(val, NumValue):
@@ -189,7 +175,7 @@ class Value(ABC):
             )
         return NumValue(not val.value)
 
-    @special_method("has_item")
+    @spec_meth("has_item")
     def has_item(self, ctx: NativeContext, other: Value) -> Value:
         val = ctx.invoke_spec(self, "iter")
         if not isinstance(val, ListValue):
@@ -198,41 +184,41 @@ class Value(ABC):
             )
         return NumValue(other in val.value)
 
-    @special_method("less")
+    @spec_meth("less")
     def less(self, ctx: NativeContext, _other: Value) -> Value:
         raise SafulateValueError("Less than is not defined for this type")
 
-    @special_method("grtr")
+    @spec_meth("grtr")
     def grtr(self, ctx: NativeContext, _other: Value) -> Value:
         raise SafulateValueError("Greater than is not defined for this type")
 
-    @special_method("lesseq")
+    @spec_meth("lesseq")
     def lesseq(self, ctx: NativeContext, _other: Value) -> Value:
         raise SafulateValueError("Less than or equal to is not defined for this type")
 
-    @special_method("deco")
+    @spec_meth("deco")
     def deco(self, ctx: NativeContext, _other: Value) -> Value:
         raise SafulateValueError("deco is not defined for this type")
 
-    @special_method("grtreq")
+    @spec_meth("grtreq")
     def grtreq(self, ctx: NativeContext, _other: Value) -> Value:
         raise SafulateValueError(
             "Greater than or equal to is not defined for this type"
         )
 
-    @special_method("and")
+    @spec_meth("and")
     def and_(self, ctx: NativeContext, other: Value) -> Value:
         return NumValue(int(self.bool_spec(ctx) and other.bool_spec(ctx)))
 
-    @special_method("or")
+    @spec_meth("or")
     def or_(self, ctx: NativeContext, other: Value) -> Value:
         return self if self.bool_spec(ctx) else other
 
-    @special_method("not")
+    @spec_meth("not")
     def not_(self, ctx: NativeContext) -> Value:
         return NumValue(0) if self.bool_spec(ctx) else NumValue(1)
 
-    @special_method("bool")
+    @spec_meth("bool")
     def bool(self, ctx: NativeContext) -> Value:
         return NumValue(1)
 
@@ -241,35 +227,35 @@ class Value(ABC):
         call: Callable[Concatenate[Any, NativeContext, ...], Value]
     else:
 
-        @special_method("altcall")
+        @spec_meth("altcall")
         def altcall(self, ctx: NativeContext, *args: Value, **kwargs: Value) -> Value:
             raise SafulateValueError("Cannot altcall this type")
 
-        @special_method("call")
+        @spec_meth("call")
         def call(self, ctx: NativeContext, *args: Value, **kwargs: Value) -> Value:
             raise SafulateValueError("Cannot call this type")
 
-    @special_method("iter")
+    @spec_meth("iter")
     def iter(self, ctx: NativeContext) -> ListValue:
         raise SafulateValueError("This type is not iterable")
 
-    @special_method("get")
+    @spec_meth("get")
     def get_spec(self, ctx: NativeContext) -> Value:
         return self
 
-    @special_method("repr")
+    @spec_meth("repr")
     @abstractmethod
     def repr(self, ctx: NativeContext) -> Value: ...
 
-    @special_method("str")
+    @spec_meth("str")
     def str(self, ctx: NativeContext) -> Value:
         return ctx.invoke_spec(self, "repr")
 
-    @special_method("format")
+    @spec_meth("format")
     def format(self, ctx: NativeContext, val: Value) -> Value:
         raise SafulateValueError(f"Unknown format type {val.repr_spec(ctx)}")
 
-    @special_method("get_attr")
+    @spec_meth("get_attr")
     def get_attr(self, ctx: NativeContext, name: Value) -> Value:
         if not isinstance(name, StrValue):
             raise SafulateValueError(f"Expected str, got {name.repr_spec(ctx)} instead")
@@ -313,79 +299,103 @@ class Value(ABC):
         return bool(val.value)
 
 
-class TypeValue(Value, type=ValueTypeEnum.type):
-    def __init__(self, enum: ValueTypeEnum) -> None:
-        self.enum = enum
+class TypeValue(Value):
+    def __init__(self, name: str) -> None:
+        self.name = name
 
-    @special_method("repr")
+    def _attrs_hook(self, attrs: defaultdict[str, dict[str, Value]]) -> None:
+        attrs["%"]["type"] = TypeValue("type")
+
+    @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
-        return StrValue(f"<type {self.enum.name}>")
+        return StrValue(f"<type {self.name!r}>")
 
     @public_method("check")
     def check(self, ctx: NativeContext, obj: Value) -> NumValue:
-        return NumValue(int(obj.type is self.enum))
+        obj_type = obj.specs["type"]
+        return NumValue(
+            1 if isinstance(obj_type, TypeValue) and obj_type.name == self.name else 0
+        )
 
 
-class ObjectValue(Value, type=ValueTypeEnum.obj):
-    def __init__(self, name: str, attrs: dict[str, Value]) -> None:
-        self.name = name
-        self.attrs = attrs
-        self.public_attrs.update(self.attrs)
+class ObjectValue(Value):
+    __saf_typename__: str
+    __saf_init_attrs__: dict[str, Value] | None
 
-    @special_method("repr")
+    def __init__(self, name: str, attrs: dict[str, Value] | None = None) -> None:
+        self.__saf_typename__ = name
+        self.__saf_init_attrs__ = attrs
+
+    def _attrs_hook(self, attrs: defaultdict[str, dict[str, Value]]) -> None:
+        if self.__saf_init_attrs__:
+            attrs[""].update(self.__saf_init_attrs__)
+        attrs["%"]["type"] = TypeValue(self.__saf_typename__)
+
+    @property
+    def type(self) -> TypeValue:
+        typ = self.specs["type"]
+        assert isinstance(typ, TypeValue)
+        return typ
+
+    @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
-        return StrValue(f"<{self.name}>")
+        return StrValue(f"<{self.type.name}>")
 
 
 # region Atoms
 
 
-class NullValue(Value, type=ValueTypeEnum.null):
-    @special_method("repr")
+class NullValue(ObjectValue):
+    def __init__(self) -> None:
+        super().__init__("null")
+
+    @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
         return StrValue("null")
 
-    @special_method("eq")
+    @spec_meth("eq")
     def eq(self, ctx: NativeContext, other: Value) -> Value:
         return NumValue(isinstance(other, NullValue))
 
-    @special_method("bool")
+    @spec_meth("bool")
     def bool(self, ctx: NativeContext) -> Value:
         return NumValue(0)
 
 
-class NumValue(Value, type=ValueTypeEnum.num):
+class NumValue(ObjectValue):
     def __init__(self, value: float) -> None:
+        super().__init__("num")
+
         self.value = value
 
-    @special_method("add")
+    @spec_meth("add")
     def add(self, ctx: NativeContext, other: Value) -> NumValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError("Add is not defined for number and this type")
 
         return NumValue(self.value + other.value)
 
-    @special_method("sub")
+    @spec_meth("sub")
     def sub(self, ctx: NativeContext, other: Value) -> NumValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError("Subtract is not defined for number and this type")
 
         return NumValue(self.value - other.value)
 
-    @special_method("mul")
+    @spec_meth("mul")
     def mul(self, ctx: NativeContext, other: Value) -> NumValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError("Multiply is not defined for number and this type")
 
         return NumValue(self.value * other.value)
 
-    @special_method("div")
+    @spec_meth("div")
     def div(self, ctx: NativeContext, other: Value) -> NumValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError("Divide is not defined for number and this type")
         return NumValue(self.value / other.value)
 
-    @special_method("pow")
+    @spec_meth("pow")
     def pow(self, ctx: NativeContext, other: Value) -> NumValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError(
@@ -394,22 +404,22 @@ class NumValue(Value, type=ValueTypeEnum.num):
 
         return NumValue(self.value**other.value)
 
-    @special_method("uadd")
+    @spec_meth("uadd")
     def uadd(self, ctx: NativeContext) -> NumValue:
         return NumValue(self.value)
 
-    @special_method("neg")
+    @spec_meth("neg")
     def neg(self, ctx: NativeContext) -> NumValue:
         return NumValue(-self.value)
 
-    @special_method("eq")
+    @spec_meth("eq")
     def eq(self, ctx: NativeContext, other: Value) -> NumValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError("Equality is not defined for number and this type")
 
         return NumValue(self.value == other.value)
 
-    @special_method("neq")
+    @spec_meth("neq")
     def neq(self, ctx: NativeContext, other: Value) -> NumValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError(
@@ -418,7 +428,7 @@ class NumValue(Value, type=ValueTypeEnum.num):
 
         return NumValue(self.value != other.value)
 
-    @special_method("less")
+    @spec_meth("less")
     def less(self, ctx: NativeContext, other: Value) -> NumValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError(
@@ -427,7 +437,7 @@ class NumValue(Value, type=ValueTypeEnum.num):
 
         return NumValue(self.value < other.value)
 
-    @special_method("grtr")
+    @spec_meth("grtr")
     def grtr(self, ctx: NativeContext, other: Value) -> NumValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError(
@@ -436,7 +446,7 @@ class NumValue(Value, type=ValueTypeEnum.num):
 
         return NumValue(self.value > other.value)
 
-    @special_method("lesseq")
+    @spec_meth("lesseq")
     def lesseq(self, ctx: NativeContext, other: Value) -> NumValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError(
@@ -445,7 +455,7 @@ class NumValue(Value, type=ValueTypeEnum.num):
 
         return NumValue(self.value <= other.value)
 
-    @special_method("grtreq")
+    @spec_meth("grtreq")
     def grtreq(self, ctx: NativeContext, other: Value) -> NumValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError(
@@ -454,11 +464,11 @@ class NumValue(Value, type=ValueTypeEnum.num):
 
         return NumValue(self.value >= other.value)
 
-    @special_method("bool")
+    @spec_meth("bool")
     def bool(self, ctx: NativeContext) -> NumValue:
         return NumValue(int(self.value != 0))
 
-    @special_method("repr")
+    @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
         if self.value % 1 == 0 and "e" not in str(self.value):
             return StrValue(str(int(self.value)))
@@ -466,19 +476,20 @@ class NumValue(Value, type=ValueTypeEnum.num):
         return StrValue(str(self.value))
 
 
-class StrValue(Value, type=ValueTypeEnum.str):
+class StrValue(ObjectValue):
     def __init__(self, value: str) -> None:
-        self.value = value
-        self.value = self.value.encode("ascii").decode("unicode_escape")
+        super().__init__("str")
 
-    @special_method("altcall")
+        self.value = value.encode("ascii").decode("unicode_escape")
+
+    @spec_meth("altcall")
     def altcall(self, ctx: NativeContext, idx: Value) -> StrValue:
         if not isinstance(idx, NumValue):
             raise SafulateTypeError(f"Expected num, got {idx.repr_spec(ctx)} instead")
 
         return StrValue(self.value[int(idx.value)])
 
-    @special_method("add")
+    @spec_meth("add")
     def add(self, ctx: NativeContext, other: Value) -> StrValue:
         if not isinstance(other, StrValue):
             other = ctx.invoke_spec(other, "str")
@@ -489,7 +500,7 @@ class StrValue(Value, type=ValueTypeEnum.str):
 
         return StrValue(self.value + other.value)
 
-    @special_method("mul")
+    @spec_meth("mul")
     def mul(self, ctx: NativeContext, other: Value) -> StrValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError("Multiply is not defined for string and this type")
@@ -501,23 +512,23 @@ class StrValue(Value, type=ValueTypeEnum.str):
 
         return StrValue(self.value * int(other.value))
 
-    @special_method("iter")
+    @spec_meth("iter")
     def iter(self, ctx: NativeContext) -> ListValue:
         return ListValue([StrValue(char) for char in self.value])
 
-    @special_method("bool")
+    @spec_meth("bool")
     def bool(self, ctx: NativeContext) -> NumValue:
         return NumValue(int(len(self.value) != 0))
 
-    @special_method("repr")
+    @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
         return StrValue(repr(self.value))
 
-    @special_method("str")
+    @spec_meth("str")
     def str(self, ctx: NativeContext) -> StrValue:
         return StrValue(self.value)
 
-    @special_method("eq")
+    @spec_meth("eq")
     def eq(self, ctx: NativeContext, other: Value) -> Value:
         return NumValue(isinstance(other, StrValue) and other.value == self.value)
 
@@ -704,8 +715,10 @@ class StrValue(Value, type=ValueTypeEnum.str):
 # region Structures
 
 
-class ListValue(Value, type=ValueTypeEnum.list):
+class ListValue(ObjectValue):
     def __init__(self, value: list[Value]) -> None:
+        super().__init__("list")
+
         self.value = value
 
     @public_method("append")
@@ -727,22 +740,22 @@ class ListValue(Value, type=ValueTypeEnum.list):
 
         return self.value.pop(int(index.value))
 
-    @special_method("bool")
+    @spec_meth("bool")
     def bool(self, ctx: NativeContext) -> NumValue:
         return NumValue(int(len(self.value) != 0))
 
-    @special_method("altcall")
+    @spec_meth("altcall")
     def altcall(self, ctx: NativeContext, idx: Value) -> Value:
         if not isinstance(idx, NumValue):
             raise SafulateTypeError(f"Expected num, got {idx.repr_spec(ctx)} instead.")
 
         return self.value[int(idx.value)]
 
-    @special_method("iter")
+    @spec_meth("iter")
     def iter(self, ctx: NativeContext) -> ListValue:
         return self
 
-    @special_method("repr")
+    @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
         return StrValue(
             "["
@@ -766,7 +779,7 @@ class SpecialFuncParams(Enum):
     both = 3
 
 
-class FuncValue(Value, type=ValueTypeEnum.func):
+class FuncValue(ObjectValue):
     def __init__(
         self,
         name: Token,
@@ -777,6 +790,8 @@ class FuncValue(Value, type=ValueTypeEnum.func):
         partial_args: tuple[Value, ...] | None = None,
         partial_kwargs: dict[str, Value] | None = None,
     ) -> None:
+        super().__init__("func")
+
         self.name = name
         self.params = params
         self.body = body
@@ -854,7 +869,7 @@ class FuncValue(Value, type=ValueTypeEnum.func):
 
         return passable_params
 
-    @special_method("altcall")
+    @spec_meth("altcall")
     def altcall(self, ctx: NativeContext, *args: Value, **kwargs: Value) -> Value:
         if ctx.token.lexeme == "ADD-TO-START":
             args = (*args, *self.partial_args)
@@ -871,7 +886,7 @@ class FuncValue(Value, type=ValueTypeEnum.func):
             partial_kwargs=self.partial_kwargs | kwargs,
         )
 
-    @special_method("call")
+    @spec_meth("call")
     def call(self, ctx: NativeContext, *args: Value, **kwargs: Value) -> Value:
         params = self._validate_params(
             ctx,
@@ -899,7 +914,7 @@ class FuncValue(Value, type=ValueTypeEnum.func):
 
         return ret_value
 
-    @special_method("repr")
+    @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
         return StrValue(f"<func {self.name.lexeme!r}>")
 
@@ -933,28 +948,36 @@ class FuncValue(Value, type=ValueTypeEnum.func):
         )
 
 
-class PropertyValue(Value, type=ValueTypeEnum.property):
+class PropertyValue(ObjectValue):
     def __init__(self, func: FuncValue) -> None:
+        super().__init__("property")
+
         self.func = func
 
-    @special_method("repr")
+    @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
-        return StrValue(f"<Property {self.func.repr_spec(ctx)}>")
+        return StrValue(f"<property {self.func.repr_spec(ctx)}>")
 
-    @special_method("get")
+    @spec_meth("get")
     def get_spec(self, ctx: NativeContext) -> Value:
         return ctx.invoke(self.func)
+
+    @public_property("func")
+    def func_prop(self, ctx: NativeContext) -> Value:
+        return self.func
 
 
 MISSING: Any = object()
 null = NullValue()
 
 
-class DictValue(Value, type=ValueTypeEnum.dict):
+class DictValue(ObjectValue):
     def __init__(self, data: dict[str, Value]) -> None:
+        super().__init__("dict")
+
         self.data = data
 
-    @special_method("repr")
+    @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
         return StrValue(
             "{"
@@ -964,7 +987,7 @@ class DictValue(Value, type=ValueTypeEnum.dict):
             + "}"
         )
 
-    @special_method("altcall")
+    @spec_meth("altcall")
     def altcall(
         self, ctx: NativeContext, key: Value, default: Value = MISSING
     ) -> Value:
@@ -973,7 +996,7 @@ class DictValue(Value, type=ValueTypeEnum.dict):
     @public_method("get")
     def get(self, ctx: NativeContext, key: Value, default: Value = null) -> Value:
         try:
-            return self.data[key.repr_spec(ctx)]
+            return self.data[key.str_spec(ctx)]
         except KeyError:
             if default is MISSING:
                 raise SafulateKeyError(f"Key {key.repr_spec(ctx)} was not found")
@@ -1009,93 +1032,33 @@ class DictValue(Value, type=ValueTypeEnum.dict):
                 raise SafulateKeyError(f"Key {key.repr_spec(ctx)} was not found")
             return default
 
-    @special_method("iter")
+    @spec_meth("iter")
     def iter(self, ctx: NativeContext) -> ListValue:
         return self.keys(ctx)
 
-    @special_method("has")
+    @spec_meth("has")
     def has(self, ctx: NativeContext, key: Value) -> NumValue:
         return NumValue(int(key in self.data))
 
-    @special_method("bool")
+    @spec_meth("bool")
     def bool(self, ctx: NativeContext) -> NumValue:
         return NumValue(1 if self.data else 0)
-
-
-# region Versions
-
-
-class VersionValue(Value, type=ValueTypeEnum.version):
-    def __init__(
-        self,
-        major: NumValue,
-        minor: NumValue | NullValue,
-        micro: NumValue | NullValue,
-    ) -> None:
-        self.major = major
-        self.minor = minor
-        self.micro = micro
-
-    def __post_init__(self) -> None:
-        self.public_attrs.update(
-            {"major": self.major, "minor": self.minor, "micro": self.micro}
-        )
-
-    def _handle_constraint(self, other: Value, constraint: str) -> Value:
-        if isinstance(other, VersionValue):
-            return VersionConstraintValue(left=self, right=other, constraint=constraint)
-        if isinstance(other, NullValue):
-            return VersionConstraintValue(left=other, right=self, constraint=constraint)
-        raise SafulateValueError(
-            f"{constraint!r} operation is not defined for version and this type"
-        )
-
-    @special_method("sub")
-    def sub(self, ctx: NativeContext, other: Value) -> Value:
-        return self._handle_constraint(other, "-")
-
-    @special_method("uadd")
-    def uadd(self, ctx: NativeContext) -> Value:
-        return self._handle_constraint(null, "+")
-
-    @special_method("neg")
-    def neg(self, ctx: NativeContext) -> Value:
-        return self._handle_constraint(null, "-")
-
-    @special_method("repr")
-    def repr(self, ctx: NativeContext) -> StrValue:
-        return StrValue(
-            f"v{self.major}{f'.{self.minor}' if isinstance(self.minor, NumValue) else ''}{f'.{self.micro}' if isinstance(self.micro, NumValue) else ''}"
-        )
-
-
-class VersionConstraintValue(Value, type=ValueTypeEnum.version_constraint):
-    def __init__(
-        self, left: VersionValue | NullValue, right: VersionValue, constraint: str
-    ) -> None:
-        self.left = left
-        self.right = right
-        self.constraint = constraint
-
-    @special_method("repr")
-    def repr(self, ctx: NativeContext) -> StrValue:
-        return StrValue(
-            f"{self.left if isinstance(self.left, VersionValue) else ''}{self.constraint}{self.right}"
-        )
 
 
 # region Regex
 
 
-class PatternValue(Value, type=ValueTypeEnum.re_pattern):
+class PatternValue(ObjectValue):
     def __init__(self, pattern: re.Pattern[str]) -> None:
+        super().__init__("regex pattern")
+
         self.pattern = pattern
 
-    @special_method("repr")
+    @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
-        return StrValue(f"<Pattern {self.pattern.pattern!r}>")
+        return StrValue(f"<regex pattern {self.pattern!r}>")
 
-    @special_method("str")
+    @spec_meth("str")
     def str(self, ctx: NativeContext) -> StrValue:
         return self.get_pattern_prop(ctx)
 
@@ -1243,12 +1206,14 @@ class PatternValue(Value, type=ValueTypeEnum.re_pattern):
         return ListValue([StrValue(group) for group in self.pattern.groupindex])
 
 
-class MatchValue(Value, type=ValueTypeEnum.re_match):
+class MatchValue(ObjectValue):
     def __init__(self, match: re.Match[str], pattern: PatternValue) -> None:
+        super().__init__("regex match")
+
         self.match = match
         self.pattern = pattern
 
-    @special_method("repr")
+    @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
         return StrValue(f"<Match groups={self.groups(ctx).repr_spec(ctx)}>")
 
@@ -1283,15 +1248,15 @@ class MatchValue(Value, type=ValueTypeEnum.re_match):
             }
         )
 
-    @special_method("iter")
+    @spec_meth("iter")
     def iter(self, ctx: NativeContext) -> ListValue:
         return self.groups(ctx)
 
-    @special_method("bool")
+    @spec_meth("bool")
     def bool(self, ctx: NativeContext) -> NumValue:
         return NumValue(1 if self.match else 0)
 
-    @special_method("altcall")
+    @spec_meth("altcall")
     def altcall(self, ctx: NativeContext, key: Value) -> Value:
         match key:
             case StrValue():

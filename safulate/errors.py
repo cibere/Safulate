@@ -66,9 +66,26 @@ class ErrorManager:
         else:
             raise RuntimeError("Error manager got no way of getting token")
 
-        exc_value.tokens.insert(0, token)
+        exc_value.tokens.insert(0, TokenEntry(token))
 
         return False
+
+
+class TokenEntry:
+    def __init__(
+        self, token: Token, *, source: str | None = None, filename: str | None = None
+    ) -> None:
+        self.token = token
+        self.source = source
+        self.filename = filename
+
+    def update_if_empty(
+        self, source: str | None = None, filename: str | None = None
+    ) -> None:
+        if source is not None:
+            self.source = source
+        if filename is not None:
+            self.filename = filename
 
 
 class SafulateError(BaseException):
@@ -77,23 +94,26 @@ class SafulateError(BaseException):
     ) -> None:
         self.msg = msg
         self.obj = obj
-        self.tokens: list[Token] = []
+        self.tokens: list[TokenEntry] = []
 
         if token:
-            self.tokens.append(token)
+            self.tokens.append(TokenEntry(token))
 
         super().__init__(self.msg)
 
-    def _make_subreport(self, token: Token, source: str) -> str:
-        line = source[: token.start].count("\n") + 1
-        if line > 1:
-            col = source[token.start - 1 :: -1].index("\n") + 1
-        else:
-            col = token.start + 1
+    def _make_subreport(self, entry: TokenEntry, src: str) -> str:
+        src = entry.source or src
 
-        src = source.splitlines()[line - 1]
+        line = src[: entry.token.start].count("\n") + 1
+        if line > 1:
+            col = src[entry.token.start - 1 :: -1].index("\n") + 1
+        else:
+            col = entry.token.start + 1
+
+        src = src.splitlines()[line - 1]
         ws = len(src) - len(src.lstrip())
-        res = f"\033[31mLine {line}, col {col}\n\033[36m{line:>5} | \033[0m{src.lstrip()}\n"
+        file_prefix = f"File {entry.filename!r}, " if entry.filename else ""
+        res = f"\033[31m{file_prefix}Line {line}, col {col}\n\033[36m{line:>5} | \033[0m{src.lstrip()}\n"
         res += (
             "\033[36m  "
             + " " * max(5, len(str(line)))
@@ -106,7 +126,7 @@ class SafulateError(BaseException):
 
     def make_report(self, source: str) -> str:
         return (
-            "\n".join(self._make_subreport(token, source) for token in self.tokens)
+            "\n".join(self._make_subreport(token, source) for (token) in self.tokens)
             + "\033[31m\n"
             + self.__class__.__name__.removeprefix("Safulate")
             + ": "

@@ -1,8 +1,24 @@
 from __future__ import annotations
 
-from safulate import Exporter, TypeValue, ValueTypeEnum
+TYPE_CHECKING = False
+if TYPE_CHECKING:
+    from safulate import NativeContext, Value
 
-exporter = Exporter("types")
+code = """
+struct TypesModule(){
+    pub str = type("");
+    pub num = type(0);
+    pub dict = type(dict());
+    priv temp_func(){}
+    pub func = type($temp_func);
+    pub list = type([]);
+    pub null = type(null);
+    pub type = type(str);
+}
 
-for enum in ValueTypeEnum:
-    exporter[enum.name] = TypeValue(enum)
+pub types = TypesModule();
+"""
+
+
+def load(ctx: NativeContext) -> Value:
+    return ctx.eval(code, name="<builtin module types>")["types"]

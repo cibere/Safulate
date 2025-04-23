@@ -23,9 +23,9 @@ class Environment:
             self.values = scope.public_attrs
 
     def add_builtins(self) -> Self:
-        from .libs.builtins import exporter as builtins
+        from .libs.builtins import Builtins
 
-        self.values.update(builtins.exports)
+        self.values.update(Builtins().public_attrs)
         return self
 
     def __getitem__(self, token: Token) -> Value:

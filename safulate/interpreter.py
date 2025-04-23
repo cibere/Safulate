@@ -52,7 +52,7 @@ from .errors import (
     SafulateScopeError,
     SafulateTypeError,
     SafulateValueError,
-    SafulateVersionConflict,
+    # SafulateVersionConflict,
 )
 from .native_context import NativeContext
 from .py_libs import LibManager
@@ -66,8 +66,6 @@ from .values import (
     PropertyValue,
     StrValue,
     Value,
-    VersionConstraintValue,
-    VersionValue,
     null,
 )
 
@@ -85,6 +83,7 @@ class TreeWalker(ASTVisitor):
     ) -> None:
         self.version = Version(__version__)
         self.import_cache: dict[str, ObjectValue] = {}
+
         self.libs = lib_manager or LibManager()
 
         if env:
@@ -374,47 +373,53 @@ class TreeWalker(ASTVisitor):
                 obj, "get_attr", StrValue(node.attr.lexeme)
             )
 
-    def visit_version(self, node: ASTVersion) -> VersionValue:
-        major = NumValue(node.major)
-        minor = null if node.minor is None else NumValue(node.minor)
-        micro = null if node.micro is None else NumValue(node.micro)
-
-        return VersionValue(major=major, minor=minor, micro=micro)
+    def visit_version(self, node: ASTVersion) -> Value:
+        raise RuntimeError("version not allowed")
 
     def visit_version_req(self, node: ASTVersionReq) -> Value:
-        with ErrorManager(token=node.token):
-            match node.version.visit(self):
-                case VersionValue() as ver_value:
-                    ver = Version(str(ver_value))
-                    if ver != self.version:
-                        raise SafulateVersionConflict(
-                            f"Current version (v{self.version}) is not equal to the required version (v{ver})"
-                        )
-                case VersionConstraintValue(constraint="-", left=null) as const:
-                    ver = Version(str(const.right))
+        raise RuntimeError("version not allowed")
 
-                    if self.version > ver:
-                        raise SafulateVersionConflict(
-                            f"Current version (v{self.version}) is above the maximum set version allowed (v{ver})"
-                        )
-                case VersionConstraintValue(constraint="+", left=null) as const:
-                    ver = Version(str(const.right))
+    # def visit_version(self, node: ASTVersion) -> VersionValue:
+    #     major = NumValue(node.major)
+    #     minor = null if node.minor is None else NumValue(node.minor)
+    #     micro = null if node.micro is None else NumValue(node.micro)
 
-                    if self.version < ver:
-                        raise SafulateVersionConflict(
-                            f"Current version (v{self.version}) is below the minimum set version allowed (v{ver})"
-                        )
-                case VersionConstraintValue(constraint="-") as const:
-                    left_ver = Version(str(const.left))
-                    right_ver = Version(str(const.right))
+    #     return VersionValue(major=major, minor=minor, micro=micro)
 
-                    if not (left_ver < self.version < right_ver):
-                        raise SafulateVersionConflict(
-                            f"Current version (v{self.version}) outside of the allowed range ({const})"
-                        )
-                case _ as x:
-                    raise RuntimeError(f"Unknown version req combination: {x!r}")
-            return null  # pyright: ignore[reportPossiblyUnboundVariable] # pyright is high
+    # def visit_version_req(self, node: ASTVersionReq) -> Value:
+    #     with ErrorManager(token=node.token):
+    #         match node.version.visit(self):
+    #             case VersionValue() as ver_value:
+    #                 ver = Version(str(ver_value))
+    #                 if ver != self.version:
+    #                     raise SafulateVersionConflict(
+    #                         f"Current version (v{self.version}) is not equal to the required version (v{ver})"
+    #                     )
+    #             case VersionConstraintValue(constraint="-", left=null) as const:
+    #                 ver = Version(str(const.right))
+
+    #                 if self.version > ver:
+    #                     raise SafulateVersionConflict(
+    #                         f"Current version (v{self.version}) is above the maximum set version allowed (v{ver})"
+    #                     )
+    #             case VersionConstraintValue(constraint="+", left=null) as const:
+    #                 ver = Version(str(const.right))
+
+    #                 if self.version < ver:
+    #                     raise SafulateVersionConflict(
+    #                         f"Current version (v{self.version}) is below the minimum set version allowed (v{ver})"
+    #                     )
+    #             case VersionConstraintValue(constraint="-") as const:
+    #                 left_ver = Version(str(const.left))
+    #                 right_ver = Version(str(const.right))
+
+    #                 if not (left_ver < self.version < right_ver):
+    #                     raise SafulateVersionConflict(
+    #                         f"Current version (v{self.version}) outside of the allowed range ({const})"
+    #                     )
+    #             case _ as x:
+    #                 raise RuntimeError(f"Unknown version req combination: {x!r}")
+    #         return null  # pyright: ignore[reportPossiblyUnboundVariable] # pyright is high
 
     def visit_import_req(self, node: ASTImportReq) -> Value:
         with ErrorManager(token=node.source):
@@ -423,7 +428,9 @@ class TreeWalker(ASTVisitor):
             if value is None:
                 match node.source.type:
                     case TokenType.ID:
-                        value = self.libs[node.source.lexeme]
+                        value = self.libs.get_or_load(
+                            node.source.lexeme, ctx=self.ctx(node.source)
+                        )
                     case TokenType.STR:
                         raise SafulateImportError("Url imports are not allowed yet")
                     case other:

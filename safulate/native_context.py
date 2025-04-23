@@ -3,14 +3,13 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, cast
 
-from .errors import ErrorManager, SafulateTypeError
+from .errors import ErrorManager, SafulateError, SafulateTypeError
 from .values import (
     DictValue,
     FuncValue,
     ListValue,
     NullValue,
     NumValue,
-    ObjectValue,
     StrValue,
     Value,
     null,
@@ -85,10 +84,10 @@ class NativeContext:
         ignore_null_attrs: bool = False,
     ) -> Any:
         match obj:
-            case ObjectValue():
+            case DictValue():
                 return {
                     key: value
-                    for key, raw_value in obj.attrs.items()
+                    for key, raw_value in obj.data.items()
                     if (
                         (
                             value := self.value_to_python(
@@ -125,3 +124,15 @@ class NativeContext:
                 raise SafulateTypeError(
                     f"Unable to convert {x.repr_spec(self)} to value"
                 )
+
+    def eval(self, code: str, *, name: str | None) -> dict[str, Value]:
+        from .repl import code_to_ast
+
+        try:
+            visitor = self.interpreter.__class__()
+            code_to_ast(code).visit(visitor)
+            return visitor.env.values
+        except SafulateError as e:
+            for token in e.tokens:
+                token.update_if_empty(source=code, filename=name)
+            raise e

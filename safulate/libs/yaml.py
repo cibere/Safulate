@@ -1,5 +1,7 @@
-from safulate import SafulateError
-from safulate.libs._msgspec_wrapper import make_exporter
+from __future__ import annotations
+
+from safulate import NativeContext, ObjectValue, SafulateError
+from safulate.libs._msgspec_wrapper import MsgspecWrapper
 
 
 class SafulateYamlDecodeError(SafulateError): ...
@@ -8,6 +10,9 @@ class SafulateYamlDecodeError(SafulateError): ...
 class SafulateYamlEncodeError(SafulateError): ...
 
 
-exporter = make_exporter(
-    "yaml", encode_error=SafulateYamlEncodeError, decode_error=SafulateYamlDecodeError
-)
+def load(_: NativeContext) -> ObjectValue:
+    return MsgspecWrapper(
+        "yaml",
+        encode_error=SafulateYamlEncodeError,
+        decode_error=SafulateYamlDecodeError,
+    )

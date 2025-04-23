@@ -1,5 +1,7 @@
-from safulate import SafulateError
-from safulate.libs._msgspec_wrapper import make_exporter
+from __future__ import annotations
+
+from safulate import NativeContext, ObjectValue, SafulateError
+from safulate.libs._msgspec_wrapper import MsgspecWrapper
 
 
 class SafulateJsonDecodeError(SafulateError): ...
@@ -8,6 +10,9 @@ class SafulateJsonDecodeError(SafulateError): ...
 class SafulateJsonEncodeError(SafulateError): ...
 
 
-exporter = make_exporter(
-    "json", encode_error=SafulateJsonEncodeError, decode_error=SafulateJsonDecodeError
-)
+def load(_: NativeContext) -> ObjectValue:
+    return MsgspecWrapper(
+        "json",
+        encode_error=SafulateJsonEncodeError,
+        decode_error=SafulateJsonDecodeError,
+    )

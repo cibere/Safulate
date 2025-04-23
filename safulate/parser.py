@@ -266,7 +266,7 @@ class Parser:
                 func = ASTFuncDecl(
                     name=name,
                     params=params,
-                    soft_kw=soft_kw,
+                    soft_kw=SoftKeyword.PUB,
                     kw_token=kw_token,
                     paren_token=paren_token,
                     body=ASTBlock(
@@ -289,7 +289,7 @@ class Parser:
                                             ASTAtom(
                                                 Token(
                                                     TokenType.STR,
-                                                    f'"{name.lexeme}"',
+                                                    f"{name.lexeme}",
                                                     name.start,
                                                 )
                                             )

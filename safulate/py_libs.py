@@ -1,26 +1,22 @@
 from __future__ import annotations
 
 import runpy
+from inspect import isfunction
 from pathlib import Path
-from typing import TYPE_CHECKING, Concatenate
+from typing import TYPE_CHECKING
 
 from .errors import SafulateImportError
-from .values import FuncValue, ObjectValue, Value
+from .values import ObjectValue
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from .native_context import NativeContext
 
-__all__ = ("Exporter", "LibManager")
+__all__ = ("LibManager",)
 
 
 class LibManager:
-    def __init__(self, *, load_builtin_libs: bool = True) -> None:
+    def __init__(self) -> None:
         self.libs: dict[str, ObjectValue] = {}
-
-        if load_builtin_libs:
-            self.load_builtin_libs()
 
     def __getitem__(self, key: str) -> ObjectValue | None:
         return self.libs.get(key)
@@ -28,53 +24,32 @@ class LibManager:
     def __setitem__(self, key: str, value: ObjectValue) -> None:
         self.libs[key] = value
 
-    def register_exporter(self, exporter: Exporter) -> None:
-        self[exporter.name] = exporter.to_container()
-
-    def load_lib(self, path: Path) -> None:
+    def load_lib(self, path: Path, *, ctx: NativeContext) -> ObjectValue:
         globals = runpy.run_path(str(path.absolute()))
-        exporter = globals.get("exporter")
-        if exporter is None:
-            raise SafulateImportError("Module does not have an exporter")
-        if not isinstance(exporter, Exporter):
-            raise RuntimeError("Module does not have a valid exporter")
+        loader = globals.get("load")
+        if loader is None or not isfunction(loader):
+            raise SafulateImportError("Module is invalid and could not be loaded")
 
-        self.register_exporter(exporter)
+        try:
+            obj = loader(ctx)
+        except Exception as e:
+            raise RuntimeError("Module does not have a valid exporter") from e
 
-    def load_builtin_libs(self) -> None:
-        lib_folder = Path(__file__).parent / "libs"
-        for file in lib_folder.glob("*.py"):
-            if file.name.startswith("_"):
-                continue
+        if not isinstance(obj, ObjectValue):
+            raise SafulateImportError("Module is invalid and could not be loaded")
 
-            self.load_lib(file)
+        self[obj.type.name] = obj
+        return obj
 
+    def load_builtin_lib(self, name: str, *, ctx: NativeContext) -> ObjectValue:
+        path = Path(__file__).parent / "libs" / f"{name}.py"
+        if not path.exists():
+            raise SafulateImportError(f"Module {name!r} could not be found")
 
-class Exporter:
-    def __init__(self, name: str) -> None:
-        self.name = name
-        self.exports: dict[str, Value] = {}
+        return self.load_lib(path, ctx=ctx)
 
-    def __getitem__(self, key: str) -> Value:
-        return self.exports[key]
-
-    def __setitem__(self, key: str, value: Value) -> None:
-        self.exports[key] = value
-
-    def export(
-        self,
-        name: str,
-    ) -> Callable[[Callable[Concatenate[NativeContext, ...], Value]], FuncValue]:
-        def deco(
-            callback: Callable[Concatenate[NativeContext, ...], Value],
-        ) -> FuncValue:
-            func = FuncValue.from_native(name, callback)
-            self[name] = func
-            return func
-
-        return deco
-
-    __call__ = export
-
-    def to_container(self) -> ObjectValue:
-        return ObjectValue(self.name, self.exports)
+    def get_or_load(self, name: str, *, ctx: NativeContext) -> ObjectValue | None:
+        lib = self[name]
+        if lib is None:
+            lib = self.load_builtin_lib(name, ctx=ctx)
+        return lib

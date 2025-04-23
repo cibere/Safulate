@@ -4,12 +4,20 @@ import argparse
 from pathlib import Path
 
 
-class CliOptions:
-    filename: Path
-    code: str
-    lex: bool
-    ast: bool
-    python_errors: bool
+class Options:
+    def __init__(
+        self,
+        lex: bool,
+        ast: bool,
+        python_errors: bool,
+    ) -> None:
+        self.lex = lex
+        self.ast = ast
+        self.python_errors = python_errors
+
+    @classmethod
+    def default(cls) -> Options:
+        return cls(lex=False, ast=False, python_errors=False)
 
 
 parser = argparse.ArgumentParser("test")
@@ -24,5 +32,14 @@ level_group.add_argument("--ast", action="store_true")
 parser.add_argument("-pyers", "--python-errors", action="store_true")
 
 
-def parse_cli_args() -> CliOptions:
-    return parser.parse_args()  # pyright: ignore[reportReturnType]
+def parse_cli_args() -> tuple[str | Path | None, Options]:
+    args = parser.parse_args()
+    source = None
+    if args.filename:
+        source = args.filename
+    elif args.code:
+        source = args.code
+    return (
+        source,
+        Options(lex=args.lex, ast=args.ast, python_errors=args.python_errors),
+    )
