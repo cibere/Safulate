@@ -5,15 +5,27 @@ if TYPE_CHECKING:
     from safulate import NativeContext, Value
 
 code = """
+pub get_type = type;
+
 struct TypesModule(){
-    pub str = type("");
-    pub num = type(0);
-    pub dict = type(dict());
-    priv temp_func(){}
-    pub func = type($temp_func);
-    pub list = type([]);
-    pub null = type(null);
-    pub type = type(str);
+    pub str = get_type("");
+    pub num = get_type(0);
+    pub dict = get_type(dict());
+    pub list = get_type([]);
+    pub null = get_type(null);
+    pub type = get_type(str);
+
+    pub func;
+    {
+        pub temp_func(){}
+        func = get_type(temp_func);
+    }
+
+    pub property;
+    {
+        prop temp_prop(){}
+        property = get_type(temp_prop);
+    }
 }
 
 pub types = TypesModule();
