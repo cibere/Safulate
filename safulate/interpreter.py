@@ -463,7 +463,7 @@ class TreeWalker(ASTVisitor):
             with self.scope() as env:
                 if node.error_var:
                     env.declare(node.error_var)
-                    env[node.error_var] = e.obj
+                    env[node.error_var] = e.saf_value
 
                 return self.visit_unscoped_block(node.catch_branch)
 

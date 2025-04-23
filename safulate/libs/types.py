@@ -26,6 +26,17 @@ struct TypesModule(){
         prop temp_prop(){}
         property = get_type(temp_prop);
     }
+
+
+    pub AssertionError = get_type(object("AssertionError"));
+    pub BreakoutError = get_type(object("BreakoutError"));
+    pub InvalidContinue = get_type(object("InvalidContinue"));
+    pub InvalidReturn = get_type(object("InvalidReturn"));
+    pub KeyError = get_type(object("KeyError"));
+    pub NameError = get_type(object("NameError"));
+    pub SyntaxError = get_type(object("SyntaxError"));
+    pub TypeError = get_type(object("TypeError"));
+    pub ValueError = get_type(object("ValueError"));
 }
 
 pub types = TypesModule();

@@ -6,11 +6,9 @@ from safulate import (
     DictValue,
     ListValue,
     NativeContext,
-    NullValue,
     NumValue,
     ObjectValue,
     SafulateAssertionError,
-    SafulateTypeError,
     StrValue,
     Value,
     null,
@@ -55,17 +53,12 @@ class Builtins(ObjectValue):
 
     @public_method("object")
     def create_object(self, ctx: NativeContext, name: Value = null) -> Value:
-        match name:
-            case StrValue():
-                obj_name = name.value
-            case NullValue():
-                obj_name = f"Custom Object @ {ctx.token.start}"
-            case _ as x:
-                raise SafulateTypeError(
-                    f"Expected str or null for object name, received {x.repr_spec(ctx)} instead"
-                )
-
-        return ObjectValue(name=obj_name, attrs={})
+        return ObjectValue(
+            name=f"Custom Object @ {ctx.token.start}"
+            if name is null
+            else name.str_spec(ctx),
+            attrs={},
+        )
 
     @public_method("assert")
     def assert_(self, ctx: NativeContext, obj: Value, msg: Value = null) -> Value:

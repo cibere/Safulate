@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, TypeVar
 
 from .mock import MockToken
+from .properties import cached_property
 from .tokens import Token, TokenType
 
 if TYPE_CHECKING:
@@ -10,7 +11,7 @@ if TYPE_CHECKING:
     from types import TracebackType
     from typing import Literal
 
-    from .values import Value
+    from .values import NativeErrorValue, Value
 
 T = TypeVar("T")
 
@@ -92,6 +93,8 @@ class SafulateError(BaseException):
     def __init__(
         self, msg: str, token: Token | None = None, obj: Value | None = None
     ) -> None:
+        super().__init__(msg)
+
         self.msg = msg
         self.obj = obj
         self.tokens: list[TokenEntry] = []
@@ -99,7 +102,15 @@ class SafulateError(BaseException):
         if token:
             self.tokens.append(TokenEntry(token))
 
-        super().__init__(self.msg)
+    @property
+    def name(self) -> str:
+        return self.__class__.__name__.removeprefix("Safulate")
+
+    @cached_property
+    def saf_value(self) -> NativeErrorValue:
+        from .values import NativeErrorValue, null
+
+        return NativeErrorValue(error=self.name, msg=self.msg, obj=self.obj or null)
 
     def _make_subreport(self, entry: TokenEntry, src: str) -> str:
         src = entry.source or src
@@ -128,7 +139,7 @@ class SafulateError(BaseException):
         return (
             "\n".join(self._make_subreport(token, source) for (token) in self.tokens)
             + "\033[31m\n"
-            + self.__class__.__name__.removeprefix("Safulate")
+            + self.name
             + ": "
             + self.msg
             + "\033[0m"

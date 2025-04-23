@@ -34,6 +34,7 @@ __all__ = (
     "FuncValue",
     "ListValue",
     "MatchValue",
+    "NativeErrorValue",
     "NullValue",
     "NumValue",
     "ObjectValue",
@@ -1268,3 +1269,21 @@ class MatchValue(ObjectValue):
                 raise SafulateTypeError(
                     f"Expected num or str, got {key.repr_spec(ctx)} instead"
                 )
+
+
+# region Error
+
+
+class NativeErrorValue(ObjectValue):
+    def __init__(self, error: str, msg: str, obj: Value = null) -> None:
+        super().__init__(error, {"value": obj, "msg": StrValue(msg)})
+
+    @spec_meth("str")
+    def str(self, ctx: NativeContext) -> StrValue:
+        return StrValue(f"{self.type.name}: {self.public_attrs['msg'].str_spec(ctx)}")
+
+    @spec_meth("repr")
+    def repr(self, ctx: NativeContext) -> StrValue:
+        return StrValue(
+            f"<{self.type.name} msg={self.public_attrs['msg'].repr_spec(ctx)} value={self.public_attrs['value'].repr_spec(ctx)}>"
+        )
