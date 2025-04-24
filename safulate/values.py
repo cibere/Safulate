@@ -198,23 +198,19 @@ class Value(ABC):
     def lesseq(self, ctx: NativeContext, _other: Value) -> Value:
         raise SafulateValueError("Less than or equal to is not defined for this type")
 
-    @spec_meth("deco")
-    def deco(self, ctx: NativeContext, _other: Value) -> Value:
-        raise SafulateValueError("deco is not defined for this type")
-
     @spec_meth("grtreq")
     def grtreq(self, ctx: NativeContext, _other: Value) -> Value:
         raise SafulateValueError(
             "Greater than or equal to is not defined for this type"
         )
 
-    @spec_meth("and")
-    def and_(self, ctx: NativeContext, other: Value) -> Value:
-        return NumValue(int(self.bool_spec(ctx) and other.bool_spec(ctx)))
+    @spec_meth("amp")
+    def amp(self, ctx: NativeContext, other: Value) -> Value:
+        raise SafulateValueError("amp is not defined for this type")
 
-    @spec_meth("or")
-    def or_(self, ctx: NativeContext, other: Value) -> Value:
-        return self if self.bool_spec(ctx) else other
+    @spec_meth("pipe")
+    def pipe(self, ctx: NativeContext, other: Value) -> Value:
+        raise SafulateValueError("pipe is not defined for this type")
 
     @spec_meth("not")
     def not_(self, ctx: NativeContext) -> Value:

@@ -30,6 +30,11 @@ class TokenType(Enum):
     MINUSEQ = "-="
     STAREQ = "*="
     SLASHEQ = "/="
+    BOOL = "!!"
+    AND = "&&"
+    OR = "||"
+    EQEQ = "=="
+    NEQ = "!="
 
     # monosymbols
     LPAR = "("
@@ -43,8 +48,6 @@ class TokenType(Enum):
     STAR = "*"
     SLASH = "/"
     EQ = "="
-    EQEQ = "=="
-    NEQ = "!="
     LESS = "<"
     GRTR = ">"
     SEMI = ";"
@@ -52,8 +55,8 @@ class TokenType(Enum):
     DOT = "."
     TILDE = "~"
     NOT = "!"
-    AND = "&"
-    OR = "|"
+    PIPE = "|"
+    AMP = "&"
     AT = "@"
     COLON = ":"
 

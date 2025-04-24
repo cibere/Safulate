@@ -605,6 +605,8 @@ class Parser:
             TokenType.AND,
             TokenType.OR,
             TokenType.HAS,
+            TokenType.AMP,
+            TokenType.PIPE,
         )
 
     def equality(self) -> ASTNode:

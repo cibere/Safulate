@@ -299,18 +299,31 @@ class TreeWalker(ASTVisitor):
             TokenType.GRTR: "grtr",
             TokenType.LESSEQ: "lesseq",
             TokenType.GRTREQ: "grtreq",
-            TokenType.AND: "and",
-            TokenType.OR: "or",
+            TokenType.AMP: "amp",
+            TokenType.PIPE: "pipe",
             TokenType.HAS: "has_item",
         }.get(node.op.type)
 
+        ctx = self.ctx(node.op)
         if spec_name is None:
-            raise ValueError(
-                f"Invalid token type {node.op.type.name} for binary operator"
-            )
+            match node.op.type:
+                case TokenType.OR:
+                    if left.bool_spec(ctx):
+                        return left
+                    if right.bool_spec(ctx):
+                        return right
+                    return null
+                case TokenType.AND:
+                    return NumValue(
+                        1 if left.bool_spec(ctx) and right.bool_spec(ctx) else 0
+                    )
+                case _:
+                    raise ValueError(
+                        f"Invalid token type {node.op.type.name} for binary operator"
+                    )
 
         with ErrorManager(token=node.op):
-            return self.ctx(node.op).invoke_spec(left, spec_name, right)
+            return ctx.invoke_spec(left, spec_name, right)
 
     def visit_unary(self, node: ASTUnary) -> Value:
         right = node.right.visit(self)
@@ -319,6 +332,7 @@ class TreeWalker(ASTVisitor):
             TokenType.PLUS: "uadd",
             TokenType.MINUS: "neg",
             TokenType.NOT: "not",
+            TokenType.BOOL: "bool",
         }.get(node.op.type, None)
         if spec_name is None:
             raise ValueError(
