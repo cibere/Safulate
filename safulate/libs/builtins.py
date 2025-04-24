@@ -11,14 +11,16 @@ from safulate import (
     SafulateAssertionError,
     StrValue,
     Value,
+    false,
     null,
+    true,
 )
 from safulate.values import public_method
 
 
 class Builtins(ObjectValue):
     def __init__(self) -> None:
-        super().__init__("builtins", {"null": null})
+        super().__init__("builtins", {"null": null, "true": true, "false": false})
 
     @public_method("print")
     def print_(self, ctx: NativeContext, *args: Value) -> Value:

@@ -44,6 +44,7 @@ __all__ = (
     "StrValue",
     "TypeValue",
     "Value",
+    "false",
     "null",
     "private_method",
     "private_property",
@@ -51,6 +52,7 @@ __all__ = (
     "public_property",
     "spec_meth",
     "spec_prop",
+    "true",
 )
 
 
@@ -165,41 +167,37 @@ class Value(ABC):
         raise SafulateValueError("Unary minus is not defined for this type")
 
     @spec_meth("eq")
-    def eq(self, ctx: NativeContext, other: Value) -> Value:
-        return NumValue(int(self == other))
+    def eq(self, ctx: NativeContext, other: Value) -> BoolValue:
+        return BoolValue(self == other)
 
     @spec_meth("neq")
-    def neq(self, ctx: NativeContext, other: Value) -> Value:
-        val = ctx.invoke_spec(self, "eq", other)
-        if not isinstance(val, NumValue):
-            raise SafulateValueError(
-                f"equality spec returned {val.repr_spec(ctx)}, expected number"
-            )
-        return NumValue(not val.value)
+    def neq(self, ctx: NativeContext, other: Value) -> BoolValue:
+        val = ctx.invoke_spec(self, "eq", other).bool_spec(ctx)
+        return BoolValue(not val)
 
     @spec_meth("has_item")
-    def has_item(self, ctx: NativeContext, other: Value) -> Value:
+    def has_item(self, ctx: NativeContext, other: Value) -> BoolValue:
         val = ctx.invoke_spec(self, "iter")
         if not isinstance(val, ListValue):
             raise SafulateValueError(
                 f"iter spec returned {val.repr_spec(ctx)}, expected list"
             )
-        return NumValue(other in val.value)
+        return BoolValue(other in val.value)
 
     @spec_meth("less")
-    def less(self, ctx: NativeContext, _other: Value) -> Value:
+    def less(self, ctx: NativeContext, _other: Value) -> BoolValue:
         raise SafulateValueError("Less than is not defined for this type")
 
     @spec_meth("grtr")
-    def grtr(self, ctx: NativeContext, _other: Value) -> Value:
+    def grtr(self, ctx: NativeContext, _other: Value) -> BoolValue:
         raise SafulateValueError("Greater than is not defined for this type")
 
     @spec_meth("lesseq")
-    def lesseq(self, ctx: NativeContext, _other: Value) -> Value:
+    def lesseq(self, ctx: NativeContext, _other: Value) -> BoolValue:
         raise SafulateValueError("Less than or equal to is not defined for this type")
 
     @spec_meth("grtreq")
-    def grtreq(self, ctx: NativeContext, _other: Value) -> Value:
+    def grtreq(self, ctx: NativeContext, _other: Value) -> BoolValue:
         raise SafulateValueError(
             "Greater than or equal to is not defined for this type"
         )
@@ -213,12 +211,12 @@ class Value(ABC):
         raise SafulateValueError("pipe is not defined for this type")
 
     @spec_meth("not")
-    def not_(self, ctx: NativeContext) -> Value:
-        return NumValue(0) if self.bool_spec(ctx) else NumValue(1)
+    def not_(self, ctx: NativeContext) -> BoolValue:
+        return BoolValue(self.bool_spec(ctx))
 
     @spec_meth("bool")
-    def bool(self, ctx: NativeContext) -> Value:
-        return NumValue(1)
+    def bool(self, ctx: NativeContext) -> BoolValue:
+        return true
 
     if TYPE_CHECKING:
         altcall: Callable[Concatenate[Any, NativeContext, ...], Value]
@@ -289,10 +287,10 @@ class Value(ABC):
         return self.run_spec("str", StrValue, ctx).value
 
     def bool_spec(self, ctx: NativeContext) -> bool:
-        val = self.run_spec("bool", NumValue, ctx)
+        val = self.run_spec("bool", BoolValue, ctx)
         if int(val.value) not in (1, 0):
             raise SafulateValueError(
-                f"expected return for bool spec to be 1 or 0, got {val.repr_spec(ctx)} instead"
+                f"expected return for bool spec to be a bool, got {val.repr_spec(ctx)} instead"
             )
         return bool(val.value)
 
@@ -352,12 +350,12 @@ class NullValue(ObjectValue):
         return StrValue("null")
 
     @spec_meth("eq")
-    def eq(self, ctx: NativeContext, other: Value) -> Value:
-        return NumValue(isinstance(other, NullValue))
+    def eq(self, ctx: NativeContext, other: Value) -> BoolValue:
+        return BoolValue(isinstance(other, NullValue))
 
     @spec_meth("bool")
-    def bool(self, ctx: NativeContext) -> Value:
-        return NumValue(0)
+    def bool(self, ctx: NativeContext) -> BoolValue:
+        return false
 
 
 class NumValue(ObjectValue):
@@ -411,60 +409,60 @@ class NumValue(ObjectValue):
         return NumValue(-self.value)
 
     @spec_meth("eq")
-    def eq(self, ctx: NativeContext, other: Value) -> NumValue:
+    def eq(self, ctx: NativeContext, other: Value) -> BoolValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError("Equality is not defined for number and this type")
 
-        return NumValue(self.value == other.value)
+        return BoolValue(self.value == other.value)
 
     @spec_meth("neq")
-    def neq(self, ctx: NativeContext, other: Value) -> NumValue:
+    def neq(self, ctx: NativeContext, other: Value) -> BoolValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError(
                 "Non-equality is not defined for number and this type"
             )
 
-        return NumValue(self.value != other.value)
+        return BoolValue(self.value != other.value)
 
     @spec_meth("less")
-    def less(self, ctx: NativeContext, other: Value) -> NumValue:
+    def less(self, ctx: NativeContext, other: Value) -> BoolValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError(
                 "Less than is not defined for number and this type"
             )
 
-        return NumValue(self.value < other.value)
+        return BoolValue(self.value < other.value)
 
     @spec_meth("grtr")
-    def grtr(self, ctx: NativeContext, other: Value) -> NumValue:
+    def grtr(self, ctx: NativeContext, other: Value) -> BoolValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError(
                 "Greater than is not defined for number and this type"
             )
 
-        return NumValue(self.value > other.value)
+        return BoolValue(self.value > other.value)
 
     @spec_meth("lesseq")
-    def lesseq(self, ctx: NativeContext, other: Value) -> NumValue:
+    def lesseq(self, ctx: NativeContext, other: Value) -> BoolValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError(
                 "Less than or equal to is not defined for number and this type"
             )
 
-        return NumValue(self.value <= other.value)
+        return BoolValue(self.value <= other.value)
 
     @spec_meth("grtreq")
-    def grtreq(self, ctx: NativeContext, other: Value) -> NumValue:
+    def grtreq(self, ctx: NativeContext, other: Value) -> BoolValue:
         if not isinstance(other, NumValue):
             raise SafulateValueError(
                 "Greater than or equal to is not defined for number and this type",
             )
 
-        return NumValue(self.value >= other.value)
+        return BoolValue(self.value >= other.value)
 
     @spec_meth("bool")
-    def bool(self, ctx: NativeContext) -> NumValue:
-        return NumValue(int(self.value != 0))
+    def bool(self, ctx: NativeContext) -> BoolValue:
+        return BoolValue(self.value != 0)
 
     @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
@@ -472,6 +470,26 @@ class NumValue(ObjectValue):
             return StrValue(str(int(self.value)))
 
         return StrValue(str(self.value))
+
+
+class BoolValue(NumValue):
+    def __init__(self, status: Any) -> None:
+        self.status: bool = bool(status)
+        self.value = int(self.status)
+
+        ObjectValue.__init__(self, str(self.status).lower())
+
+    @spec_meth("repr")
+    def repr(self, ctx: NativeContext) -> StrValue:
+        return StrValue(self.type.name)
+
+    @spec_meth("str")
+    def str(self, ctx: NativeContext) -> StrValue:
+        return self.repr(ctx)
+
+    @spec_meth("bool")
+    def bool(self, ctx: NativeContext) -> BoolValue:
+        return self
 
 
 class StrValue(ObjectValue):
@@ -515,8 +533,8 @@ class StrValue(ObjectValue):
         return ListValue([StrValue(char) for char in self.value])
 
     @spec_meth("bool")
-    def bool(self, ctx: NativeContext) -> NumValue:
-        return NumValue(int(len(self.value) != 0))
+    def bool(self, ctx: NativeContext) -> BoolValue:
+        return BoolValue(len(self.value) != 0)
 
     @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
@@ -527,8 +545,8 @@ class StrValue(ObjectValue):
         return StrValue(self.value)
 
     @spec_meth("eq")
-    def eq(self, ctx: NativeContext, other: Value) -> Value:
-        return NumValue(isinstance(other, StrValue) and other.value == self.value)
+    def eq(self, ctx: NativeContext, other: Value) -> BoolValue:
+        return BoolValue(isinstance(other, StrValue) and other.value == self.value)
 
     @public_method("format")
     def format_(self, ctx: NativeContext, *args: Value) -> Value:
@@ -580,12 +598,12 @@ class StrValue(ObjectValue):
         return NumValue(self.value.count(char.value, int(start.value), int(end.value)))
 
     @public_method("endswith")
-    def casendswithefold(self, ctx: NativeContext, sub: Value) -> Value:
+    def casendswithefold(self, ctx: NativeContext, sub: Value) -> BoolValue:
         if not isinstance(sub, StrValue):
             raise SafulateTypeError(
                 f"Expected str, received {sub.repr_spec(ctx)} instead"
             )
-        return NumValue(int(self.value.endswith(sub.value)))
+        return BoolValue(self.value.endswith(sub.value))
 
     @public_method("index")
     def index(self, ctx: NativeContext, sub: Value) -> Value:
@@ -596,44 +614,44 @@ class StrValue(ObjectValue):
         return NumValue(int(self.value.index(sub.value)))
 
     @public_method("is_alnum")
-    def isalnum(self, ctx: NativeContext) -> Value:
-        return NumValue(int(self.value.isalnum()))
+    def isalnum(self, ctx: NativeContext) -> BoolValue:
+        return BoolValue(self.value.isalnum())
 
     @public_method("is_alpha")
-    def isalpha(self, ctx: NativeContext) -> Value:
-        return NumValue(int(self.value.isalpha()))
+    def isalpha(self, ctx: NativeContext) -> BoolValue:
+        return BoolValue(self.value.isalpha())
 
     @public_method("is_ascii")
-    def isascii(self, ctx: NativeContext) -> Value:
-        return NumValue(int(self.value.isascii()))
+    def isascii(self, ctx: NativeContext) -> BoolValue:
+        return BoolValue(self.value.isascii())
 
     @public_method("is_decimal")
-    def isdecimal(self, ctx: NativeContext) -> Value:
-        return NumValue(int(self.value.isdecimal()))
+    def isdecimal(self, ctx: NativeContext) -> BoolValue:
+        return BoolValue(self.value.isdecimal())
 
     @public_method("is_digit")
-    def isdigit(self, ctx: NativeContext) -> Value:
-        return NumValue(int(self.value.isdigit()))
+    def isdigit(self, ctx: NativeContext) -> BoolValue:
+        return BoolValue(self.value.isdigit())
 
     @public_method("is_lower")
-    def islower(self, ctx: NativeContext) -> Value:
-        return NumValue(int(self.value.islower()))
+    def islower(self, ctx: NativeContext) -> BoolValue:
+        return BoolValue(self.value.islower())
 
     @public_method("is_numeric")
-    def isnumeric(self, ctx: NativeContext) -> Value:
-        return NumValue(int(self.value.isnumeric()))
+    def isnumeric(self, ctx: NativeContext) -> BoolValue:
+        return BoolValue(self.value.isnumeric())
 
     @public_method("is_space")
-    def isspace(self, ctx: NativeContext) -> Value:
-        return NumValue(int(self.value.isspace()))
+    def isspace(self, ctx: NativeContext) -> BoolValue:
+        return BoolValue(self.value.isspace())
 
     @public_method("is_title")
-    def istitle(self, ctx: NativeContext) -> Value:
-        return NumValue(int(self.value.istitle()))
+    def istitle(self, ctx: NativeContext) -> BoolValue:
+        return BoolValue(self.value.istitle())
 
     @public_method("is_upper")
-    def isupper(self, ctx: NativeContext) -> Value:
-        return NumValue(int(self.value.isupper()))
+    def isupper(self, ctx: NativeContext) -> BoolValue:
+        return BoolValue(self.value.isupper())
 
     @public_method("lower")
     def lower(self, ctx: NativeContext) -> Value:
@@ -739,8 +757,8 @@ class ListValue(ObjectValue):
         return self.value.pop(int(index.value))
 
     @spec_meth("bool")
-    def bool(self, ctx: NativeContext) -> NumValue:
-        return NumValue(int(len(self.value) != 0))
+    def bool(self, ctx: NativeContext) -> BoolValue:
+        return BoolValue(len(self.value) != 0)
 
     @spec_meth("altcall")
     def altcall(self, ctx: NativeContext, idx: Value) -> Value:
@@ -970,6 +988,8 @@ class PropertyValue(ObjectValue):
 
 MISSING: Any = object()
 null = NullValue()
+true = BoolValue(True)
+false = BoolValue(False)
 
 
 class DictValue(ObjectValue):
@@ -1042,8 +1062,8 @@ class DictValue(ObjectValue):
         return NumValue(int(key in self.data))
 
     @spec_meth("bool")
-    def bool(self, ctx: NativeContext) -> NumValue:
-        return NumValue(1 if self.data else 0)
+    def bool(self, ctx: NativeContext) -> BoolValue:
+        return BoolValue(self.data)
 
 
 # region Regex
@@ -1254,8 +1274,8 @@ class MatchValue(ObjectValue):
         return self.groups(ctx)
 
     @spec_meth("bool")
-    def bool(self, ctx: NativeContext) -> NumValue:
-        return NumValue(1 if self.match else 0)
+    def bool(self, ctx: NativeContext) -> BoolValue:
+        return BoolValue(self.match)
 
     @spec_meth("altcall")
     def altcall(self, ctx: NativeContext, key: Value) -> Value:
