@@ -128,9 +128,11 @@ class Lexer:
             if self.char == "\\":
                 self.current += 2
             elif self.char == "{":
-                self.add_token(
-                    TokenType.FSTR_MIDDLE if start_token_added else TokenType.FSTR_START
-                )
+                if start_token_added:
+                    self.add_token(TokenType.FSTR_MIDDLE)
+                else:
+                    self.start += 2
+                    self.add_token(TokenType.FSTR_START)
                 start_token_added = True
                 self.current += 1
                 parens = 1
@@ -151,7 +153,6 @@ class Lexer:
 
         if self.is_eof():
             raise SafulateSyntaxError("Unterminated string")
-        self.current += 1
 
         if start_token_added:
             token_type = TokenType.FSTR_END
@@ -160,6 +161,7 @@ class Lexer:
             token_type = TokenType.STR
 
         self.add_token(token_type)
+        self.current += 1
 
     def handle_rstring(self, enclosing_char: str) -> None:
         self.current += 2
