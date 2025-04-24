@@ -33,6 +33,7 @@ __all__ = (
     "ASTReturn",
     "ASTSwitchCase",
     "ASTTryCatch",
+    "ASTTryCatch_CatchBranch",
     "ASTUnary",
     "ASTVarDecl",
     "ASTVersion",
@@ -269,10 +270,16 @@ class ASTDel(ASTNode):
 
 
 @dataclass
+class ASTTryCatch_CatchBranch:
+    body: ASTBlock
+    target: tuple[Token, ASTNode] | None
+    var: Token | None
+
+
+@dataclass
 class ASTTryCatch(ASTNode):
     body: ASTBlock
-    catch_branch: ASTBlock | None
-    error_var: Token | None
+    catch_branches: list[ASTTryCatch_CatchBranch]
     else_branch: ASTBlock | None
 
     def visit(self, visitor: ASTVisitor) -> Value:

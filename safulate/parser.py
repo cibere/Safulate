@@ -28,6 +28,7 @@ from .asts import (
     ASTReturn,
     ASTSwitchCase,
     ASTTryCatch,
+    ASTTryCatch_CatchBranch,
     ASTUnary,
     ASTVarDecl,
     ASTVersion,
@@ -127,6 +128,15 @@ class Parser:
 
     def check_after_next(self, *types: TokenType | SoftKeyword) -> bool:
         return any(self.compare(self.tokens[self.current + 2], type) for type in types)
+
+    def check_sequence(self, *types: TokenType | SoftKeyword) -> bool:
+        try:
+            for idx, typ in enumerate(types):
+                if not self.compare(self.tokens[self.current + idx], typ):
+                    return False
+        except IndexError:
+            return False
+        return True
 
     def match(self, *types: TokenType | SoftKeyword) -> Token | None:
         if self.check(*types):
@@ -468,23 +478,34 @@ class Parser:
         elif kwd := self.match(TokenType.TRY):
             body = self.block()
 
-            catch_branch = None
-            error_var = None
-            if self.match(SoftKeyword.CATCH):
-                if self.match(SoftKeyword.AS):
-                    error_var = self.consume(
-                        TokenType.ID, "Expected variable name after 'catch as'"
+            catch_branches: list[ASTTryCatch_CatchBranch] = []
+            while self.match(SoftKeyword.CATCH):
+                error_var: Token | None = None
+                target: tuple[Token, ASTNode] | None = None
+
+                while not self.check(TokenType.LBRC):
+                    if self.check_sequence(
+                        SoftKeyword.AS, TokenType.ID, TokenType.LBRC
+                    ):
+                        self.consume(SoftKeyword.AS, "Expected 'as'")
+                        error_var = self.consume(
+                            TokenType.ID, "Expected error var name"
+                        )
+                    else:
+                        target = (self.peek(), self.expr())
+
+                catch_branches.append(
+                    ASTTryCatch_CatchBranch(
+                        body=self.block(), target=(target), var=error_var
                     )
-                catch_branch = self.block()
+                )
 
             else_branch = None
             if self.match(SoftKeyword.ELSE):
                 else_branch = self.block()
+
             return ASTTryCatch(
-                body=body,
-                catch_branch=catch_branch,
-                error_var=error_var,
-                else_branch=else_branch,
+                body=body, catch_branches=catch_branches, else_branch=else_branch
             )
         elif kwd := self.match(SoftKeyword.SWITCH):
             switch_expr = self.expr()
@@ -716,32 +737,22 @@ class Parser:
     def fstring(self) -> ASTNode:
         parts: list[ASTNode] = []
         start_token = self.peek()
+        end_reached = False
 
         while 1:
-            if (orig_type := self.peek().type) in (
-                TokenType.FSTR_START,
-                TokenType.FSTR_MIDDLE,
-                TokenType.FSTR_END,
+            if self.check(TokenType.FSTR_START, TokenType.FSTR_MIDDLE) or (
+                end_reached := self.check(TokenType.FSTR_END)
             ):
                 self.tokens[self.current].type = TokenType.STR
-                node = self.atom()
-                parts.append(node)
-                assert isinstance(node, ASTAtom)
-
-                if orig_type is TokenType.FSTR_END:
-                    node.token.lexeme = node.token.lexeme[-1] + node.token.lexeme
-                    break
-                elif orig_type is TokenType.FSTR_MIDDLE:
-                    node.token.lexeme = f'"{node.token.lexeme}"'
-                elif orig_type is TokenType.FSTR_START:
-                    node.token.lexeme = node.token.lexeme[1:] + node.token.lexeme[1]
+                parts.append(self.atom())
             else:
                 parts.append(self.stmt())
+            if end_reached:
+                break
 
         node = parts.pop(0)
         while parts:
             node = ASTBinary(
                 node, Token(TokenType.PLUS, "", start_token.start), parts.pop(0)
             )
-
         return node

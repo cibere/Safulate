@@ -65,6 +65,7 @@ from .values import (
     PatternValue,
     PropertyValue,
     StrValue,
+    TypeValue,
     Value,
     null,
 )
@@ -457,15 +458,30 @@ class TreeWalker(ASTVisitor):
         try:
             node.body.visit(self)
         except SafulateError as e:
-            if node.catch_branch is None:
+            if not node.catch_branches:
                 return null
 
-            with self.scope() as env:
-                if node.error_var:
-                    env.declare(node.error_var)
-                    env[node.error_var] = e.saf_value
+            for branch in node.catch_branches:
+                if branch.target is not None:
+                    target_token = branch.target[0]
+                    target = branch.target[1].visit(self)
 
-                return self.visit_unscoped_block(node.catch_branch)
+                    if not isinstance(target, TypeValue):
+                        raise SafulateTypeError(
+                            f"Expected Type object, got {target.repr_spec(self.ctx(target_token))} instead"
+                        )
+                    if not target.check(self.ctx(target_token), e.saf_value).bool_spec(
+                        self.ctx(target_token)
+                    ):
+                        continue
+
+                with self.scope() as env:
+                    if branch.var:
+                        env.declare(branch.var)
+                        env[branch.var] = e.saf_value
+
+                    return self.visit_unscoped_block(branch.body)
+            raise e
 
         if node.else_branch is None:
             return null
