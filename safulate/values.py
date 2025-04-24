@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, Concatenate, TypeVar, cast, final
 from .asts import ASTBlock, ASTNode
 from .errors import (
     SafulateAttributeError,
+    SafulateIndexError,
     SafulateInvalidReturn,
     SafulateKeyError,
     SafulateTypeError,
@@ -750,7 +751,10 @@ class ListValue(ObjectValue):
         if not isinstance(idx, NumValue):
             raise SafulateTypeError(f"Expected num, got {idx.repr_spec(ctx)} instead.")
 
-        return self.value[int(idx.value)]
+        try:
+            return self.value[int(idx.value)]
+        except IndexError:
+            raise SafulateIndexError(f"Index {idx.repr_spec(ctx)} is out of range")
 
     @spec_meth("iter")
     def iter(self, ctx: NativeContext) -> ListValue:

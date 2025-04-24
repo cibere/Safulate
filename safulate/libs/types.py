@@ -37,6 +37,7 @@ struct TypesModule(){
     pub SyntaxError = get_type(object("SyntaxError"));
     pub TypeError = get_type(object("TypeError"));
     pub ValueError = get_type(object("ValueError"));
+    pub IndexError = get_type(object("IndexError"));
 }
 
 pub types = TypesModule();

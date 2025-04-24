@@ -20,6 +20,7 @@ __all__ = (
     "SafulateAssertionError",
     "SafulateBreakoutError",
     "SafulateError",
+    "SafulateIndexError",
     "SafulateInvalidContinue",
     "SafulateInvalidReturn",
     "SafulateKeyError",
@@ -226,4 +227,8 @@ class SafulateKeyError(SafulateError):
 
 
 class SafulateScopeError(SafulateError):
+    pass
+
+
+class SafulateIndexError(SafulateError):
     pass
