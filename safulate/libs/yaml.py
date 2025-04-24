@@ -10,9 +10,10 @@ class SafulateYamlDecodeError(SafulateError): ...
 class SafulateYamlEncodeError(SafulateError): ...
 
 
-def load(_: NativeContext) -> ObjectValue:
+def load(ctx: NativeContext) -> ObjectValue:
     return MsgspecWrapper(
         "yaml",
         encode_error=SafulateYamlEncodeError,
         decode_error=SafulateYamlDecodeError,
+        ctx=ctx,
     )

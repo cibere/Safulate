@@ -10,9 +10,10 @@ class SafulateTomlDecodeError(SafulateError): ...
 class SafulateTomlEncodeError(SafulateError): ...
 
 
-def load(_: NativeContext) -> ObjectValue:
+def load(ctx: NativeContext) -> ObjectValue:
     return MsgspecWrapper(
         "toml",
         encode_error=SafulateTomlEncodeError,
         decode_error=SafulateTomlDecodeError,
+        ctx=ctx,
     )

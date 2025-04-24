@@ -15,13 +15,24 @@ from safulate import (
     public_method,
 )
 
+types_code = """
+struct TypeModule(){{
+    pub {decode_error} = type(object("{decode_error}"));
+    pub {encode_error} = type(object("{encode_error}"));
+}}
+
+pub types = TypeModule();
+"""
+
 
 class MsgspecWrapper(ObjectValue):
     def __init__(
         self,
         module_name: Literal["json", "toml", "yaml"],
+        *,
         encode_error: type[SafulateError],
         decode_error: type[SafulateError],
+        ctx: NativeContext,
     ) -> None:
         super().__init__(
             module_name,
@@ -31,7 +42,14 @@ class MsgspecWrapper(ObjectValue):
                     self.dump_json_method
                     if module_name == "json"
                     else self.dump_method,
-                )
+                ),
+                "types": ctx.eval(
+                    types_code.format(
+                        decode_error=decode_error.__new__(decode_error).name,
+                        encode_error=encode_error.__new__(encode_error).name,
+                    ),
+                    name=f"<builtin module {module_name}>",
+                )["types"],
             },
         )
 

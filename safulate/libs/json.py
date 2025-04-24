@@ -10,9 +10,10 @@ class SafulateJsonDecodeError(SafulateError): ...
 class SafulateJsonEncodeError(SafulateError): ...
 
 
-def load(_: NativeContext) -> ObjectValue:
+def load(ctx: NativeContext) -> ObjectValue:
     return MsgspecWrapper(
         "json",
         encode_error=SafulateJsonEncodeError,
         decode_error=SafulateJsonDecodeError,
+        ctx=ctx,
     )
