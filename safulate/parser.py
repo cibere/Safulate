@@ -792,7 +792,7 @@ class Parser:
                 self.tokens[self.current].type = TokenType.STR
                 parts.append(self.atom())
             else:
-                parts.append(self.stmt())
+                parts.append(self.expr())
             if end_reached:
                 break
 
