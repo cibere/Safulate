@@ -371,18 +371,6 @@ class Parser:
     def stmt(self) -> ASTNode:
         if self.check(TokenType.LBRC):
             return self.block()
-        elif kw_token := self.match(TokenType.IF):
-            condition = self.expr()
-            body = self.block()
-            else_branch = None
-            if self.match(SoftKeyword.ELSE):
-                else_branch = self.block()
-            return ASTIf(
-                condition=condition,
-                body=body,
-                else_branch=else_branch,
-                kw_token=kw_token,
-            )
         elif kw_token := self.match(TokenType.WHILE):
             condition = self.expr()
             body = self.block()
@@ -593,6 +581,18 @@ class Parser:
             TokenType.LPAR,
         ):
             return self.func_decl(named=False)
+        elif kw_token := self.match(TokenType.IF):
+            condition = self.expr()
+            body = self.block()
+            else_branch = None
+            if self.match(SoftKeyword.ELSE):
+                else_branch = self.block()
+            return ASTIf(
+                condition=condition,
+                body=body,
+                else_branch=else_branch,
+                kw_token=kw_token,
+            )
         return self.assign()
 
     def assign(self) -> ASTNode:
