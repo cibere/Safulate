@@ -374,6 +374,7 @@ class Parser:
         elif kw_token := self.match(TokenType.WHILE):
             condition = self.expr()
             body = self.block()
+            self.consume(TokenType.SEMI, "Expected ';'")
             return ASTWhile(condition=condition, body=body, kw_token=kw_token)
         elif self.match(TokenType.FOR):
             var = self.consume(
@@ -384,7 +385,7 @@ class Parser:
                 raise SafulateSyntaxError("Expected 'in'")
             src = self.expr()
             body = self.block()
-
+            self.consume(TokenType.SEMI, "Expected ';'")
             return ASTForLoop(var_name=var, source=src, body=body)
         elif kwd := self.match(TokenType.RETURN):
             expr = None
@@ -501,6 +502,7 @@ class Parser:
             if self.match(SoftKeyword.ELSE):
                 else_branch = self.block()
 
+            self.consume(TokenType.SEMI, "Expected ';'")
             return ASTTryCatch(
                 body=body, catch_branches=catch_branches, else_branch=else_branch
             )
@@ -526,7 +528,9 @@ class Parser:
             if len(cases) == 0:
                 raise SafulateSyntaxError("Switch/Case requires at least 1 case", kwd)
 
+            self.consume(TokenType.SEMI, "Expected ';'")
             self.consume(TokenType.RBRC, "Expected '}'")
+            self.consume(TokenType.SEMI, "Expected ';'")
             return ASTSwitchCase(
                 cases=cases, expr=switch_expr, else_branch=else_branch, kw=kwd
             )
