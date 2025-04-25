@@ -7,7 +7,7 @@ from collections import defaultdict
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Concatenate, TypeVar, cast, final
 
-from .asts import ASTBlock, ASTFuncDecl_Param, ASTFuncDecl_ParamType
+from .asts import ASTBlock, ASTFuncDecl_Param, ParamType
 from .errors import (
     SafulateAttributeError,
     SafulateIndexError,
@@ -820,10 +820,10 @@ class FuncValue(ObjectValue):
         passable_params: dict[str, Value] = {}
 
         for param in params:
-            if param.type is ASTFuncDecl_ParamType.vararg:
+            if param.type is ParamType.vararg:
                 passable_params[param.name.lexeme] = ListValue(args)
                 args = []
-            elif param.type is ASTFuncDecl_ParamType.varkwarg:
+            elif param.type is ParamType.varkwarg:
                 passable_params[param.name.lexeme] = DictValue(kwargs)
                 kwargs = {}
             elif args:
@@ -848,8 +848,8 @@ class FuncValue(ObjectValue):
                     if param.name.lexeme not in kwargs:
                         if param.default is None:
                             arg_type = {
-                                ASTFuncDecl_ParamType.kwarg: "keyword ",
-                                ASTFuncDecl_ParamType.arg: "positional ",
+                                ParamType.kwarg: "keyword ",
+                                ParamType.arg: "positional ",
                             }.get(param.type, "")
                             raise SafulateValueError(
                                 f"Required {arg_type}argument was not passed: {param.name.lexeme!r}"
@@ -867,8 +867,8 @@ class FuncValue(ObjectValue):
             else:
                 if param.default is None:
                     arg_type = {
-                        ASTFuncDecl_ParamType.kwarg: "keyword ",
-                        ASTFuncDecl_ParamType.arg: "positional ",
+                        ParamType.kwarg: "keyword ",
+                        ParamType.arg: "positional ",
                     }.get(param.type, "")
                     raise SafulateValueError(
                         f"Required {arg_type}argument was not passed: {param.name.lexeme!r}"
@@ -952,11 +952,11 @@ class FuncValue(ObjectValue):
                     name=Token(TokenType.ID, param.name, -1),
                     default=None if param.default is param.empty else param.default,
                     type={
-                        param.VAR_POSITIONAL: ASTFuncDecl_ParamType.vararg,
-                        param.VAR_KEYWORD: ASTFuncDecl_ParamType.varkwarg,
-                        param.POSITIONAL_ONLY: ASTFuncDecl_ParamType.arg,
-                        param.KEYWORD_ONLY: ASTFuncDecl_ParamType.kwarg,
-                        param.POSITIONAL_OR_KEYWORD: ASTFuncDecl_ParamType.arg_or_kwarg,
+                        param.VAR_POSITIONAL: ParamType.vararg,
+                        param.VAR_KEYWORD: ParamType.varkwarg,
+                        param.POSITIONAL_ONLY: ParamType.arg,
+                        param.KEYWORD_ONLY: ParamType.kwarg,
+                        param.POSITIONAL_OR_KEYWORD: ParamType.arg_or_kwarg,
                     }[param.kind],
                 )
                 for param in raw_params

@@ -39,6 +39,7 @@ from .asts import (
     ASTVersionReq,
     ASTVisitor,
     ASTWhile,
+    ParamType,
 )
 from .environment import Environment
 from .errors import (
@@ -58,6 +59,7 @@ from .native_context import NativeContext
 from .py_libs import LibManager
 from .tokens import SoftKeyword, Token, TokenType
 from .values import (
+    DictValue,
     FuncValue,
     ListValue,
     NumValue,
@@ -351,14 +353,47 @@ class TreeWalker(ASTVisitor):
 
     def visit_call(self, node: ASTCall) -> Value:
         func = node.callee.visit(self)
+        ctx = self.ctx(node.paren)
 
         if node.paren.type is TokenType.LSQB:
             func = func.specs["altcall"]
 
+        args: list[Value] = []
+        kwargs: dict[str, Value] = {}
+
+        for param_type, name, value in node.params:
+            match param_type:
+                case ParamType.arg:
+                    args.append(value.visit(self))
+                case ParamType.kwarg if name:
+                    kwargs[name] = value.visit(self)
+                case ParamType.kwarg:
+                    raise RuntimeError(
+                        f"Kwarg without name: {param_type}, {name}, {value}"
+                    )
+                case ParamType.vararg:
+                    val = ctx.invoke_spec(value.visit(self), "iter")
+                    if not isinstance(val, ListValue):
+                        raise SafulateValueError(
+                            f"Can not unpack, {val.repr_spec(ctx)} is not iterable"
+                        )
+                    args.extend(val.value)
+                case ParamType.varkwarg:
+                    val = value.visit(self)
+                    if not isinstance(val, DictValue):
+                        raise SafulateValueError(
+                            f"Can not unpack, {val.repr_spec(ctx)} is not a dictionary"
+                        )
+                    kwargs.update(val.data)
+                case _:
+                    raise RuntimeError(
+                        f"Unhandled param: {param_type}, {name}, {value}"
+                    )
+
         return self.ctx(node.paren).invoke(
             func,
-            *[arg.visit(self) for arg in node.args],
-            **{name: value.visit(self) for name, value in node.kwargs.items()},
+            *args,
+            **kwargs,
         )
 
     def visit_atom(self, node: ASTAtom) -> Value:

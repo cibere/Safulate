@@ -18,7 +18,6 @@ from .asts import (
     ASTFormat,
     ASTFuncDecl,
     ASTFuncDecl_Param,
-    ASTFuncDecl_ParamType,
     ASTIf,
     ASTImportReq,
     ASTList,
@@ -36,6 +35,7 @@ from .asts import (
     ASTVersion,
     ASTVersionReq,
     ASTWhile,
+    ParamType,
 )
 from .errors import SafulateSyntaxError
 from .tokens import SoftKeyword, Token, TokenType
@@ -230,20 +230,16 @@ class Parser:
             if varkwarg_reached:
                 raise SafulateSyntaxError("No params can follow varkwarg", self.peek())
 
-            param_type = (
-                ASTFuncDecl_ParamType.kwarg
-                if vararg_reached
-                else ASTFuncDecl_ParamType.arg_or_kwarg
-            )
+            param_type = ParamType.kwarg if vararg_reached else ParamType.arg_or_kwarg
             if self.check_sequence(TokenType.DOT, TokenType.DOT):
                 self.consume(TokenType.DOT, "Expected '.'")
                 self.consume(TokenType.DOT, "Expected '.'")
                 if self.match(TokenType.DOT):
-                    param_type = ASTFuncDecl_ParamType.varkwarg
+                    param_type = ParamType.varkwarg
                     varkwarg_reached = True
                 else:
                     vararg_reached = True
-                    param_type = ASTFuncDecl_ParamType.vararg
+                    param_type = ParamType.vararg
 
             param_name = self.consume(TokenType.ID, "Expected name of arg")
             default = None
@@ -304,18 +300,21 @@ class Parser:
                                         paren=Token(
                                             TokenType.LPAR, "(", kw_token.start
                                         ),
-                                        args=[
-                                            ASTAtom(
-                                                Token(
-                                                    TokenType.STR,
-                                                    f"{name.lexeme}",
-                                                    name.start,
-                                                )
+                                        params=[
+                                            (
+                                                ParamType.arg,
+                                                None,
+                                                ASTAtom(
+                                                    Token(
+                                                        TokenType.STR,
+                                                        f"{name.lexeme}",
+                                                        name.start,
+                                                    )
+                                                ),
                                             )
                                         ]
                                         if name
                                         else [],
-                                        kwargs={},
                                     ),
                                     block=body,
                                 ),
@@ -351,12 +350,10 @@ class Parser:
                 callee=ASTCall(
                     callee=deco,
                     paren=Token(TokenType.LSQB, "ADD-TO-START", token.start),
-                    args=[func],
-                    kwargs={},
+                    params=[(ParamType.arg, None, func)],
                 ),
                 paren=Token(TokenType.LPAR, "(", token.start),
-                args=[],
-                kwargs={},
+                params=[],
             )
 
         if name:
@@ -685,8 +682,8 @@ class Parser:
         ):
             match token.type:
                 case TokenType.LPAR | TokenType.LSQB as open_paren:
-                    args: list[ASTNode] = []
-                    kwargs: dict[str, ASTNode] = {}
+                    params: list[tuple[ParamType, str | None, ASTNode]] = []
+                    has_kwargs = False
                     close_paren = {
                         TokenType.LPAR: TokenType.RPAR,
                         TokenType.LSQB: TokenType.RSQB,
@@ -694,26 +691,36 @@ class Parser:
 
                     if not self.match(close_paren):
                         while True:
-                            expr = self.expr()
-                            is_kwarg = isinstance(expr, ASTAssign)
-
-                            if not is_kwarg and kwargs:
-                                raise SafulateSyntaxError(
-                                    "Positional argument follows keyword argument",
-                                    self.peek(),
-                                )
-                            if is_kwarg:
-                                kwargs[expr.name.lexeme] = expr.value
+                            if self.check_sequence(
+                                TokenType.DOT, TokenType.DOT, TokenType.DOT
+                            ):
+                                for _ in range(3):
+                                    self.consume(TokenType.DOT, "Expected '.'")
+                                params.append((ParamType.varkwarg, None, self.expr()))
+                            elif self.check_sequence(TokenType.DOT, TokenType.DOT):
+                                for _ in range(2):
+                                    self.consume(TokenType.DOT, "Expected '.'")
+                                params.append((ParamType.vararg, None, self.expr()))
                             else:
-                                args.append(expr)
+                                expr = self.expr()
+                                if isinstance(expr, ASTAssign):
+                                    has_kwargs = True
+                                    params.append(
+                                        (ParamType.kwarg, expr.name.lexeme, expr.value)
+                                    )
+                                elif has_kwargs:
+                                    raise SafulateSyntaxError(
+                                        "Positional argument follows keyword argument",
+                                        self.peek(),
+                                    )
+                                else:
+                                    params.append((ParamType.arg, None, expr))
 
                             if self.match(close_paren):
                                 break
                             self.consume(TokenType.COMMA, "Expected ','")
 
-                    callee = ASTCall(
-                        callee=callee, paren=token, args=args, kwargs=kwargs
-                    )
+                    callee = ASTCall(callee=callee, paren=token, params=params)
                 case TokenType.DOT:
                     callee = ASTAttr(
                         callee, self.consume(TokenType.ID, "Expected attribute name")

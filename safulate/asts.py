@@ -24,7 +24,6 @@ __all__ = (
     "ASTFormat",
     "ASTFuncDecl",
     "ASTFuncDecl_Param",
-    "ASTFuncDecl_ParamType",
     "ASTIf",
     "ASTImportReq",
     "ASTList",
@@ -42,6 +41,7 @@ __all__ = (
     "ASTVersion",
     "ASTVersionReq",
     "ASTWhile",
+    "ParamType",
 )
 
 
@@ -68,7 +68,7 @@ class ASTVarDecl(ASTNode):
         return visitor.visit_var_decl(self)
 
 
-class ASTFuncDecl_ParamType(Enum):
+class ParamType(Enum):
     vararg = 1
     varkwarg = 2
     arg = 3
@@ -80,21 +80,15 @@ class ASTFuncDecl_ParamType(Enum):
 class ASTFuncDecl_Param:
     name: Token
     default: ASTNode | None | Value
-    type: ASTFuncDecl_ParamType
+    type: ParamType
 
     @property
     def is_arg(self) -> bool:
-        return (
-            self.type is ASTFuncDecl_ParamType.arg
-            or self.type is ASTFuncDecl_ParamType.arg_or_kwarg
-        )
+        return self.type is ParamType.arg or self.type is ParamType.arg_or_kwarg
 
     @property
     def is_kwarg(self) -> bool:
-        return (
-            self.type is ASTFuncDecl_ParamType.kwarg
-            or self.type is ASTFuncDecl_ParamType.arg_or_kwarg
-        )
+        return self.type is ParamType.kwarg or self.type is ParamType.arg_or_kwarg
 
 
 @dataclass
@@ -222,8 +216,7 @@ class ASTUnary(ASTNode):
 class ASTCall(ASTNode):
     callee: ASTNode
     paren: Token
-    args: list[ASTNode]
-    kwargs: dict[str, ASTNode]
+    params: list[tuple[ParamType, str | None, ASTNode]]
 
     def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_call(self)
