@@ -36,8 +36,8 @@ class Builtins(ObjectValue):
         return ListValue(list(values))
 
     @public_method("dict")
-    def dict_(self, ctx: NativeContext) -> DictValue:
-        return DictValue({})
+    def dict_(self, ctx: NativeContext, **data: Value) -> DictValue:
+        return DictValue(data)
 
     @public_method("globals")
     def get_globals(self, ctx: NativeContext) -> Value:
