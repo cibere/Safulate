@@ -4,7 +4,7 @@ from typing import Any, Self
 
 from .errors import SafulateAttributeError, SafulateNameError, SafulateScopeError
 from .tokens import Token
-from .values import FuncValue, Value, null
+from .values import SafFunc, SafBaseObject, null
 
 __all__ = ("Environment",)
 
@@ -13,11 +13,11 @@ class Environment:
     __slots__ = "parent", "scope", "values"
 
     def __init__(
-        self, parent: Environment | None = None, scope: Value | None = None
+        self, parent: Environment | None = None, scope: SafBaseObject | None = None
     ) -> None:
-        self.values: dict[str, Value] = {}
+        self.values: dict[str, SafBaseObject] = {}
         self.parent: Environment | None = parent
-        self.scope: Value | None = scope
+        self.scope: SafBaseObject | None = scope
 
         if scope:
             self.values = scope.public_attrs
@@ -28,7 +28,7 @@ class Environment:
         self.values.update(Builtins().public_attrs)
         return self
 
-    def __getitem__(self, token: Token) -> Value:
+    def __getitem__(self, token: Token) -> SafBaseObject:
         name = token.lexeme
 
         if name in self.values:
@@ -63,7 +63,7 @@ class Environment:
         self.scope.private_attrs[name.lexeme] = value
         self._set_parent(value)
 
-    def get_priv(self, name: Token) -> Value:
+    def get_priv(self, name: Token) -> SafBaseObject:
         if self.scope is None:
             raise SafulateScopeError(
                 "no private vars are being exposed in the current scope", name
@@ -77,6 +77,6 @@ class Environment:
 
         return val
 
-    def _set_parent(self, val: Value) -> None:
-        if isinstance(val, FuncValue):
+    def _set_parent(self, val: SafBaseObject) -> None:
+        if isinstance(val, SafFunc):
             val.parent = self.scope

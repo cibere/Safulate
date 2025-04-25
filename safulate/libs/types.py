@@ -2,7 +2,7 @@ from __future__ import annotations
 
 TYPE_CHECKING = False
 if TYPE_CHECKING:
-    from safulate import NativeContext, Value
+    from safulate import NativeContext, SafBaseObject
 
 code = """
 pub get_type = type;
@@ -44,5 +44,5 @@ pub types = TypesModule();
 """
 
 
-def load(ctx: NativeContext) -> Value:
+def load(ctx: NativeContext) -> SafBaseObject:
     return ctx.eval(code, name="<builtin module types>")["types"]

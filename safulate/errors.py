@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from types import TracebackType
     from typing import Literal
 
-    from .values import NativeErrorValue, Value
+    from .values import SafPythonError, SafBaseObject
 
 T = TypeVar("T")
 
@@ -92,7 +92,7 @@ class TokenEntry:
 
 class SafulateError(BaseException):
     def __init__(
-        self, msg: str, token: Token | None = None, obj: Value | None = None
+        self, msg: str, token: Token | None = None, obj: SafBaseObject | None = None
     ) -> None:
         super().__init__(msg)
 
@@ -108,10 +108,10 @@ class SafulateError(BaseException):
         return self.__class__.__name__.removeprefix("Safulate")
 
     @cached_property
-    def saf_value(self) -> NativeErrorValue:
-        from .values import NativeErrorValue, null
+    def saf_value(self) -> SafPythonError:
+        from .values import SafPythonError, null
 
-        return NativeErrorValue(error=self.name, msg=self.msg, obj=self.obj or null)
+        return SafPythonError(error=self.name, msg=self.msg, obj=self.obj or null)
 
     def _make_subreport(self, entry: TokenEntry, src: str, filename: str | None) -> str:
         src = entry.source or src
@@ -183,7 +183,7 @@ class SafulateTypeError(SafulateError):
 
 
 class SafulateInvalidReturn(SafulateError):
-    def __init__(self, value: Value, token: Token = MockToken()) -> None:
+    def __init__(self, value: SafBaseObject, token: Token = MockToken()) -> None:
         self.value = value
 
         super().__init__("Return used outside of function", token)

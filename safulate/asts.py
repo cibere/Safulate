@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .tokens import Token
-    from .values import Value
+    from .values import SafBaseObject
 
 __all__ = (
     "ASTAssign",
@@ -47,14 +47,14 @@ __all__ = (
 
 class ASTNode(ABC):
     @abstractmethod
-    def visit(self, visitor: ASTVisitor) -> Value: ...
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject: ...
 
 
 @dataclass
 class ASTProgram(ASTNode):
     stmts: list[ASTNode]
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_program(self)
 
 
@@ -64,7 +64,7 @@ class ASTVarDecl(ASTNode):
     value: ASTNode | None
     keyword: Token
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_var_decl(self)
 
 
@@ -79,7 +79,7 @@ class ParamType(Enum):
 @dataclass
 class ASTFuncDecl_Param:
     name: Token
-    default: ASTNode | None | Value
+    default: ASTNode | None | SafBaseObject
     type: ParamType
 
     @property
@@ -101,7 +101,7 @@ class ASTFuncDecl(ASTNode):
     kw_token: Token
     paren_token: Token
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_func_decl(self)
 
 
@@ -110,12 +110,12 @@ class ASTBlock(ASTNode):
     stmts: list[ASTNode]
     force_unscoped: bool = False
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         if self.force_unscoped:
             return self.visit_unscoped(visitor)
         return visitor.visit_block(self)
 
-    def visit_unscoped(self, visistor: ASTVisitor) -> Value:
+    def visit_unscoped(self, visistor: ASTVisitor) -> SafBaseObject:
         return visistor.visit_unscoped_block(self)
 
 
@@ -124,7 +124,7 @@ class ASTEditObject(ASTNode):
     obj: ASTNode
     block: ASTBlock
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_edit_object(self)
 
 
@@ -135,7 +135,7 @@ class ASTIf(ASTNode):
     else_branch: ASTNode | None
     kw_token: Token
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_if(self)
 
 
@@ -145,7 +145,7 @@ class ASTWhile(ASTNode):
     body: ASTNode
     kw_token: Token
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_while(self)
 
 
@@ -154,7 +154,7 @@ class ASTReturn(ASTNode):
     keyword: Token
     expr: ASTNode | None
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_return(self)
 
 
@@ -163,7 +163,7 @@ class ASTBreak(ASTNode):
     keyword: Token
     amount: ASTNode | None
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_break(self)
 
 
@@ -172,7 +172,7 @@ class ASTContinue(ASTNode):
     keyword: Token
     amount: ASTNode | None
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_continue(self)
 
 
@@ -180,7 +180,7 @@ class ASTContinue(ASTNode):
 class ASTExprStmt(ASTNode):
     expr: ASTNode
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_expr_stmt(self)
 
 
@@ -189,7 +189,7 @@ class ASTAssign(ASTNode):
     name: Token
     value: ASTNode
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_assign(self)
 
 
@@ -199,7 +199,7 @@ class ASTBinary(ASTNode):
     op: Token
     right: ASTNode
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_binary(self)
 
 
@@ -208,7 +208,7 @@ class ASTUnary(ASTNode):
     op: Token
     right: ASTNode
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_unary(self)
 
 
@@ -218,7 +218,7 @@ class ASTCall(ASTNode):
     paren: Token
     params: list[tuple[ParamType, str | None, ASTNode]]
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_call(self)
 
 
@@ -226,7 +226,7 @@ class ASTCall(ASTNode):
 class ASTAtom(ASTNode):
     token: Token
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_atom(self)
 
 
@@ -236,7 +236,7 @@ class ASTAttr(ASTNode):
     attr: Token
     is_spec: bool = False
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_attr(self)
 
 
@@ -246,7 +246,7 @@ class ASTVersion(ASTNode):
     minor: float | None
     micro: float | None
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_version(self)
 
 
@@ -255,7 +255,7 @@ class ASTImportReq(ASTNode):
     source: Token
     name: Token
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_import_req(self)
 
 
@@ -264,7 +264,7 @@ class ASTVersionReq(ASTNode):
     version: ASTNode
     token: Token
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_version_req(self)
 
 
@@ -273,7 +273,7 @@ class ASTRaise(ASTNode):
     expr: ASTNode
     kw: Token
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_raise(self)
 
 
@@ -283,7 +283,7 @@ class ASTForLoop(ASTNode):
     source: ASTNode
     body: ASTNode
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_for_loop(self)
 
 
@@ -291,7 +291,7 @@ class ASTForLoop(ASTNode):
 class ASTDel(ASTNode):
     var: Token
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_del(self)
 
 
@@ -308,7 +308,7 @@ class ASTTryCatch(ASTNode):
     catch_branches: list[ASTTryCatch_CatchBranch]
     else_branch: ASTBlock | None
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_try_catch(self)
 
 
@@ -319,7 +319,7 @@ class ASTSwitchCase(ASTNode):
     expr: ASTNode
     kw: Token
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_switch_case(self)
 
 
@@ -327,7 +327,7 @@ class ASTSwitchCase(ASTNode):
 class ASTList(ASTNode):
     children: list[ASTBlock]
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_list(self)
 
 
@@ -336,7 +336,7 @@ class ASTFormat(ASTNode):
     obj: ASTNode
     spec: Token
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_format(self)
 
 
@@ -345,7 +345,7 @@ class ASTProperty(ASTNode):
     body: ASTBlock
     name: Token
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_property(self)
 
 
@@ -353,68 +353,68 @@ class ASTProperty(ASTNode):
 class ASTRegex(ASTNode):
     value: Token
 
-    def visit(self, visitor: ASTVisitor) -> Value:
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_regex(self)
 
 
 class ASTVisitor(ABC):
     @abstractmethod
-    def visit_program(self, node: ASTProgram) -> Value: ...
+    def visit_program(self, node: ASTProgram) -> SafBaseObject: ...
     @abstractmethod
-    def visit_block(self, node: ASTBlock) -> Value: ...
+    def visit_block(self, node: ASTBlock) -> SafBaseObject: ...
     @abstractmethod
-    def visit_unscoped_block(self, node: ASTBlock) -> Value: ...
+    def visit_unscoped_block(self, node: ASTBlock) -> SafBaseObject: ...
     @abstractmethod
-    def visit_if(self, node: ASTIf) -> Value: ...
+    def visit_if(self, node: ASTIf) -> SafBaseObject: ...
     @abstractmethod
-    def visit_while(self, node: ASTWhile) -> Value: ...
+    def visit_while(self, node: ASTWhile) -> SafBaseObject: ...
     @abstractmethod
-    def visit_return(self, node: ASTReturn) -> Value: ...
+    def visit_return(self, node: ASTReturn) -> SafBaseObject: ...
     @abstractmethod
-    def visit_break(self, node: ASTBreak) -> Value: ...
+    def visit_break(self, node: ASTBreak) -> SafBaseObject: ...
     @abstractmethod
-    def visit_expr_stmt(self, node: ASTExprStmt) -> Value: ...
+    def visit_expr_stmt(self, node: ASTExprStmt) -> SafBaseObject: ...
     @abstractmethod
-    def visit_var_decl(self, node: ASTVarDecl) -> Value: ...
+    def visit_var_decl(self, node: ASTVarDecl) -> SafBaseObject: ...
     @abstractmethod
-    def visit_func_decl(self, node: ASTFuncDecl) -> Value: ...
+    def visit_func_decl(self, node: ASTFuncDecl) -> SafBaseObject: ...
     @abstractmethod
-    def visit_assign(self, node: ASTAssign) -> Value: ...
+    def visit_assign(self, node: ASTAssign) -> SafBaseObject: ...
     @abstractmethod
-    def visit_binary(self, node: ASTBinary) -> Value: ...
+    def visit_binary(self, node: ASTBinary) -> SafBaseObject: ...
     @abstractmethod
-    def visit_unary(self, node: ASTUnary) -> Value: ...
+    def visit_unary(self, node: ASTUnary) -> SafBaseObject: ...
     @abstractmethod
-    def visit_call(self, node: ASTCall) -> Value: ...
+    def visit_call(self, node: ASTCall) -> SafBaseObject: ...
     @abstractmethod
-    def visit_atom(self, node: ASTAtom) -> Value: ...
+    def visit_atom(self, node: ASTAtom) -> SafBaseObject: ...
     @abstractmethod
-    def visit_attr(self, node: ASTAttr) -> Value: ...
+    def visit_attr(self, node: ASTAttr) -> SafBaseObject: ...
     @abstractmethod
-    def visit_edit_object(self, node: ASTEditObject) -> Value: ...
+    def visit_edit_object(self, node: ASTEditObject) -> SafBaseObject: ...
     @abstractmethod
-    def visit_version(self, node: ASTVersion) -> Value: ...
+    def visit_version(self, node: ASTVersion) -> SafBaseObject: ...
     @abstractmethod
-    def visit_import_req(self, node: ASTImportReq) -> Value: ...
+    def visit_import_req(self, node: ASTImportReq) -> SafBaseObject: ...
     @abstractmethod
-    def visit_version_req(self, node: ASTVersionReq) -> Value: ...
+    def visit_version_req(self, node: ASTVersionReq) -> SafBaseObject: ...
     @abstractmethod
-    def visit_raise(self, node: ASTRaise) -> Value: ...
+    def visit_raise(self, node: ASTRaise) -> SafBaseObject: ...
     @abstractmethod
-    def visit_for_loop(self, node: ASTForLoop) -> Value: ...
+    def visit_for_loop(self, node: ASTForLoop) -> SafBaseObject: ...
     @abstractmethod
-    def visit_del(self, node: ASTDel) -> Value: ...
+    def visit_del(self, node: ASTDel) -> SafBaseObject: ...
     @abstractmethod
-    def visit_try_catch(self, node: ASTTryCatch) -> Value: ...
+    def visit_try_catch(self, node: ASTTryCatch) -> SafBaseObject: ...
     @abstractmethod
-    def visit_switch_case(self, node: ASTSwitchCase) -> Value: ...
+    def visit_switch_case(self, node: ASTSwitchCase) -> SafBaseObject: ...
     @abstractmethod
-    def visit_continue(self, node: ASTContinue) -> Value: ...
+    def visit_continue(self, node: ASTContinue) -> SafBaseObject: ...
     @abstractmethod
-    def visit_list(self, node: ASTList) -> Value: ...
+    def visit_list(self, node: ASTList) -> SafBaseObject: ...
     @abstractmethod
-    def visit_format(self, node: ASTFormat) -> Value: ...
+    def visit_format(self, node: ASTFormat) -> SafBaseObject: ...
     @abstractmethod
-    def visit_property(self, node: ASTProperty) -> Value: ...
+    def visit_property(self, node: ASTProperty) -> SafBaseObject: ...
     @abstractmethod
-    def visit_regex(self, node: ASTRegex) -> Value: ...
+    def visit_regex(self, node: ASTRegex) -> SafBaseObject: ...

@@ -10,7 +10,7 @@ from .interpreter import TreeWalker
 from .lexer import Lexer
 from .parser import Parser
 from .tokens import Token, TokenType
-from .values import NullValue, Value
+from .values import SafNull, SafBaseObject
 
 REPL_GREETING = "\033[34;1mTest v0.0.0\033[0m"
 
@@ -45,7 +45,7 @@ def run_code(
     opts: Options | None = None,
     interpreter: TreeWalker | None = None,
     filename: str | None = None,
-) -> Value:
+) -> SafBaseObject:
     try:
         return code_to_ast(source, opts=opts).visit(interpreter or TreeWalker())
     except SafulateError as error:
@@ -72,7 +72,7 @@ def start_repl_session(opts: Options) -> None:
 
             try:
                 value = run_code(code, opts=opts, interpreter=interpreter)
-                if not isinstance(value, NullValue):
+                if not isinstance(value, SafNull):
                     print(value.str_spec(interpreter.ctx(Token(TokenType.EOF, "", -1))))
             except SafulateError:
                 continue

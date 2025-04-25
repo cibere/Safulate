@@ -5,13 +5,13 @@ from typing import TYPE_CHECKING, Any, cast
 
 from .errors import ErrorManager, SafulateError, SafulateTypeError
 from .values import (
-    DictValue,
-    FuncValue,
-    ListValue,
-    NullValue,
-    NumValue,
-    StrValue,
-    Value,
+    SafDict,
+    SafFunc,
+    SafList,
+    SafNull,
+    SafNum,
+    SafStr,
+    SafBaseObject,
     null,
 )
 
@@ -30,14 +30,14 @@ class NativeContext:
         self.interpreter = interpreter
         self.token = token
 
-    def invoke(self, func: Value, *args: Value, **kwargs: Value) -> Value:
+    def invoke(self, func: SafBaseObject, *args: SafBaseObject, **kwargs: SafBaseObject) -> SafBaseObject:
         with ErrorManager(token=self.token):
-            caller = func if isinstance(func, (FuncValue)) else func.specs["call"]
+            caller = func if isinstance(func, (SafFunc)) else func.specs["call"]
             return caller.call(self, *args, **kwargs)  # pyright: ignore[reportArgumentType]
 
     def invoke_spec(
-        self, func: Value, spec_name: str, *args: Value, **kwargs: Value
-    ) -> Value:
+        self, func: SafBaseObject, spec_name: str, *args: SafBaseObject, **kwargs: SafBaseObject
+    ) -> SafBaseObject:
         return self.invoke(func.specs[spec_name], *args, **kwargs)
 
     @property
@@ -54,37 +54,37 @@ class NativeContext:
                 break
             env = env.parent
 
-    def python_to_values(self, obj: Any) -> Value:
+    def python_to_values(self, obj: Any) -> SafBaseObject:
         if obj is None:
             return null
 
         if isinstance(obj, dict):
-            return DictValue(
+            return SafDict(
                 {
                     key: self.python_to_values(value)
                     for key, value in cast("dict[Any, Any]", obj).items()
                 },
             )
         elif isinstance(obj, list):
-            return ListValue(
+            return SafList(
                 [self.python_to_values(child) for child in cast("list[Any]", obj)]
             )
         elif isinstance(obj, str):
-            return StrValue(obj)
+            return SafStr(obj)
         elif isinstance(obj, int | float):
-            return NumValue(float(obj))
+            return SafNum(float(obj))
         else:
             raise SafulateTypeError(f"Unable to convert {obj!r} to value")
 
     def value_to_python(
         self,
-        obj: Value,
+        obj: SafBaseObject,
         *,
         repr_fallback: bool = False,
         ignore_null_attrs: bool = False,
     ) -> Any:
         match obj:
-            case DictValue():
+            case SafDict():
                 return {
                     key: value
                     for key, raw_value in obj.data.items()
@@ -99,7 +99,7 @@ class NativeContext:
                     )
                     or ignore_null_attrs is False
                 }
-            case ListValue():
+            case SafList():
                 return [
                     value
                     for child in obj.value
@@ -114,9 +114,9 @@ class NativeContext:
                     )
                     or ignore_null_attrs is False
                 ]
-            case StrValue() | NumValue():
+            case SafStr() | SafNum():
                 return obj.value
-            case NullValue():
+            case SafNull():
                 return None
             case _ as x if repr_fallback:
                 return x.repr_spec(self)
@@ -127,7 +127,7 @@ class NativeContext:
 
     def eval(
         self, code: str, *, name: str | None, env: Environment | None = None
-    ) -> dict[str, Value]:
+    ) -> dict[str, SafBaseObject]:
         from .repl import code_to_ast
 
         try:

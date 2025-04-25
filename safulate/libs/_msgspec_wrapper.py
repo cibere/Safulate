@@ -5,13 +5,13 @@ from typing import Literal
 from msgspec import DecodeError, json, toml, yaml
 
 from safulate import (
-    FuncValue,
+    SafFunc,
     NativeContext,
-    NumValue,
-    ObjectValue,
+    SafNum,
+    SafObject,
     SafulateError,
-    StrValue,
-    Value,
+    SafStr,
+    SafBaseObject,
     public_method,
 )
 
@@ -25,7 +25,7 @@ pub types = TypeModule();
 """
 
 
-class MsgspecWrapper(ObjectValue):
+class MsgspecWrapper(SafObject):
     def __init__(
         self,
         module_name: Literal["json", "toml", "yaml"],
@@ -37,7 +37,7 @@ class MsgspecWrapper(ObjectValue):
         super().__init__(
             module_name,
             attrs={
-                "dump": FuncValue.from_native(
+                "dump": SafFunc.from_native(
                     "dump",
                     self.dump_json_method
                     if module_name == "json"
@@ -69,7 +69,7 @@ class MsgspecWrapper(ObjectValue):
                 self.decode = yaml.decode
 
     @public_method("load")
-    def load_method(self, ctx: NativeContext, content: StrValue) -> Value:
+    def load_method(self, ctx: NativeContext, content: SafStr) -> SafBaseObject:
         try:
             data = self.decode(content.value)
         except DecodeError as e:
@@ -80,12 +80,12 @@ class MsgspecWrapper(ObjectValue):
     def dump_json_method(
         self,
         ctx: NativeContext,
-        content: Value,
-        convert_reprs: NumValue = NumValue(0),
-        indentation: NumValue = NumValue(2),
-    ) -> StrValue:
+        content: SafBaseObject,
+        convert_reprs: SafNum = SafNum(0),
+        indentation: SafNum = SafNum(2),
+    ) -> SafStr:
         try:
-            return StrValue(
+            return SafStr(
                 json.format(
                     self.encode(
                         ctx.value_to_python(
@@ -99,10 +99,10 @@ class MsgspecWrapper(ObjectValue):
             raise self.encode_error(str(e)) from None
 
     def dump_method(
-        self, ctx: NativeContext, content: Value, convert_reprs: NumValue = NumValue(0)
-    ) -> StrValue:
+        self, ctx: NativeContext, content: SafBaseObject, convert_reprs: SafNum = SafNum(0)
+    ) -> SafStr:
         try:
-            return StrValue(
+            return SafStr(
                 self.encode(
                     ctx.value_to_python(
                         content,

@@ -59,16 +59,16 @@ from .native_context import NativeContext
 from .py_libs import LibManager
 from .tokens import SoftKeyword, Token, TokenType
 from .values import (
-    DictValue,
-    FuncValue,
-    ListValue,
-    NumValue,
-    ObjectValue,
-    PatternValue,
-    PropertyValue,
-    StrValue,
-    TypeValue,
-    Value,
+    SafDict,
+    SafFunc,
+    SafList,
+    SafNum,
+    SafObject,
+    SafPattern,
+    SafProperty,
+    SafStr,
+    SafType,
+    SafBaseObject,
     null,
 )
 
@@ -85,7 +85,7 @@ class TreeWalker(ASTVisitor):
         self, *, env: Environment | None = None, lib_manager: LibManager | None = None
     ) -> None:
         self.version = Version(__version__)
-        self.import_cache: dict[str, ObjectValue] = {}
+        self.import_cache: dict[str, SafObject] = {}
 
         self.libs = lib_manager or LibManager()
 
@@ -98,13 +98,13 @@ class TreeWalker(ASTVisitor):
         return NativeContext(self, token)
 
     @contextmanager
-    def scope(self, source: Value | None = None) -> Iterator[Environment]:
+    def scope(self, source: SafBaseObject | None = None) -> Iterator[Environment]:
         old_env = self.env
         self.env = Environment(self.env, scope=source)
         yield self.env
         self.env = old_env
 
-    def visit_program(self, node: ASTProgram) -> Value:
+    def visit_program(self, node: ASTProgram) -> SafBaseObject:
         if len(node.stmts) <= 0:
             return null
         for stmt in node.stmts[:-1]:
@@ -112,7 +112,7 @@ class TreeWalker(ASTVisitor):
 
         return node.stmts[-1].visit(self)
 
-    def visit_unscoped_block(self, node: ASTBlock) -> Value:
+    def visit_unscoped_block(self, node: ASTBlock) -> SafBaseObject:
         if len(node.stmts) <= 0:
             return null
 
@@ -122,24 +122,24 @@ class TreeWalker(ASTVisitor):
 
         return res
 
-    def visit_block(self, node: ASTBlock) -> Value:
+    def visit_block(self, node: ASTBlock) -> SafBaseObject:
         with self.scope():
             return self.visit_unscoped_block(node)
 
-    def visit_edit_object(self, node: ASTEditObject) -> Value:
+    def visit_edit_object(self, node: ASTEditObject) -> SafBaseObject:
         src = node.obj.visit(self)
         with self.scope(source=src):
             self.visit_unscoped_block(node.block)
         return src
 
-    def visit_if(self, node: ASTIf) -> Value:
+    def visit_if(self, node: ASTIf) -> SafBaseObject:
         if node.condition.visit(self).bool_spec(self.ctx(node.kw_token)):
             return node.body.visit(self)
         elif node.else_branch:
             return node.else_branch.visit(self)
         return null
 
-    def visit_while(self, node: ASTWhile) -> Value:
+    def visit_while(self, node: ASTWhile) -> SafBaseObject:
         val = null
 
         while node.condition.visit(self).bool_spec(self.ctx(node.kw_token)):
@@ -153,12 +153,12 @@ class TreeWalker(ASTVisitor):
 
         return val
 
-    def visit_for_loop(self, node: ASTForLoop) -> Value:
+    def visit_for_loop(self, node: ASTForLoop) -> SafBaseObject:
         src = node.source.visit(self)
-        if not isinstance(src, ListValue):
+        if not isinstance(src, SafList):
             with ErrorManager(token=node.var_name):
                 src = self.ctx(node.var_name).invoke_spec(src, "iter")
-                if not isinstance(src, ListValue):
+                if not isinstance(src, SafList):
                     raise SafulateValueError(
                         f"{src.repr_spec(self.ctx(node.var_name))} is not iterable"
                     )
@@ -181,14 +181,14 @@ class TreeWalker(ASTVisitor):
 
         return val
 
-    def visit_return(self, node: ASTReturn) -> Value:
+    def visit_return(self, node: ASTReturn) -> SafBaseObject:
         if node.expr:
             value = node.expr.visit(self)
             raise SafulateInvalidReturn(value, node.keyword)
 
         raise SafulateInvalidReturn(null, node.keyword)
 
-    def _visit_continue_and_break(self, node: ASTBreak | ASTContinue) -> Value:
+    def _visit_continue_and_break(self, node: ASTBreak | ASTContinue) -> SafBaseObject:
         is_break = isinstance(node, ASTBreak)
 
         with ErrorManager(token=node.keyword):
@@ -196,7 +196,7 @@ class TreeWalker(ASTVisitor):
                 amount = 1
             else:
                 amount_node = node.amount.visit(self)
-                if not isinstance(amount_node, NumValue):
+                if not isinstance(amount_node, SafNum):
                     raise SafulateTypeError(
                         f"Expected a number for {'break' if is_break else 'continue'} amount, got {amount_node.repr_spec(self.ctx(node.keyword))} instead.",
                     )
@@ -216,17 +216,17 @@ class TreeWalker(ASTVisitor):
                 raise SafulateBreakoutError(amount)
             raise SafulateInvalidContinue(amount)
 
-    def visit_break(self, node: ASTBreak) -> Value:
+    def visit_break(self, node: ASTBreak) -> SafBaseObject:
         return self._visit_continue_and_break(node)
 
-    def visit_continue(self, node: ASTContinue) -> Value:
+    def visit_continue(self, node: ASTContinue) -> SafBaseObject:
         return self._visit_continue_and_break(node)
 
-    def visit_expr_stmt(self, node: ASTExprStmt) -> Value:
+    def visit_expr_stmt(self, node: ASTExprStmt) -> SafBaseObject:
         value = node.expr.visit(self)
         return value
 
-    def visit_var_decl(self, node: ASTVarDecl) -> Value:
+    def visit_var_decl(self, node: ASTVarDecl) -> SafBaseObject:
         value = null if node.value is None else node.value.visit(self)
         match node.keyword.type:
             case TokenType.PUB:
@@ -238,8 +238,8 @@ class TreeWalker(ASTVisitor):
                 raise RuntimeError(f"Unknown var decl keyword: {node.keyword.type!r}")
         return value
 
-    def visit_func_decl(self, node: ASTFuncDecl) -> Value:
-        value = FuncValue(
+    def visit_func_decl(self, node: ASTFuncDecl) -> SafBaseObject:
+        value = SafFunc(
             name=node.name,
             params=node.params,  # pyright: ignore[reportArgumentType]
             body=node.body,
@@ -267,7 +267,7 @@ class TreeWalker(ASTVisitor):
 
                 try:
                     current_spec = self.env.scope.specs[node.name.lexeme]
-                    assert isinstance(current_spec, FuncValue)
+                    assert isinstance(current_spec, SafFunc)
                 except KeyError:
                     raise SafulateValueError(
                         f"there is no spec named {node.name.lexeme!r}", node.name
@@ -287,12 +287,12 @@ class TreeWalker(ASTVisitor):
                 )
         return value
 
-    def visit_assign(self, node: ASTAssign) -> Value:
+    def visit_assign(self, node: ASTAssign) -> SafBaseObject:
         value = node.value.visit(self)
         self.env[node.name] = value
         return value
 
-    def visit_binary(self, node: ASTBinary) -> Value:
+    def visit_binary(self, node: ASTBinary) -> SafBaseObject:
         left = node.left.visit(self)
         right = node.right.visit(self)
 
@@ -323,7 +323,7 @@ class TreeWalker(ASTVisitor):
                         return right
                     return null
                 case TokenType.AND:
-                    return NumValue(
+                    return SafNum(
                         1 if left.bool_spec(ctx) and right.bool_spec(ctx) else 0
                     )
                 case _:
@@ -334,7 +334,7 @@ class TreeWalker(ASTVisitor):
         with ErrorManager(token=node.op):
             return ctx.invoke_spec(left, spec_name, right)
 
-    def visit_unary(self, node: ASTUnary) -> Value:
+    def visit_unary(self, node: ASTUnary) -> SafBaseObject:
         right = node.right.visit(self)
 
         spec_name = {
@@ -351,15 +351,15 @@ class TreeWalker(ASTVisitor):
         with ErrorManager(token=node.op):
             return self.ctx(node.op).invoke_spec(right, spec_name)
 
-    def visit_call(self, node: ASTCall) -> Value:
+    def visit_call(self, node: ASTCall) -> SafBaseObject:
         func = node.callee.visit(self)
         ctx = self.ctx(node.paren)
 
         if node.paren.type is TokenType.LSQB:
             func = func.specs["altcall"]
 
-        args: list[Value] = []
-        kwargs: dict[str, Value] = {}
+        args: list[SafBaseObject] = []
+        kwargs: dict[str, SafBaseObject] = {}
 
         for param_type, name, value in node.params:
             match param_type:
@@ -373,14 +373,14 @@ class TreeWalker(ASTVisitor):
                     )
                 case ParamType.vararg:
                     val = ctx.invoke_spec(value.visit(self), "iter")
-                    if not isinstance(val, ListValue):
+                    if not isinstance(val, SafList):
                         raise SafulateValueError(
                             f"Can not unpack, {val.repr_spec(ctx)} is not iterable"
                         )
                     args.extend(val.value)
                 case ParamType.varkwarg:
                     val = value.visit(self)
-                    if not isinstance(val, DictValue):
+                    if not isinstance(val, SafDict):
                         raise SafulateValueError(
                             f"Can not unpack, {val.repr_spec(ctx)} is not a dictionary"
                         )
@@ -396,12 +396,12 @@ class TreeWalker(ASTVisitor):
             **kwargs,
         )
 
-    def visit_atom(self, node: ASTAtom) -> Value:
+    def visit_atom(self, node: ASTAtom) -> SafBaseObject:
         match node.token.type:
             case TokenType.NUM:
-                return NumValue(float(node.token.lexeme))
+                return SafNum(float(node.token.lexeme))
             case TokenType.STR:
-                return StrValue(node.token.lexeme)
+                return SafStr(node.token.lexeme)
             case TokenType.ID:
                 return self.env[node.token]
             case TokenType.PRIV_ID:
@@ -409,7 +409,7 @@ class TreeWalker(ASTVisitor):
             case _:
                 raise ValueError(f"Invalid atom type {node.token.type.name}")
 
-    def visit_attr(self, node: ASTAttr) -> Value:
+    def visit_attr(self, node: ASTAttr) -> SafBaseObject:
         obj = node.expr.visit(self)
 
         with ErrorManager(token=node.attr):
@@ -427,23 +427,23 @@ class TreeWalker(ASTVisitor):
                     )
 
             return self.ctx(node.attr).invoke_spec(
-                obj, "get_attr", StrValue(node.attr.lexeme)
+                obj, "get_attr", SafStr(node.attr.lexeme)
             )
 
-    def visit_version(self, node: ASTVersion) -> Value:
+    def visit_version(self, node: ASTVersion) -> SafBaseObject:
         raise RuntimeError("version not allowed")
 
-    def visit_version_req(self, node: ASTVersionReq) -> Value:
+    def visit_version_req(self, node: ASTVersionReq) -> SafBaseObject:
         raise RuntimeError("version not allowed")
 
     # def visit_version(self, node: ASTVersion) -> VersionValue:
-    #     major = NumValue(node.major)
-    #     minor = null if node.minor is None else NumValue(node.minor)
-    #     micro = null if node.micro is None else NumValue(node.micro)
+    #     major = SafNum(node.major)
+    #     minor = null if node.minor is None else SafNum(node.minor)
+    #     micro = null if node.micro is None else SafNum(node.micro)
 
     #     return VersionValue(major=major, minor=minor, micro=micro)
 
-    # def visit_version_req(self, node: ASTVersionReq) -> Value:
+    # def visit_version_req(self, node: ASTVersionReq) -> SafBaseObject:
     #     with ErrorManager(token=node.token):
     #         match node.version.visit(self):
     #             case VersionValue() as ver_value:
@@ -478,7 +478,7 @@ class TreeWalker(ASTVisitor):
     #                 raise RuntimeError(f"Unknown version req combination: {x!r}")
     #         return null  # pyright: ignore[reportPossiblyUnboundVariable] # pyright is high
 
-    def visit_import_req(self, node: ASTImportReq) -> Value:
+    def visit_import_req(self, node: ASTImportReq) -> SafBaseObject:
         with ErrorManager(token=node.source):
             value = self.import_cache.get(node.source.lexeme)
 
@@ -502,15 +502,15 @@ class TreeWalker(ASTVisitor):
             self.import_cache[node.source.lexeme] = value
             return value
 
-    def visit_raise(self, node: ASTRaise) -> Value:
+    def visit_raise(self, node: ASTRaise) -> SafBaseObject:
         val = node.expr.visit(self)
         raise SafulateError(val.repr_spec(self.ctx(node.kw)), token=node.kw, obj=val)
 
-    def visit_del(self, node: ASTDel) -> Value:
+    def visit_del(self, node: ASTDel) -> SafBaseObject:
         del self.env.values[node.var.lexeme]
         return null
 
-    def visit_try_catch(self, node: ASTTryCatch) -> Value:
+    def visit_try_catch(self, node: ASTTryCatch) -> SafBaseObject:
         try:
             node.body.visit(self)
         except SafulateError as e:
@@ -522,7 +522,7 @@ class TreeWalker(ASTVisitor):
                     target_token = branch.target[0]
                     target = branch.target[1].visit(self)
 
-                    if not isinstance(target, TypeValue):
+                    if not isinstance(target, SafType):
                         raise SafulateTypeError(
                             f"Expected Type object, got {target.repr_spec(self.ctx(target_token))} instead"
                         )
@@ -546,7 +546,7 @@ class TreeWalker(ASTVisitor):
 
     def _visit_switch_case_entry(
         self, body: ASTBlock, loops: list[tuple[ASTNode, ASTBlock]]
-    ) -> Value:
+    ) -> SafBaseObject:
         try:
             return body.visit(self)
         except SafulateInvalidContinue as e:
@@ -556,7 +556,7 @@ class TreeWalker(ASTVisitor):
                 return null
             return self._visit_switch_case_entry(next_loop[-1], loops)
 
-    def visit_switch_case(self, node: ASTSwitchCase) -> Value:
+    def visit_switch_case(self, node: ASTSwitchCase) -> SafBaseObject:
         key = node.expr.visit(self)
         cases = node.cases.copy()
 
@@ -575,24 +575,24 @@ class TreeWalker(ASTVisitor):
             node.else_branch.visit(self)
         return null
 
-    def visit_list(self, node: ASTList) -> ListValue:
-        return ListValue([child.visit(self) for child in node.children])
+    def visit_list(self, node: ASTList) -> SafList:
+        return SafList([child.visit(self) for child in node.children])
 
-    def visit_format(self, node: ASTFormat) -> Value:
+    def visit_format(self, node: ASTFormat) -> SafBaseObject:
         spec = {"r": "repr", "s": "str"}.get(node.spec.lexeme)
-        args: tuple[Value, ...] = ()
+        args: tuple[SafBaseObject, ...] = ()
 
         if spec is None:
-            args = (StrValue(node.spec.lexeme),)
+            args = (SafStr(node.spec.lexeme),)
             spec = "format"
 
         return self.ctx(node.spec).invoke_spec(node.obj.visit(self), spec, *args)
 
-    def visit_property(self, node: ASTProperty) -> Value:
-        val = PropertyValue(FuncValue(name=node.name, params=[], body=node.body))
+    def visit_property(self, node: ASTProperty) -> SafBaseObject:
+        val = SafProperty(SafFunc(name=node.name, params=[], body=node.body))
         self.env.declare(node.name)
         self.env[node.name] = val
         return val
 
-    def visit_regex(self, node: ASTRegex) -> Value:
-        return PatternValue(re.compile(node.value.lexeme[2:-1]))
+    def visit_regex(self, node: ASTRegex) -> SafBaseObject:
+        return SafPattern(re.compile(node.value.lexeme[2:-1]))

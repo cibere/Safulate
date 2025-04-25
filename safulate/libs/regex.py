@@ -4,10 +4,10 @@ import re
 
 from safulate import (
     NativeContext,
-    ObjectValue,
-    PatternValue,
-    StrValue,
-    Value,
+    SafObject,
+    SafPattern,
+    SafStr,
+    SafBaseObject,
     public_method,
 )
 
@@ -21,7 +21,7 @@ pub types = RegexTypes();
 """
 
 
-class RegexModule(ObjectValue):
+class RegexModule(SafObject):
     def __init__(self, ctx: NativeContext) -> None:
         super().__init__(
             "regex",
@@ -31,13 +31,13 @@ class RegexModule(ObjectValue):
         )
 
     @public_method("compile")
-    def compile_(self, ctx: NativeContext, pattern: Value) -> Value:
-        return PatternValue(re.compile(pattern.str_spec(ctx)))
+    def compile_(self, ctx: NativeContext, pattern: SafBaseObject) -> SafBaseObject:
+        return SafPattern(re.compile(pattern.str_spec(ctx)))
 
     @public_method("escape")
-    def escape(self, ctx: NativeContext, string: Value) -> StrValue:
-        return StrValue(re.escape(string.str_spec(ctx)))
+    def escape(self, ctx: NativeContext, string: SafBaseObject) -> SafStr:
+        return SafStr(re.escape(string.str_spec(ctx)))
 
 
-def load(ctx: NativeContext) -> ObjectValue:
+def load(ctx: NativeContext) -> SafObject:
     return RegexModule(ctx)
