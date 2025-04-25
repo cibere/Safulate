@@ -3,14 +3,14 @@ from __future__ import annotations
 from typing import Never
 
 from safulate import (
+    NativeContext,
+    SafBaseObject,
     SafDict,
     SafList,
-    NativeContext,
     SafNum,
     SafObject,
-    SafulateAssertionError,
     SafStr,
-    SafBaseObject,
+    SafulateAssertionError,
     false,
     null,
     true,
@@ -54,7 +54,9 @@ class Builtins(SafObject):
         return null
 
     @public_method("object")
-    def create_object(self, ctx: NativeContext, name: SafBaseObject = null) -> SafBaseObject:
+    def create_object(
+        self, ctx: NativeContext, name: SafBaseObject = null
+    ) -> SafBaseObject:
         return SafObject(
             name=f"Custom Object @ {ctx.token.start}"
             if name is null
@@ -63,13 +65,17 @@ class Builtins(SafObject):
         )
 
     @public_method("assert")
-    def assert_(self, ctx: NativeContext, obj: SafBaseObject, msg: SafBaseObject = null) -> SafBaseObject:
+    def assert_(
+        self, ctx: NativeContext, obj: SafBaseObject, msg: SafBaseObject = null
+    ) -> SafBaseObject:
         if not obj.bool_spec(ctx):
             raise SafulateAssertionError(msg.str_spec(ctx), obj=msg)
         return null
 
     @public_method("dir")
-    def dir_(self, ctx: NativeContext, obj: SafBaseObject, full: SafBaseObject = null) -> SafBaseObject:
+    def dir_(
+        self, ctx: NativeContext, obj: SafBaseObject, full: SafBaseObject = null
+    ) -> SafBaseObject:
         attrs = obj.public_attrs
         if isinstance(full, SafNum) and int(full.value) == 1:
             attrs.update({f"${key}": val for key, val in obj.private_attrs.items()})

@@ -55,22 +55,22 @@ from .errors import (
     SafulateValueError,
     # SafulateVersionConflict,
 )
+from .libs.regex import SafPattern
 from .native_context import NativeContext
-from .py_libs import LibManager
-from .tokens import SoftKeyword, Token, TokenType
 from .objects import (
+    SafBaseObject,
     SafDict,
     SafFunc,
     SafList,
     SafNum,
     SafObject,
-    SafPattern,
     SafProperty,
     SafStr,
     SafType,
-    SafBaseObject,
     null,
 )
+from .py_libs import LibManager
+from .tokens import SoftKeyword, Token, TokenType
 
 if TYPE_CHECKING:
     from collections.abc import Iterator

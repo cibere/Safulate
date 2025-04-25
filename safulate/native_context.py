@@ -5,13 +5,13 @@ from typing import TYPE_CHECKING, Any, cast
 
 from .errors import ErrorManager, SafulateError, SafulateTypeError
 from .objects import (
+    SafBaseObject,
     SafDict,
     SafFunc,
     SafList,
     SafNull,
     SafNum,
     SafStr,
-    SafBaseObject,
     null,
 )
 
@@ -30,13 +30,19 @@ class NativeContext:
         self.interpreter = interpreter
         self.token = token
 
-    def invoke(self, func: SafBaseObject, *args: SafBaseObject, **kwargs: SafBaseObject) -> SafBaseObject:
+    def invoke(
+        self, func: SafBaseObject, *args: SafBaseObject, **kwargs: SafBaseObject
+    ) -> SafBaseObject:
         with ErrorManager(token=self.token):
             caller = func if isinstance(func, (SafFunc)) else func.specs["call"]
             return caller.call(self, *args, **kwargs)  # pyright: ignore[reportArgumentType]
 
     def invoke_spec(
-        self, func: SafBaseObject, spec_name: str, *args: SafBaseObject, **kwargs: SafBaseObject
+        self,
+        func: SafBaseObject,
+        spec_name: str,
+        *args: SafBaseObject,
+        **kwargs: SafBaseObject,
     ) -> SafBaseObject:
         return self.invoke(func.specs[spec_name], *args, **kwargs)
 

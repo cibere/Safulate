@@ -6,8 +6,8 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .tokens import Token
     from .objects import SafBaseObject
+    from .tokens import Token
 
 __all__ = (
     "ASTAssign",

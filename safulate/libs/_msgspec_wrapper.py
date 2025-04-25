@@ -5,13 +5,13 @@ from typing import Literal
 from msgspec import DecodeError, json, toml, yaml
 
 from safulate import (
-    SafFunc,
     NativeContext,
+    SafBaseObject,
+    SafFunc,
     SafNum,
     SafObject,
-    SafulateError,
     SafStr,
-    SafBaseObject,
+    SafulateError,
     public_method,
 )
 
@@ -99,7 +99,10 @@ class MsgspecWrapper(SafObject):
             raise self.encode_error(str(e)) from None
 
     def dump_method(
-        self, ctx: NativeContext, content: SafBaseObject, convert_reprs: SafNum = SafNum(0)
+        self,
+        ctx: NativeContext,
+        content: SafBaseObject,
+        convert_reprs: SafNum = SafNum(0),
     ) -> SafStr:
         try:
             return SafStr(

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import inspect
-import sys
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable
@@ -20,29 +19,27 @@ from .properties import cached_property
 from .tokens import Token, TokenType
 
 if TYPE_CHECKING:
-    import re
-
     from .native_context import NativeContext
 
 SafBaseObjectT = TypeVar("SafBaseObjectT")
 NativeMethodT = TypeVar(
-    "NativeMethodT", bound=Callable[Concatenate[Any, "NativeContext", ...], "SafBaseObject"]
+    "NativeMethodT",
+    bound=Callable[Concatenate[Any, "NativeContext", ...], "SafBaseObject"],
 )
 
 __all__ = (
+    "SafBaseObject",
+    "SafBool",
     "SafDict",
     "SafFunc",
     "SafList",
-    "SafMatch",
-    "SafPythonError",
     "SafNull",
     "SafNum",
     "SafObject",
-    "SafPattern",
     "SafProperty",
+    "SafPythonError",
     "SafStr",
     "SafType",
-    "SafBaseObject",
     "false",
     "null",
     "private_method",
@@ -166,37 +163,37 @@ class SafBaseObject(ABC):
         raise SafulateValueError("Unary minus is not defined for this type")
 
     @spec_meth("eq")
-    def eq(self, ctx: NativeContext, other: SafBaseObject) -> BoolSafBaseObject:
-        return BoolSafBaseObject(self == other)
+    def eq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
+        return SafBool(self == other)
 
     @spec_meth("neq")
-    def neq(self, ctx: NativeContext, other: SafBaseObject) -> BoolSafBaseObject:
+    def neq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
         val = ctx.invoke_spec(self, "eq", other).bool_spec(ctx)
-        return BoolSafBaseObject(not val)
+        return SafBool(not val)
 
     @spec_meth("has_item")
-    def has_item(self, ctx: NativeContext, other: SafBaseObject) -> BoolSafBaseObject:
+    def has_item(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
         val = ctx.invoke_spec(self, "iter")
         if not isinstance(val, SafList):
             raise SafulateValueError(
                 f"iter spec returned {val.repr_spec(ctx)}, expected list"
             )
-        return BoolSafBaseObject(other in val.value)
+        return SafBool(other in val.value)
 
     @spec_meth("less")
-    def less(self, ctx: NativeContext, _other: SafBaseObject) -> BoolSafBaseObject:
+    def less(self, ctx: NativeContext, _other: SafBaseObject) -> SafBool:
         raise SafulateValueError("Less than is not defined for this type")
 
     @spec_meth("grtr")
-    def grtr(self, ctx: NativeContext, _other: SafBaseObject) -> BoolSafBaseObject:
+    def grtr(self, ctx: NativeContext, _other: SafBaseObject) -> SafBool:
         raise SafulateValueError("Greater than is not defined for this type")
 
     @spec_meth("lesseq")
-    def lesseq(self, ctx: NativeContext, _other: SafBaseObject) -> BoolSafBaseObject:
+    def lesseq(self, ctx: NativeContext, _other: SafBaseObject) -> SafBool:
         raise SafulateValueError("Less than or equal to is not defined for this type")
 
     @spec_meth("grtreq")
-    def grtreq(self, ctx: NativeContext, _other: SafBaseObject) -> BoolSafBaseObject:
+    def grtreq(self, ctx: NativeContext, _other: SafBaseObject) -> SafBool:
         raise SafulateValueError(
             "Greater than or equal to is not defined for this type"
         )
@@ -210,11 +207,11 @@ class SafBaseObject(ABC):
         raise SafulateValueError("pipe is not defined for this type")
 
     @spec_meth("not")
-    def not_(self, ctx: NativeContext) -> BoolSafBaseObject:
-        return BoolSafBaseObject(self.bool_spec(ctx))
+    def not_(self, ctx: NativeContext) -> SafBool:
+        return SafBool(self.bool_spec(ctx))
 
     @spec_meth("bool")
-    def bool(self, ctx: NativeContext) -> BoolSafBaseObject:
+    def bool(self, ctx: NativeContext) -> SafBool:
         return true
 
     if TYPE_CHECKING:
@@ -223,11 +220,15 @@ class SafBaseObject(ABC):
     else:
 
         @spec_meth("altcall")
-        def altcall(self, ctx: NativeContext, *args: SafBaseObject, **kwargs: SafBaseObject) -> SafBaseObject:
+        def altcall(
+            self, ctx: NativeContext, *args: SafBaseObject, **kwargs: SafBaseObject
+        ) -> SafBaseObject:
             raise SafulateValueError("Cannot altcall this type")
 
         @spec_meth("call")
-        def call(self, ctx: NativeContext, *args: SafBaseObject, **kwargs: SafBaseObject) -> SafBaseObject:
+        def call(
+            self, ctx: NativeContext, *args: SafBaseObject, **kwargs: SafBaseObject
+        ) -> SafBaseObject:
             raise SafulateValueError("Cannot call this type")
 
     @spec_meth("iter")
@@ -286,7 +287,7 @@ class SafBaseObject(ABC):
         return self.run_spec("str", SafStr, ctx).value
 
     def bool_spec(self, ctx: NativeContext) -> bool:
-        val = self.run_spec("bool", BoolSafBaseObject, ctx)
+        val = self.run_spec("bool", SafBool, ctx)
         if int(val.value) not in (1, 0):
             raise SafulateValueError(
                 f"expected return for bool spec to be a bool, got {val.repr_spec(ctx)} instead"
@@ -317,7 +318,9 @@ class SafObject(SafBaseObject):
     __saf_typename__: str
     __saf_init_attrs__: dict[str, SafBaseObject] | None
 
-    def __init__(self, name: str, attrs: dict[str, SafBaseObject] | None = None) -> None:
+    def __init__(
+        self, name: str, attrs: dict[str, SafBaseObject] | None = None
+    ) -> None:
         self.__saf_typename__ = name
         self.__saf_init_attrs__ = attrs
 
@@ -349,11 +352,11 @@ class SafNull(SafObject):
         return SafStr("null")
 
     @spec_meth("eq")
-    def eq(self, ctx: NativeContext, other: SafBaseObject) -> BoolSafBaseObject:
-        return BoolSafBaseObject(isinstance(other, SafNull))
+    def eq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
+        return SafBool(isinstance(other, SafNull))
 
     @spec_meth("bool")
-    def bool(self, ctx: NativeContext) -> BoolSafBaseObject:
+    def bool(self, ctx: NativeContext) -> SafBool:
         return false
 
 
@@ -408,60 +411,60 @@ class SafNum(SafObject):
         return SafNum(-self.value)
 
     @spec_meth("eq")
-    def eq(self, ctx: NativeContext, other: SafBaseObject) -> BoolSafBaseObject:
+    def eq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
         if not isinstance(other, SafNum):
             raise SafulateValueError("Equality is not defined for number and this type")
 
-        return BoolSafBaseObject(self.value == other.value)
+        return SafBool(self.value == other.value)
 
     @spec_meth("neq")
-    def neq(self, ctx: NativeContext, other: SafBaseObject) -> BoolSafBaseObject:
+    def neq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
         if not isinstance(other, SafNum):
             raise SafulateValueError(
                 "Non-equality is not defined for number and this type"
             )
 
-        return BoolSafBaseObject(self.value != other.value)
+        return SafBool(self.value != other.value)
 
     @spec_meth("less")
-    def less(self, ctx: NativeContext, other: SafBaseObject) -> BoolSafBaseObject:
+    def less(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
         if not isinstance(other, SafNum):
             raise SafulateValueError(
                 "Less than is not defined for number and this type"
             )
 
-        return BoolSafBaseObject(self.value < other.value)
+        return SafBool(self.value < other.value)
 
     @spec_meth("grtr")
-    def grtr(self, ctx: NativeContext, other: SafBaseObject) -> BoolSafBaseObject:
+    def grtr(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
         if not isinstance(other, SafNum):
             raise SafulateValueError(
                 "Greater than is not defined for number and this type"
             )
 
-        return BoolSafBaseObject(self.value > other.value)
+        return SafBool(self.value > other.value)
 
     @spec_meth("lesseq")
-    def lesseq(self, ctx: NativeContext, other: SafBaseObject) -> BoolSafBaseObject:
+    def lesseq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
         if not isinstance(other, SafNum):
             raise SafulateValueError(
                 "Less than or equal to is not defined for number and this type"
             )
 
-        return BoolSafBaseObject(self.value <= other.value)
+        return SafBool(self.value <= other.value)
 
     @spec_meth("grtreq")
-    def grtreq(self, ctx: NativeContext, other: SafBaseObject) -> BoolSafBaseObject:
+    def grtreq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
         if not isinstance(other, SafNum):
             raise SafulateValueError(
                 "Greater than or equal to is not defined for number and this type",
             )
 
-        return BoolSafBaseObject(self.value >= other.value)
+        return SafBool(self.value >= other.value)
 
     @spec_meth("bool")
-    def bool(self, ctx: NativeContext) -> BoolSafBaseObject:
-        return BoolSafBaseObject(self.value != 0)
+    def bool(self, ctx: NativeContext) -> SafBool:
+        return SafBool(self.value != 0)
 
     @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> SafStr:
@@ -471,7 +474,7 @@ class SafNum(SafObject):
         return SafStr(str(self.value))
 
 
-class BoolSafBaseObject(SafNum):
+class SafBool(SafNum):
     def __init__(self, status: Any) -> None:
         self.status: bool = bool(status)
         self.value = int(self.status)
@@ -487,7 +490,7 @@ class BoolSafBaseObject(SafNum):
         return self.repr(ctx)
 
     @spec_meth("bool")
-    def bool(self, ctx: NativeContext) -> BoolSafBaseObject:
+    def bool(self, ctx: NativeContext) -> SafBool:
         return self
 
 
@@ -532,8 +535,8 @@ class SafStr(SafObject):
         return SafList([SafStr(char) for char in self.value])
 
     @spec_meth("bool")
-    def bool(self, ctx: NativeContext) -> BoolSafBaseObject:
-        return BoolSafBaseObject(len(self.value) != 0)
+    def bool(self, ctx: NativeContext) -> SafBool:
+        return SafBool(len(self.value) != 0)
 
     @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> SafStr:
@@ -544,8 +547,8 @@ class SafStr(SafObject):
         return SafStr(self.value)
 
     @spec_meth("eq")
-    def eq(self, ctx: NativeContext, other: SafBaseObject) -> BoolSafBaseObject:
-        return BoolSafBaseObject(isinstance(other, SafStr) and other.value == self.value)
+    def eq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
+        return SafBool(isinstance(other, SafStr) and other.value == self.value)
 
     @public_method("format")
     def format_(self, ctx: NativeContext, *args: SafBaseObject) -> SafBaseObject:
@@ -597,12 +600,12 @@ class SafStr(SafObject):
         return SafNum(self.value.count(char.value, int(start.value), int(end.value)))
 
     @public_method("endswith")
-    def casendswithefold(self, ctx: NativeContext, sub: SafBaseObject) -> BoolSafBaseObject:
+    def casendswithefold(self, ctx: NativeContext, sub: SafBaseObject) -> SafBool:
         if not isinstance(sub, SafStr):
             raise SafulateTypeError(
                 f"Expected str, received {sub.repr_spec(ctx)} instead"
             )
-        return BoolSafBaseObject(self.value.endswith(sub.value))
+        return SafBool(self.value.endswith(sub.value))
 
     @public_method("index")
     def index(self, ctx: NativeContext, sub: SafBaseObject) -> SafBaseObject:
@@ -613,44 +616,44 @@ class SafStr(SafObject):
         return SafNum(int(self.value.index(sub.value)))
 
     @public_method("is_alnum")
-    def isalnum(self, ctx: NativeContext) -> BoolSafBaseObject:
-        return BoolSafBaseObject(self.value.isalnum())
+    def isalnum(self, ctx: NativeContext) -> SafBool:
+        return SafBool(self.value.isalnum())
 
     @public_method("is_alpha")
-    def isalpha(self, ctx: NativeContext) -> BoolSafBaseObject:
-        return BoolSafBaseObject(self.value.isalpha())
+    def isalpha(self, ctx: NativeContext) -> SafBool:
+        return SafBool(self.value.isalpha())
 
     @public_method("is_ascii")
-    def isascii(self, ctx: NativeContext) -> BoolSafBaseObject:
-        return BoolSafBaseObject(self.value.isascii())
+    def isascii(self, ctx: NativeContext) -> SafBool:
+        return SafBool(self.value.isascii())
 
     @public_method("is_decimal")
-    def isdecimal(self, ctx: NativeContext) -> BoolSafBaseObject:
-        return BoolSafBaseObject(self.value.isdecimal())
+    def isdecimal(self, ctx: NativeContext) -> SafBool:
+        return SafBool(self.value.isdecimal())
 
     @public_method("is_digit")
-    def isdigit(self, ctx: NativeContext) -> BoolSafBaseObject:
-        return BoolSafBaseObject(self.value.isdigit())
+    def isdigit(self, ctx: NativeContext) -> SafBool:
+        return SafBool(self.value.isdigit())
 
     @public_method("is_lower")
-    def islower(self, ctx: NativeContext) -> BoolSafBaseObject:
-        return BoolSafBaseObject(self.value.islower())
+    def islower(self, ctx: NativeContext) -> SafBool:
+        return SafBool(self.value.islower())
 
     @public_method("is_numeric")
-    def isnumeric(self, ctx: NativeContext) -> BoolSafBaseObject:
-        return BoolSafBaseObject(self.value.isnumeric())
+    def isnumeric(self, ctx: NativeContext) -> SafBool:
+        return SafBool(self.value.isnumeric())
 
     @public_method("is_space")
-    def isspace(self, ctx: NativeContext) -> BoolSafBaseObject:
-        return BoolSafBaseObject(self.value.isspace())
+    def isspace(self, ctx: NativeContext) -> SafBool:
+        return SafBool(self.value.isspace())
 
     @public_method("is_title")
-    def istitle(self, ctx: NativeContext) -> BoolSafBaseObject:
-        return BoolSafBaseObject(self.value.istitle())
+    def istitle(self, ctx: NativeContext) -> SafBool:
+        return SafBool(self.value.istitle())
 
     @public_method("is_upper")
-    def isupper(self, ctx: NativeContext) -> BoolSafBaseObject:
-        return BoolSafBaseObject(self.value.isupper())
+    def isupper(self, ctx: NativeContext) -> SafBool:
+        return SafBool(self.value.isupper())
 
     @public_method("lower")
     def lower(self, ctx: NativeContext) -> SafBaseObject:
@@ -756,8 +759,8 @@ class SafList(SafObject):
         return self.value.pop(int(index.value))
 
     @spec_meth("bool")
-    def bool(self, ctx: NativeContext) -> BoolSafBaseObject:
-        return BoolSafBaseObject(len(self.value) != 0)
+    def bool(self, ctx: NativeContext) -> SafBool:
+        return SafBool(len(self.value) != 0)
 
     @spec_meth("altcall")
     def altcall(self, ctx: NativeContext, idx: SafBaseObject) -> SafBaseObject:
@@ -890,7 +893,9 @@ class SafFunc(SafObject):
         return passable_params
 
     @spec_meth("altcall")
-    def altcall(self, ctx: NativeContext, *args: SafBaseObject, **kwargs: SafBaseObject) -> SafBaseObject:
+    def altcall(
+        self, ctx: NativeContext, *args: SafBaseObject, **kwargs: SafBaseObject
+    ) -> SafBaseObject:
         if ctx.token.lexeme == "ADD-TO-START":
             args = (*args, *self.partial_args)
         else:
@@ -907,7 +912,9 @@ class SafFunc(SafObject):
         )
 
     @spec_meth("call")
-    def call(self, ctx: NativeContext, *args: SafBaseObject, **kwargs: SafBaseObject) -> SafBaseObject:
+    def call(
+        self, ctx: NativeContext, *args: SafBaseObject, **kwargs: SafBaseObject
+    ) -> SafBaseObject:
         params = self._validate_params(
             ctx,
             *self.partial_args,
@@ -941,7 +948,9 @@ class SafFunc(SafObject):
 
     @classmethod
     def from_native(
-        cls, name: str, callback: Callable[Concatenate[NativeContext, ...], SafBaseObject]
+        cls,
+        name: str,
+        callback: Callable[Concatenate[NativeContext, ...], SafBaseObject],
     ) -> SafFunc:
         raw_params = list(inspect.signature(callback).parameters.values())
 
@@ -986,8 +995,8 @@ class SafProperty(SafObject):
 
 MISSING: Any = object()
 null = SafNull()
-true = BoolSafBaseObject(True)
-false = BoolSafBaseObject(False)
+true = SafBool(True)
+false = SafBool(False)
 
 
 class SafDict(SafObject):
@@ -1013,7 +1022,9 @@ class SafDict(SafObject):
         return self.get(ctx, key, default)
 
     @public_method("get")
-    def get(self, ctx: NativeContext, key: SafBaseObject, default: SafBaseObject = null) -> SafBaseObject:
+    def get(
+        self, ctx: NativeContext, key: SafBaseObject, default: SafBaseObject = null
+    ) -> SafBaseObject:
         try:
             return self.data[key.str_spec(ctx)]
         except KeyError:
@@ -1022,7 +1033,9 @@ class SafDict(SafObject):
             return default
 
     @public_method("set")
-    def set(self, ctx: NativeContext, key: SafBaseObject, value: SafBaseObject) -> SafBaseObject:
+    def set(
+        self, ctx: NativeContext, key: SafBaseObject, value: SafBaseObject
+    ) -> SafBaseObject:
         self.data[key.repr_spec(ctx)] = value
         return value
 
@@ -1042,7 +1055,10 @@ class SafDict(SafObject):
 
     @public_method("pop")
     def pop(
-        self, ctx: NativeContext, key: SafBaseObject, default: SafBaseObject | None = None
+        self,
+        ctx: NativeContext,
+        key: SafBaseObject,
+        default: SafBaseObject | None = None,
     ) -> SafBaseObject:
         try:
             return self.data.pop(key.repr_spec(ctx))
@@ -1060,233 +1076,8 @@ class SafDict(SafObject):
         return SafNum(int(key in self.data))
 
     @spec_meth("bool")
-    def bool(self, ctx: NativeContext) -> BoolSafBaseObject:
-        return BoolSafBaseObject(self.data)
-
-
-# region Regex
-
-
-class SafPattern(SafObject):
-    def __init__(self, pattern: re.Pattern[str]) -> None:
-        super().__init__("regex pattern")
-
-        self.pattern = pattern
-
-    @spec_meth("repr")
-    def repr(self, ctx: NativeContext) -> SafStr:
-        return SafStr(f"<regex pattern {self.pattern!r}>")
-
-    @spec_meth("str")
-    def str(self, ctx: NativeContext) -> SafStr:
-        return self.get_pattern_prop(ctx)
-
-    @public_property("pattern")
-    def get_pattern_prop(self, ctx: NativeContext) -> SafStr:
-        return SafStr(self.pattern.pattern)
-
-    @public_method("search")
-    def search(
-        self, ctx: NativeContext, sub: SafBaseObject, start: SafBaseObject = null, end: SafBaseObject = null
-    ) -> SafMatch | SafNull:
-        if not isinstance(sub, SafStr):
-            raise SafulateTypeError(
-                f"Expected str for substring, got {sub.repr_spec(ctx)} instead"
-            )
-        if not isinstance(start, SafNull | SafNum):
-            raise SafulateTypeError(
-                f"Expected num or null for start pos, got {start.repr_spec(ctx)} instead"
-            )
-        if not isinstance(end, SafNull | SafNum):
-            raise SafulateTypeError(
-                f"Expected num or null for end pos, got {end.repr_spec(ctx)} instead"
-            )
-
-        match = self.pattern.search(
-            sub.value,
-            0 if isinstance(start, SafNull) else int(start.value),
-            sys.maxsize if isinstance(end, SafNull) else int(end.value),
-        )
-        if match is None:
-            return null
-
-        return SafMatch(match, self)
-
-    @public_method("match")
-    def match(
-        self, ctx: NativeContext, sub: SafBaseObject, start: SafBaseObject = null, end: SafBaseObject = null
-    ) -> SafMatch | SafNull:
-        if not isinstance(sub, SafStr):
-            raise SafulateTypeError(
-                f"Expected str for substring, got {sub.repr_spec(ctx)} instead"
-            )
-        if not isinstance(start, SafNull | SafNum):
-            raise SafulateTypeError(
-                f"Expected num or null for start pos, got {start.repr_spec(ctx)} instead"
-            )
-        if not isinstance(end, SafNull | SafNum):
-            raise SafulateTypeError(
-                f"Expected num or null for end pos, got {end.repr_spec(ctx)} instead"
-            )
-
-        match = self.pattern.match(
-            sub.value,
-            0 if isinstance(start, SafNull) else int(start.value),
-            sys.maxsize if isinstance(end, SafNull) else int(end.value),
-        )
-        if match is None:
-            return null
-
-        return SafMatch(match, self)
-
-    @public_method("fullmatch")
-    def fullmatch(
-        self, ctx: NativeContext, sub: SafBaseObject, start: SafBaseObject = null, end: SafBaseObject = null
-    ) -> SafMatch | SafNull:
-        if not isinstance(sub, SafStr):
-            raise SafulateTypeError(
-                f"Expected str for substring, got {sub.repr_spec(ctx)} instead"
-            )
-        if not isinstance(start, SafNull | SafNum):
-            raise SafulateTypeError(
-                f"Expected num or null for start pos, got {start.repr_spec(ctx)} instead"
-            )
-        if not isinstance(end, SafNull | SafNum):
-            raise SafulateTypeError(
-                f"Expected num or null for end pos, got {end.repr_spec(ctx)} instead"
-            )
-
-        match = self.pattern.fullmatch(
-            sub.value,
-            0 if isinstance(start, SafNull) else int(start.value),
-            sys.maxsize if isinstance(end, SafNull) else int(end.value),
-        )
-        if match is None:
-            return null
-
-        return SafMatch(match, self)
-
-    @public_method("find_all")
-    def find_all(
-        self, ctx: NativeContext, sub: SafBaseObject, start: SafBaseObject = null, end: SafBaseObject = null
-    ) -> SafList:
-        if not isinstance(sub, SafStr):
-            raise SafulateTypeError(
-                f"Expected str for sub, got {sub.repr_spec(ctx)} instead"
-            )
-        if not isinstance(start, SafNull | SafNum):
-            raise SafulateTypeError(
-                f"Expected num or null for start pos, got {start.repr_spec(ctx)} instead"
-            )
-        if not isinstance(end, SafNull | SafNum):
-            raise SafulateTypeError(
-                f"Expected num or null for end pos, got {end.repr_spec(ctx)} instead"
-            )
-
-        return SafList(
-            [
-                SafMatch(match, self)
-                for match in self.pattern.findall(
-                    sub.value,
-                    0 if isinstance(start, SafNull) else int(start.value),
-                    sys.maxsize if isinstance(end, SafNull) else int(end.value),
-                )
-            ]
-        )
-
-    @public_method("split")
-    def split(self, ctx: NativeContext, sub: SafBaseObject, max: SafBaseObject = null) -> SafBaseObject:
-        if not isinstance(sub, SafStr):
-            raise SafulateTypeError(
-                f"Expected str for sub, got {sub.repr_spec(ctx)} instead"
-            )
-        if not isinstance(max, SafNum | SafNull):
-            raise SafulateTypeError(
-                f"Expected str for max, got {max.repr_spec(ctx)} instead"
-            )
-
-        return SafList(
-            [
-                SafStr(val)
-                for val in self.pattern.split(
-                    sub.value, 0 if isinstance(max, SafNull) else 1
-                )
-            ]
-        )
-
-    # @public_method("sub")
-    # def sub(self, ctx: NativeContext, sub: SafBaseObject) -> SafBaseObject:
-    #     if not isinstance(sub, SafStr):
-    #         raise SafulateTypeError(f"Expected str for sub, got {sub.repr_spec(ctx)} instead")
-    #     self.pattern.sub()
-
-    @public_property("groups")
-    def groups(self, ctx: NativeContext) -> SafList:
-        return SafList([SafStr(group) for group in self.pattern.groupindex])
-
-
-class SafMatch(SafObject):
-    def __init__(self, match: re.Match[str], pattern: SafPattern) -> None:
-        super().__init__("regex match")
-
-        self.match = match
-        self.pattern = pattern
-
-    @spec_meth("repr")
-    def repr(self, ctx: NativeContext) -> SafStr:
-        return SafStr(f"<Match groups={self.groups(ctx).repr_spec(ctx)}>")
-
-    @public_property("pattern")
-    def get_pattern_prop(self, ctx: NativeContext) -> SafPattern:
-        return self.pattern
-
-    @public_property("start_pos")
-    def start_pos(self, ctx: NativeContext) -> SafNum:
-        return SafNum(self.match.pos)
-
-    @public_property("end_pos")
-    def end_pos(self, ctx: NativeContext) -> SafNum:
-        return SafNum(self.match.endpos)
-
-    @public_method("groups")
-    def groups(self, ctx: NativeContext) -> SafList:
-        return SafList(
-            [
-                SafStr(val) if isinstance(val, str) else null
-                for val in self.match.groups()
-            ]
-        )
-
-    @public_method("as_dict")
-    def as_dict(self, ctx: NativeContext) -> SafDict:
-        return SafDict(
-            {
-                item.value[0].str_spec(ctx): item.value[1]
-                for item in self.groups(ctx).value
-                if isinstance(item, SafList)
-            }
-        )
-
-    @spec_meth("iter")
-    def iter(self, ctx: NativeContext) -> SafList:
-        return self.groups(ctx)
-
-    @spec_meth("bool")
-    def bool(self, ctx: NativeContext) -> BoolSafBaseObject:
-        return BoolSafBaseObject(self.match)
-
-    @spec_meth("altcall")
-    def altcall(self, ctx: NativeContext, key: SafBaseObject) -> SafBaseObject:
-        match key:
-            case SafStr():
-                val = self.match[key.value]
-                return SafStr(val) if isinstance(val, str) else null
-            case SafNum():
-                return self.groups(ctx).value[int(key.value)]
-            case _:
-                raise SafulateTypeError(
-                    f"Expected num or str, got {key.repr_spec(ctx)} instead"
-                )
+    def bool(self, ctx: NativeContext) -> SafBool:
+        return SafBool(self.data)
 
 
 # region Error

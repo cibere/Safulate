@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from types import TracebackType
     from typing import Literal
 
-    from .objects import SafPythonError, SafBaseObject
+    from .objects import SafBaseObject, SafPythonError
 
 T = TypeVar("T")
 

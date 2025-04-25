@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import Any, Self
 
 from .errors import SafulateAttributeError, SafulateNameError, SafulateScopeError
+from .objects import SafBaseObject, SafFunc, null
 from .tokens import Token
-from .objects import SafFunc, SafBaseObject, null
 
 __all__ = ("Environment",)
 
