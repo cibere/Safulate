@@ -4,7 +4,7 @@ from typing import Any, Self
 
 from .errors import SafulateAttributeError, SafulateNameError, SafulateScopeError
 from .tokens import Token
-from .values import SafFunc, SafBaseObject, null
+from .objects import SafFunc, SafBaseObject, null
 
 __all__ = ("Environment",)
 

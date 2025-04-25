@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from types import TracebackType
     from typing import Literal
 
-    from .values import SafPythonError, SafBaseObject
+    from .objects import SafPythonError, SafBaseObject
 
 T = TypeVar("T")
 
@@ -109,7 +109,7 @@ class SafulateError(BaseException):
 
     @cached_property
     def saf_value(self) -> SafPythonError:
-        from .values import SafPythonError, null
+        from .objects import SafPythonError, null
 
         return SafPythonError(error=self.name, msg=self.msg, obj=self.obj or null)
 

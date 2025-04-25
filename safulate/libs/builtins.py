@@ -15,7 +15,7 @@ from safulate import (
     null,
     true,
 )
-from safulate.values import public_method
+from safulate.objects import public_method
 
 
 class Builtins(SafObject):

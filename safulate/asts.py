@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .tokens import Token
-    from .values import SafBaseObject
+    from .objects import SafBaseObject
 
 __all__ = (
     "ASTAssign",

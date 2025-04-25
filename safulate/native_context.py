@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, cast
 
 from .errors import ErrorManager, SafulateError, SafulateTypeError
-from .values import (
+from .objects import (
     SafDict,
     SafFunc,
     SafList,

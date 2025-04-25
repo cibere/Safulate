@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .errors import SafulateImportError
-from .values import SafObject
+from .objects import SafObject
 
 if TYPE_CHECKING:
     from .native_context import NativeContext
