@@ -5,10 +5,9 @@ import sys
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable
-from enum import Enum
 from typing import TYPE_CHECKING, Any, Concatenate, TypeVar, cast, final
 
-from .asts import ASTBlock, ASTNode
+from .asts import ASTBlock, ASTFuncDecl_Param, ASTFuncDecl_ParamType
 from .errors import (
     SafulateAttributeError,
     SafulateIndexError,
@@ -792,17 +791,11 @@ class ListValue(ObjectValue):
         return NumValue(len(self.value))
 
 
-class SpecialFuncParams(Enum):
-    kwargs_only = 1
-    args_only = 2
-    both = 3
-
-
 class FuncValue(ObjectValue):
     def __init__(
         self,
-        name: Token,
-        params: list[tuple[Token, ASTNode | Value | None]] | SpecialFuncParams,
+        name: Token | None,
+        params: list[ASTFuncDecl_Param],
         body: ASTBlock | Callable[Concatenate[NativeContext, ...], Value],
         parent: Value | None = None,
         extra_vars: dict[str, Value] | None = None,
@@ -819,73 +812,81 @@ class FuncValue(ObjectValue):
         self.partial_args = partial_args or ()
         self.partial_kwargs = partial_kwargs or {}
 
-    @property
-    def arity(self) -> int:
-        if isinstance(self.params, SpecialFuncParams):
-            return -1
-        return len(self.params)
-
-    @cached_property
-    def required_args(self) -> list[tuple[Token, None]]:
-        if isinstance(self.params, SpecialFuncParams):
-            return []
-        return [(arg, default) for arg, default in self.params if default is None]
-
     def _validate_params(
-        self, ctx: NativeContext, *args: Value, **kwargs: Value
+        self, ctx: NativeContext, *init_args: Value, **kwargs: Value
     ) -> dict[str, Value]:
-        match self.params:
-            case SpecialFuncParams.args_only:
-                if kwargs:
-                    raise SafulateValueError(
-                        f"Function {self.name.lexeme!r} does not support keyword arguments",
-                    )
-                return {}
-            case SpecialFuncParams.kwargs_only:
-                if args:
-                    raise SafulateValueError(
-                        f"Function {self.name.lexeme!r} does not support positional arguments",
-                    )
-                return {}
-            case SpecialFuncParams.both:
-                return {}
-            case _:
-                pass
-
         params = self.params.copy()
+        args = list(init_args)
         passable_params: dict[str, Value] = {}
 
-        for arg in args:
-            try:
-                (param, _default) = params.pop(0)
-            except IndexError:
-                raise SafulateValueError(
-                    f"Extra positional argument was passed: {arg.repr_spec(ctx)}"
+        for param in params:
+            if param.type is ASTFuncDecl_ParamType.vararg:
+                passable_params[param.name.lexeme] = ListValue(args)
+                args = []
+            elif param.type is ASTFuncDecl_ParamType.varkwarg:
+                passable_params[param.name.lexeme] = DictValue(kwargs)
+                kwargs = {}
+            elif args:
+                if not param.is_arg:
+                    raise SafulateValueError(
+                        f"Extra positional argument was passed: {args[0].repr_spec(ctx)}"
+                    )
+                arg = args.pop(0)
+                passable_params[param.name.lexeme] = arg
+            elif kwargs:
+                if not param.is_kwarg:
+                    if param.default is None:
+                        raise SafulateValueError(
+                            f"Required positional argument was not passed: {param.name.lexeme!r}"
+                        )
+                    passable_params[param.name.lexeme] = (
+                        param.default
+                        if isinstance(param.default, Value)
+                        else param.default.visit(ctx.interpreter)
+                    )
+                else:
+                    if param.name.lexeme not in kwargs:
+                        if param.default is None:
+                            arg_type = {
+                                ASTFuncDecl_ParamType.kwarg: "keyword ",
+                                ASTFuncDecl_ParamType.arg: "positional ",
+                            }.get(param.type, "")
+                            raise SafulateValueError(
+                                f"Required {arg_type}argument was not passed: {param.name.lexeme!r}"
+                            )
+                        else:
+                            passable_params[param.name.lexeme] = (
+                                param.default
+                                if isinstance(param.default, Value)
+                                else param.default.visit(ctx.interpreter)
+                            )
+                    else:
+                        passable_params[param.name.lexeme] = kwargs.pop(
+                            param.name.lexeme
+                        )
+            else:
+                if param.default is None:
+                    arg_type = {
+                        ASTFuncDecl_ParamType.kwarg: "keyword ",
+                        ASTFuncDecl_ParamType.arg: "positional ",
+                    }.get(param.type, "")
+                    raise SafulateValueError(
+                        f"Required {arg_type}argument was not passed: {param.name.lexeme!r}"
+                    )
+                passable_params[param.name.lexeme] = (
+                    param.default
+                    if isinstance(param.default, Value)
+                    else param.default.visit(ctx.interpreter)
                 )
 
-            passable_params[param.lexeme] = arg
-
-        for kwarg, value in kwargs.items():
-            param = [p for p in params if p[0].lexeme == kwarg]
-            if not param:
-                raise SafulateValueError(
-                    f"Unknown Keyword argument {kwarg!r}",
-                )
-
-            params.remove(param[0])
-            passable_params[kwarg] = value
-
-        for param, default in params:
-            if default is None:
-                raise SafulateValueError(
-                    f"Required argument {param.lexeme!r} was not passed",
-                )
-            passable_params[param.lexeme] = (
-                default.visit(ctx.interpreter)
-                if isinstance(default, ASTNode)
-                else default
+        if args:
+            raise SafulateValueError(
+                f"Received {len(args)} extra positional argument(s)."
             )
-
+        if kwargs:
+            raise SafulateValueError(
+                f"Recieved {len(kwargs)} extra keyword argument(s): {', '.join(kwargs.keys())}"
+            )
         return passable_params
 
     @spec_meth("altcall")
@@ -942,27 +943,23 @@ class FuncValue(ObjectValue):
         cls, name: str, callback: Callable[Concatenate[NativeContext, ...], Value]
     ) -> FuncValue:
         raw_params = list(inspect.signature(callback).parameters.values())
-        if (
-            len(raw_params) > 2
-            and raw_params[1].kind is raw_params[1].VAR_POSITIONAL
-            and raw_params[2].kind is raw_params[2].VAR_KEYWORD
-        ):
-            params = SpecialFuncParams.both
-        elif len(raw_params) > 1 and raw_params[1].kind is raw_params[1].VAR_POSITIONAL:
-            params = SpecialFuncParams.args_only
-        elif len(raw_params) > 1 and raw_params[1].kind is raw_params[1].VAR_KEYWORD:
-            params = SpecialFuncParams.kwargs_only
-        else:
-            params = [
-                (
-                    Token(TokenType.ID, param.name, -1),
-                    None if param.default is param.empty else param.default,
-                )
-                for param in raw_params
-            ][1:]
+
         return FuncValue(
             name=Token(TokenType.ID, name, -1),
-            params=params,
+            params=[
+                ASTFuncDecl_Param(
+                    name=Token(TokenType.ID, param.name, -1),
+                    default=None if param.default is param.empty else param.default,
+                    type={
+                        param.VAR_POSITIONAL: ASTFuncDecl_ParamType.vararg,
+                        param.VAR_KEYWORD: ASTFuncDecl_ParamType.varkwarg,
+                        param.POSITIONAL_ONLY: ASTFuncDecl_ParamType.arg,
+                        param.KEYWORD_ONLY: ASTFuncDecl_ParamType.kwarg,
+                        param.POSITIONAL_OR_KEYWORD: ASTFuncDecl_ParamType.arg_or_kwarg,
+                    }[param.kind],
+                )
+                for param in raw_params
+            ][1:],
             body=callback,
         )
 

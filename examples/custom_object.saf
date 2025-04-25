@@ -1,11 +1,28 @@
-var x = object();
+# creating an object in one go
 
-x ~ {
-    var name = "foo";
+{
+    pub x = object() ~ {
+        pub name = "foo";
 
-    func print_name(){
-        print(parent.name);
-    }
+        pub print_name(){
+            print(parent.name);
+        };
+    };
+
+    x.print_name(); # prints "foo"
 }
 
-x.print_name(); # prints "foo"
+# creating an object via a predefined struct
+
+{
+    struct my_struct(){
+        pub name = "foo";
+
+        pub print_name(){
+            print(parent.name);
+        };
+    };
+
+    pub x = my_struct();
+    x.print_name(); # prints "foo"
+}

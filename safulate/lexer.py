@@ -80,6 +80,8 @@ class Lexer:
             TokenType.TRY,
             TokenType.CONTINUE,
             TokenType.HAS,
+            TokenType.PUB,
+            TokenType.PRIV,
         )
     }
 

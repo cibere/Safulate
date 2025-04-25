@@ -113,8 +113,9 @@ class SafulateError(BaseException):
 
         return NativeErrorValue(error=self.name, msg=self.msg, obj=self.obj or null)
 
-    def _make_subreport(self, entry: TokenEntry, src: str) -> str:
+    def _make_subreport(self, entry: TokenEntry, src: str, filename: str | None) -> str:
         src = entry.source or src
+        filename = entry.filename or filename
 
         line = src[: entry.token.start].count("\n") + 1
         if line > 1:
@@ -124,7 +125,7 @@ class SafulateError(BaseException):
 
         src = src.splitlines()[line - 1]
         ws = len(src) - len(src.lstrip())
-        file_prefix = f"File {entry.filename!r}, " if entry.filename else ""
+        file_prefix = f"File {filename!r}, " if filename else ""
         res = f"\033[31m{file_prefix}Line {line}, col {col}\n\033[36m{line:>5} | \033[0m{src.lstrip()}\n"
         res += (
             "\033[36m  "
@@ -136,9 +137,12 @@ class SafulateError(BaseException):
         )
         return res
 
-    def make_report(self, source: str) -> str:
+    def make_report(self, src: str, *, filename: str | None = None) -> str:
         return (
-            "\n".join(self._make_subreport(token, source) for (token) in self.tokens)
+            "\n".join(
+                self._make_subreport(token, src=src, filename=filename)
+                for (token) in self.tokens
+            )
             + "\033[31m\n"
             + self.name
             + ": "
@@ -146,8 +150,8 @@ class SafulateError(BaseException):
             + "\033[0m"
         )
 
-    def print_report(self, source: str) -> None:
-        print(self.make_report(source))
+    def print_report(self, source: str, *, filename: str | None = None) -> None:
+        print(self.make_report(source, filename=filename))
 
 
 class SafulateNameError(SafulateError):

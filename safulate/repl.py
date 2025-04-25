@@ -40,18 +40,22 @@ def code_to_ast(
 
 
 def run_code(
-    source: str, *, opts: Options | None = None, interpreter: TreeWalker | None = None
+    source: str,
+    *,
+    opts: Options | None = None,
+    interpreter: TreeWalker | None = None,
+    filename: str | None = None,
 ) -> Value:
     try:
         return code_to_ast(source, opts=opts).visit(interpreter or TreeWalker())
     except SafulateError as error:
-        error.print_report(source)
+        error.print_report(source, filename=filename)
         raise
 
 
-def run_file(filename: Path, *, opts: Options | None = None) -> None:
-    source = filename.read_text()
-    run_code(source, opts=opts)
+def run_file(path: Path, *, opts: Options | None = None) -> None:
+    source = path.read_text()
+    run_code(source, opts=opts, filename=path.absolute().as_posix())
 
 
 def start_repl_session(opts: Options) -> None:

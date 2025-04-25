@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from enum import Enum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .tokens import SoftKeyword, Token
+    from .tokens import Token
     from .values import Value
 
 __all__ = (
@@ -22,6 +23,8 @@ __all__ = (
     "ASTForLoop",
     "ASTFormat",
     "ASTFuncDecl",
+    "ASTFuncDecl_Param",
+    "ASTFuncDecl_ParamType",
     "ASTIf",
     "ASTImportReq",
     "ASTList",
@@ -59,18 +62,48 @@ class ASTProgram(ASTNode):
 class ASTVarDecl(ASTNode):
     name: Token
     value: ASTNode | None
-    kw: SoftKeyword
+    keyword: Token
 
     def visit(self, visitor: ASTVisitor) -> Value:
         return visitor.visit_var_decl(self)
 
 
+class ASTFuncDecl_ParamType(Enum):
+    vararg = 1
+    varkwarg = 2
+    arg = 3
+    kwarg = 4
+    arg_or_kwarg = 5
+
+
+@dataclass
+class ASTFuncDecl_Param:
+    name: Token
+    default: ASTNode | None | Value
+    type: ASTFuncDecl_ParamType
+
+    @property
+    def is_arg(self) -> bool:
+        return (
+            self.type is ASTFuncDecl_ParamType.arg
+            or self.type is ASTFuncDecl_ParamType.arg_or_kwarg
+        )
+
+    @property
+    def is_kwarg(self) -> bool:
+        return (
+            self.type is ASTFuncDecl_ParamType.kwarg
+            or self.type is ASTFuncDecl_ParamType.arg_or_kwarg
+        )
+
+
 @dataclass
 class ASTFuncDecl(ASTNode):
-    name: Token
-    params: list[tuple[Token, ASTNode | None]]
+    name: Token | None
+    params: list[ASTFuncDecl_Param]
     body: ASTBlock
-    soft_kw: SoftKeyword
+
+    scope_token: Token | None
     kw_token: Token
     paren_token: Token
 

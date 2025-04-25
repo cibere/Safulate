@@ -73,6 +73,8 @@ class TokenType(Enum):
     TRY = "try"
     HAS = "has"
     CONTINUE = "continue"
+    PUB = "pub"
+    PRIV = "priv"
 
 
 class SoftKeyword(Enum):
@@ -81,8 +83,6 @@ class SoftKeyword(Enum):
     CATCH = "catch"
     AS = "as"
     CASE = "case"
-    PUB = "pub"
-    PRIV = "priv"
     SPEC = "spec"
     STRUCT = "struct"
     PROP = "prop"

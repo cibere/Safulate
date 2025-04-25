@@ -17,6 +17,8 @@ from .asts import (
     ASTForLoop,
     ASTFormat,
     ASTFuncDecl,
+    ASTFuncDecl_Param,
+    ASTFuncDecl_ParamType,
     ASTIf,
     ASTImportReq,
     ASTList,
@@ -129,10 +131,16 @@ class Parser:
     def check_after_next(self, *types: TokenType | SoftKeyword) -> bool:
         return any(self.compare(self.tokens[self.current + 2], type) for type in types)
 
-    def check_sequence(self, *types: TokenType | SoftKeyword) -> bool:
+    def check_sequence(
+        self, *types: TokenType | SoftKeyword | tuple[TokenType | SoftKeyword, ...]
+    ) -> bool:
         try:
-            for idx, typ in enumerate(types):
-                if not self.compare(self.tokens[self.current + idx], typ):
+            for idx, entry in enumerate(types):
+                if not isinstance(entry, tuple):
+                    entry = (entry,)
+                if not any(
+                    self.compare(self.tokens[self.current + idx], typ) for typ in entry
+                ):
                     return False
         except IndexError:
             return False
@@ -142,13 +150,21 @@ class Parser:
         if self.check(*types):
             return self.advance()
 
-    def consume(self, type: TokenType | SoftKeyword, msg: str) -> Token:
+    def consume(
+        self,
+        types: TokenType | SoftKeyword | tuple[TokenType | SoftKeyword, ...],
+        msg: str,
+    ) -> Token:
         token = self.advance()
 
-        if not self.compare(token, type):
-            raise SafulateSyntaxError(msg, token)
+        if not isinstance(types, tuple):
+            types = (types,)
 
-        return token
+        for typ in types:
+            if self.compare(token, typ):
+                return token
+
+        raise SafulateSyntaxError(msg, token)
 
     def binary_op(
         self, next_prec: Callable[[], ASTNode], *types: TokenType | SoftKeyword
@@ -157,7 +173,9 @@ class Parser:
 
         while True:
             op = self.match(*types)
-            if op:
+            if op and op.type is TokenType.TILDE:
+                return ASTEditObject(left, self.block())
+            elif op:
                 right = next_prec()
 
                 left = ASTBinary(left, op, right)
@@ -168,75 +186,66 @@ class Parser:
         stmts: list[ASTNode] = []
 
         while not self.check(TokenType.EOF):
-            stmts.append(self.decl())
+            stmts.append(self.stmt())
 
         return ASTProgram(stmts)
 
-    def decl(self) -> ASTNode:
-        if (
-            self.check(SoftKeyword.PUB, SoftKeyword.PRIV)
-            and self.check_next(TokenType.ID)
-            and self.check_after_next(TokenType.EQ, TokenType.SEMI)
-        ):
-            return self.var_decl()
-        elif (
-            self.check(
-                SoftKeyword.PUB,
-                SoftKeyword.PRIV,
-                SoftKeyword.STRUCT,
-                SoftKeyword.PROP,
-                SoftKeyword.SPEC,
-            )
-            and self.check_next(TokenType.ID)
-            and self.check_after_next(TokenType.LPAR)
-        ):
-            return self.func_decl()
-        elif self.check_next(TokenType.TILDE):
-            return self.edit_object()
-
-        return self.stmt()
-
     def var_decl(self) -> ASTNode:
-        kw_token = self.advance()
-
-        try:
-            soft_kw = SoftKeyword(kw_token.lexeme)
-        except ValueError:
-            raise RuntimeError(
-                f"Unknown var declaration keyword type: {kw_token!r}"
-            ) from None
+        kw_token = self.consume(
+            (TokenType.PUB, TokenType.PRIV), "Expected var decl keyword"
+        )
 
         name = self.consume(TokenType.ID, "Expected variable name")
         if not self.check(TokenType.EQ):
-            self.consume(TokenType.SEMI, "Expected assignment or ';'")
-            return ASTVarDecl(name=name, value=None, kw=soft_kw)
+            return ASTVarDecl(name=name, value=None, keyword=kw_token)
 
         self.consume(TokenType.EQ, "Expected '='")
         value = self.expr()
-        self.consume(TokenType.SEMI, "Expected ';'")
 
-        return ASTVarDecl(name=name, value=value, kw=soft_kw)
+        return ASTVarDecl(name=name, value=value, keyword=kw_token)
 
-    def func_decl(self) -> ASTNode:
-        kw_token = self.advance()
+    def func_decl(self, *, named: bool = True) -> ASTNode:
+        if named:
+            scope_token = self.match(TokenType.PUB, TokenType.PRIV)
+            kw_token = self.match(SoftKeyword.STRUCT, SoftKeyword.PROP) or scope_token
+            assert kw_token
+            name = self.consume(TokenType.ID, "Expected function name")
+        else:
+            scope_token = None
+            kw_token = self.advance()
+            name = None
 
-        name = self.consume(TokenType.ID, "Expected function name")
         paren_token = self.consume(TokenType.LPAR, "Expected '('")
 
-        params: list[tuple[Token, ASTNode | None]] = []
+        params: list[ASTFuncDecl_Param] = []
         defaulted = False
+        first_captured = bool(self.check(TokenType.RPAR))
+        vararg_reached = varkwarg_reached = False
 
-        if self.check(TokenType.ID):
-            arg = self.advance()
-            default = None
-            if self.match(TokenType.EQ):
-                defaulted = True
-                default = self.expr()
-            params.append((arg, default))
+        while first_captured is False or (self.check(TokenType.COMMA)):
+            if first_captured:
+                self.consume(TokenType.COMMA, "Expected ','")
+            first_captured = True
 
-        while self.check(TokenType.COMMA) and self.check_next(TokenType.ID):
-            self.advance()
-            arg = self.advance()
+            if varkwarg_reached:
+                raise SafulateSyntaxError("No params can follow varkwarg", self.peek())
+
+            param_type = (
+                ASTFuncDecl_ParamType.kwarg
+                if vararg_reached
+                else ASTFuncDecl_ParamType.arg_or_kwarg
+            )
+            if self.check_sequence(TokenType.DOT, TokenType.DOT):
+                self.consume(TokenType.DOT, "Expected '.'")
+                self.consume(TokenType.DOT, "Expected '.'")
+                if self.match(TokenType.DOT):
+                    param_type = ASTFuncDecl_ParamType.varkwarg
+                    varkwarg_reached = True
+                else:
+                    vararg_reached = True
+                    param_type = ASTFuncDecl_ParamType.vararg
+
+            param_name = self.consume(TokenType.ID, "Expected name of arg")
             default = None
             if self.match(TokenType.EQ):
                 defaulted = True
@@ -246,7 +255,9 @@ class Parser:
                     "Non-default arg following a default arg", self.peek()
                 )
 
-            params.append((arg, default))
+            params.append(
+                ASTFuncDecl_Param(name=param_name, default=default, type=param_type)
+            )
 
         self.consume(TokenType.RPAR, "Expected ')'")
 
@@ -265,18 +276,16 @@ class Parser:
         body = self.block()
 
         try:
-            soft_kw = SoftKeyword(kw_token.lexeme)
+            decl_kw = SoftKeyword(kw_token.lexeme)
         except ValueError:
-            raise RuntimeError(
-                f"Unknown func declaration keyword type: {kw_token!r}"
-            ) from None
+            decl_kw = kw_token.type
 
-        match soft_kw:
+        match decl_kw:
             case SoftKeyword.STRUCT:
                 func = ASTFuncDecl(
                     name=name,
                     params=params,
-                    soft_kw=SoftKeyword.PUB,
+                    scope_token=scope_token,
                     kw_token=kw_token,
                     paren_token=paren_token,
                     body=ASTBlock(
@@ -303,7 +312,9 @@ class Parser:
                                                     name.start,
                                                 )
                                             )
-                                        ],
+                                        ]
+                                        if name
+                                        else [],
                                         kwargs={},
                                     ),
                                     block=body,
@@ -317,18 +328,20 @@ class Parser:
                     raise SafulateSyntaxError("Properties can't take arguments")
                 if decos:
                     raise SafulateSyntaxError("Properties can't take decorators")
+                if name is None:
+                    raise SafulateSyntaxError("Properties must have a name")
                 return ASTProperty(body=body, name=name)
-            case SoftKeyword.PRIV | SoftKeyword.SPEC | SoftKeyword.PUB:
+            case TokenType.PRIV | SoftKeyword.SPEC | TokenType.PUB:
                 func = ASTFuncDecl(
                     name=name,
                     params=params,
                     body=body,
-                    soft_kw=soft_kw,
+                    scope_token=scope_token,
                     kw_token=kw_token,
                     paren_token=paren_token,
                 )
             case _:
-                raise RuntimeError(f"Unknown keyword for func declaration: {soft_kw!r}")
+                raise RuntimeError(f"Unknown keyword for func declaration: {decl_kw!r}")
 
         if not decos:
             return func
@@ -346,18 +359,14 @@ class Parser:
                 kwargs={},
             )
 
-        return ASTVarDecl(
-            name=name,
-            value=func,
-            kw=soft_kw if soft_kw is SoftKeyword.PRIV else SoftKeyword.PUB,
-        )
-
-    def edit_object(self) -> ASTNode:
-        obj = self.version()
-        self.consume(TokenType.TILDE, "Expected '~'")
-        body = self.block()
-
-        return ASTEditObject(obj, body)
+        if name:
+            return ASTVarDecl(
+                name=name,
+                value=func,
+                keyword=scope_token or Token(TokenType.PUB, "pub", kw_token.start),
+            )
+        else:
+            return func
 
     def stmt(self) -> ASTNode:
         if self.check(TokenType.LBRC):
@@ -458,7 +467,7 @@ class Parser:
                         *[
                             ASTVarDecl(
                                 name=name,
-                                kw=SoftKeyword.PUB,
+                                keyword=Token(TokenType.PUB, "pub", kwd.start),
                                 value=ASTAttr(expr=ASTAtom(name_token), attr=name),
                             )
                             for name in names
@@ -544,12 +553,46 @@ class Parser:
         self.consume(TokenType.LBRC, "Expected '{'")
         stmts: list[ASTNode] = []
         while not self.check(TokenType.RBRC):
-            stmts.append(self.decl())
+            stmts.append(self.stmt())
 
         self.consume(TokenType.RBRC, "Expected '}'")
         return ASTBlock(stmts)
 
     def expr(self) -> ASTNode:
+        if self.check_sequence(
+            (TokenType.PUB, TokenType.PRIV),
+            TokenType.ID,
+            (TokenType.EQ, TokenType.SEMI),
+        ):
+            return self.var_decl()
+        elif self.check_sequence(
+            (
+                TokenType.PUB,
+                TokenType.PRIV,
+                SoftKeyword.STRUCT,
+                SoftKeyword.PROP,
+                SoftKeyword.SPEC,
+            ),
+            TokenType.ID,
+            TokenType.LPAR,
+        ) or self.check_sequence(
+            (
+                TokenType.PUB,
+                TokenType.PRIV,
+            ),
+            (
+                SoftKeyword.STRUCT,
+                SoftKeyword.PROP,
+            ),
+            TokenType.ID,
+            TokenType.LPAR,
+        ):
+            return self.func_decl()
+        elif self.check_sequence(
+            TokenType.PUB,
+            TokenType.LPAR,
+        ):
+            return self.func_decl(named=False)
         return self.assign()
 
     def assign(self) -> ASTNode:
@@ -607,6 +650,7 @@ class Parser:
             TokenType.HAS,
             TokenType.AMP,
             TokenType.PIPE,
+            TokenType.TILDE,
         )
 
     def equality(self) -> ASTNode:
