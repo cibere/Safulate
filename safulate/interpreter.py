@@ -69,7 +69,7 @@ from .objects import (
     SafType,
     null,
 )
-from .py_libs import LibManager
+from .lib_manager import LibManager
 from .tokens import SoftKeyword, Token, TokenType
 
 if TYPE_CHECKING:

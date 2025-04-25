@@ -6,5 +6,5 @@ from .lexer import *
 from .native_context import *
 from .objects import *
 from .parser import *
-from .py_libs import *
+from .lib_manager import *
 from .repl import *
