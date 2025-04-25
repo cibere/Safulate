@@ -58,7 +58,7 @@ from .errors import (
 from .native_context import NativeContext
 from .py_libs import LibManager
 from .tokens import SoftKeyword, Token, TokenType
-from .values import (
+from .objects import (
     SafDict,
     SafFunc,
     SafList,
