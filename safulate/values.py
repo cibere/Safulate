@@ -936,7 +936,8 @@ class FuncValue(ObjectValue):
 
     @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> StrValue:
-        return StrValue(f"<func {self.name.lexeme!r}>")
+        suffix = f" {self.name.lexeme!r}" if self.name else ""
+        return StrValue(f"<func{suffix}>")
 
     @classmethod
     def from_native(
