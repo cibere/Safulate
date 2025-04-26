@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
+
+from packaging.version import InvalidVersion
+from packaging.version import Version as _PackagingVersion
 
 from .asts import (
     ASTAssign,
@@ -32,7 +36,6 @@ from .asts import (
     ASTTryCatch_CatchBranch,
     ASTUnary,
     ASTVarDecl,
-    ASTVersion,
     ASTVersionReq,
     ASTWhile,
     ParamType,
@@ -42,6 +45,10 @@ from .tokens import SoftKeyword, Token, TokenType
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+require_version_pattern = re.compile(
+    r"v(?P<major>[0-9]+)\.(?P<minor>[0-9]+|x)(?:\.(?P<micro>[0-9]+))?"
+)
 
 
 class Parser:
@@ -398,70 +405,8 @@ class Parser:
             expr = None if self.check(TokenType.SEMI) else self.expr()
             self.consume(TokenType.SEMI, "Expected ';'")
             return ASTContinue(kwd, expr)
-        elif kwd := self.match(TokenType.REQ):
-            names: list[Token] | Token | None = None
-            specific_import_open_paren = self.peek()
-            if specific_import_open_paren := self.match(TokenType.LPAR):
-                names = []
-                names.append(self.consume(TokenType.ID, "Expected ID"))
-
-                while self.check(TokenType.COMMA) and self.check_next(TokenType.ID):
-                    self.advance()
-                    names.append(self.consume(TokenType.ID, "Expected ID"))
-
-                self.consume(TokenType.RPAR, "Expected ')'")
-            elif self.check(TokenType.ID):
-                names = self.match(TokenType.ID)
-                if not names:
-                    raise SafulateSyntaxError("Expected name of import", self.peek())
-            else:
-                token = self.peek()
-                version = self.expr()
-                self.consume(TokenType.SEMI, "Expected ';'")
-                return ASTVersionReq(version, token)
-
-            source: Token | None = None
-            if self.match(TokenType.AT):
-                source = self.match(TokenType.ID, TokenType.STR)
-                if not source:
-                    raise SafulateSyntaxError(
-                        "Expected Source after @ symbol in req statement", self.peek()
-                    )
-
-            self.consume(TokenType.SEMI, "Expected ';'")
-
-            if isinstance(names, Token):
-                if source is None:
-                    source = names
-
-                return ASTImportReq(name=names, source=source)
-            else:
-                if source is None:
-                    raise SafulateSyntaxError(
-                        "Expected '@ source' for specific imports",
-                        specific_import_open_paren,
-                    )
-
-                name_token = Token(
-                    TokenType.ID,
-                    f"##SAFULATE-SPECIFIC-REQ-BLOCK##:{source.lexeme}",
-                    kwd.start,
-                )
-                return ASTBlock(
-                    [
-                        ASTImportReq(source=source, name=name_token),
-                        *[
-                            ASTVarDecl(
-                                name=name,
-                                keyword=Token(TokenType.PUB, "pub", kwd.start),
-                                value=ASTAttr(expr=ASTAtom(name_token), attr=name),
-                            )
-                            for name in names
-                        ],
-                        ASTDel(name_token),
-                    ],
-                    force_unscoped=True,
-                )
+        elif self.check(TokenType.REQ):
+            return self.require_stmt()
         elif kwd := self.match(TokenType.RAISE):
             expr = self.expr()
             self.consume(TokenType.SEMI, "Expected ';'")
@@ -535,6 +480,110 @@ class Parser:
         expr = self.expr()
         self.consume(TokenType.SEMI, "Expected ';'")
         return ASTExprStmt(expr)
+
+    def require_stmt(self) -> ASTNode:
+        kwd = self.consume(TokenType.REQ, "Expected 'req'")
+
+        if node := self.require_version_stmt(kwd):
+            return node
+
+        names: list[Token] | Token | None = None
+        specific_import_open_paren = self.peek()
+        if specific_import_open_paren := self.match(TokenType.LPAR):
+            names = []
+            names.append(self.consume(TokenType.ID, "Expected ID"))
+
+            while self.check(TokenType.COMMA) and self.check_next(TokenType.ID):
+                self.advance()
+                names.append(self.consume(TokenType.ID, "Expected ID"))
+
+            self.consume(TokenType.RPAR, "Expected ')'")
+        else:
+            names = self.match(TokenType.ID)
+            if not names:
+                raise SafulateSyntaxError("Expected name of import", self.peek())
+
+        source: Token | None = None
+        if self.match(TokenType.AT):
+            source = self.match(TokenType.ID, TokenType.STR)
+            if not source:
+                raise SafulateSyntaxError(
+                    "Expected Source after @ symbol in req statement", self.peek()
+                )
+
+        self.consume(TokenType.SEMI, "Expected ';'")
+
+        if isinstance(names, Token):
+            if source is None:
+                source = names
+
+            return ASTImportReq(name=names, source=source)
+        else:
+            if source is None:
+                raise SafulateSyntaxError(
+                    "Expected '@ source' for specific imports",
+                    specific_import_open_paren,
+                )
+
+            name_token = Token(
+                TokenType.ID,
+                f"##SAFULATE-SPECIFIC-REQ-BLOCK##:{source.lexeme}",
+                kwd.start,
+            )
+            return ASTBlock(
+                [
+                    ASTImportReq(source=source, name=name_token),
+                    *[
+                        ASTVarDecl(
+                            name=name,
+                            keyword=Token(TokenType.PUB, "pub", kwd.start),
+                            value=ASTAttr(expr=ASTAtom(name_token), attr=name),
+                        )
+                        for name in names
+                    ],
+                    ASTDel(name_token),
+                ],
+                force_unscoped=True,
+            )
+
+    def require_version_stmt(self, kwd: Token) -> ASTNode | None:
+        version_sequence = (
+            TokenType.ID,
+            TokenType.DOT,
+            (TokenType.NUM, TokenType.STAR),
+        )
+        left: _PackagingVersion | None = None
+        right: _PackagingVersion | None = None
+        op: Token | None = None
+
+        if self.check_sequence(TokenType.MINUS, *version_sequence):
+            op = self.consume(TokenType.MINUS, "Expected '-'")
+            left = self._get_version()
+        elif self.check_sequence(*version_sequence, TokenType.PLUS):
+            left = self._get_version()
+            op = self.consume(TokenType.PLUS, "Expected '+")
+        elif self.check_sequence(*version_sequence, TokenType.MINUS, *version_sequence):
+            left = self._get_version()
+            op = self.consume(TokenType.MINUS, "Expected '-'")
+            right = self._get_version()
+        elif self.check_sequence(*version_sequence):
+            left = self._get_version()
+        else:
+            return
+
+        self.consume(TokenType.SEMI, "Expected ';'")
+        return ASTVersionReq(keyword=kwd, left=left, op=op, right=right)
+
+    def _get_version(self) -> _PackagingVersion:
+        major = self.consume(TokenType.ID, "Expected major value")
+        self.consume(TokenType.DOT, "Expected '.'")
+        minor = self.consume((TokenType.NUM, TokenType.STAR), "Expected minor value")
+        try:
+            return _PackagingVersion(
+                f"{major.lexeme.removeprefix('v')}{'' if minor.type is TokenType.STAR else ('.' + minor.lexeme)}"
+            )
+        except InvalidVersion:
+            raise SafulateSyntaxError("Invalid Verson", major) from None
 
     def block(self) -> ASTBlock:
         # Only using consume because rules like `if` and `while` use it directly,
@@ -675,7 +724,7 @@ class Parser:
         return self.binary_op(self.call, TokenType.STARSTAR)
 
     def call(self) -> ASTNode:
-        callee = self.version()
+        callee = self.atom()
 
         while token := self.match(
             TokenType.LPAR, TokenType.DOT, TokenType.LSQB, TokenType.COLON
@@ -733,25 +782,6 @@ class Parser:
                     raise RuntimeError(f"Unknown call parsing for {self.peek()}")
 
         return callee
-
-    def version(self) -> ASTNode:
-        if not self.check(TokenType.VER):
-            return self.list_syntax()
-
-        token = self.advance()
-        parts = token.lexeme.removeprefix("v").split(".")
-
-        major = int(parts[0])
-        try:
-            minor = int(parts[1])
-        except IndexError:
-            minor = None
-        try:
-            micro = int(parts[2])
-        except IndexError:
-            micro = None
-
-        return ASTVersion(major=major, minor=minor, micro=micro)
 
     def list_syntax(self) -> ASTNode:
         if not self.check(TokenType.LSQB):

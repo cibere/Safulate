@@ -195,25 +195,6 @@ class Lexer:
         self.current += len(tok.value)
         self.add_token(tok)
 
-    def handle_version(self) -> None:
-        self.current += 1
-        temp = [""]
-
-        while self.not_eof() and (self.char.isdigit() or self.char == "."):
-            if self.char == ".":
-                temp.append("")
-            else:
-                temp[-1] += self.char
-            self.current += 1
-
-        if len(temp) > 3:
-            raise SafulateSyntaxError("Version size too big")
-        if temp[-1] == "":
-            self.start = self.current - 1
-            raise SafulateSyntaxError("Version can not end in a dot")
-
-        self.add_token(TokenType.VER)
-
     def handle_id(self, char: str) -> None:
         if char == "$":
             self.current = self.current + 1
@@ -281,8 +262,6 @@ class Lexer:
                 return self.handle_token_symbols(tok)
             case _ as x if tok := self.symbol_tokens.get(x):
                 return self.handle_token_symbols(tok)
-            case "v" if self.source[self.current + 1].isdigit():
-                return self.handle_version()
             case _ as x if x in id_first_char_characters or x == "$":
                 return self.handle_id(x)
             case _ as x if x.isdigit():

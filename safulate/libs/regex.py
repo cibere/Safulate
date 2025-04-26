@@ -24,7 +24,7 @@ types_code = """
 struct RegexTypes(){
     pub pattern = type(r"");
     pub match = type(r".*".match("hi"));
-}
+};
 
 pub types = RegexTypes();
 """

@@ -6,6 +6,8 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from packaging.version import Version as _PackagingVersion
+
     from .objects import SafBaseObject
     from .tokens import Token
 
@@ -38,7 +40,6 @@ __all__ = (
     "ASTTryCatch_CatchBranch",
     "ASTUnary",
     "ASTVarDecl",
-    "ASTVersion",
     "ASTVersionReq",
     "ASTWhile",
     "ParamType",
@@ -241,13 +242,15 @@ class ASTAttr(ASTNode):
 
 
 @dataclass
-class ASTVersion(ASTNode):
-    major: float
-    minor: float | None
-    micro: float | None
+class ASTVersionReq(ASTNode):
+    keyword: Token
+
+    left: _PackagingVersion
+    op: Token | None
+    right: _PackagingVersion | None
 
     def visit(self, visitor: ASTVisitor) -> SafBaseObject:
-        return visitor.visit_version(self)
+        return visitor.visit_version_req(self)
 
 
 @dataclass
@@ -257,15 +260,6 @@ class ASTImportReq(ASTNode):
 
     def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_import_req(self)
-
-
-@dataclass
-class ASTVersionReq(ASTNode):
-    version: ASTNode
-    token: Token
-
-    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
-        return visitor.visit_version_req(self)
 
 
 @dataclass
@@ -392,8 +386,6 @@ class ASTVisitor(ABC):
     def visit_attr(self, node: ASTAttr) -> SafBaseObject: ...
     @abstractmethod
     def visit_edit_object(self, node: ASTEditObject) -> SafBaseObject: ...
-    @abstractmethod
-    def visit_version(self, node: ASTVersion) -> SafBaseObject: ...
     @abstractmethod
     def visit_import_req(self, node: ASTImportReq) -> SafBaseObject: ...
     @abstractmethod

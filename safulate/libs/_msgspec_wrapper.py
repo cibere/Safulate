@@ -19,7 +19,7 @@ types_code = """
 struct TypeModule(){{
     pub {decode_error} = type(object("{decode_error}"));
     pub {encode_error} = type(object("{encode_error}"));
-}}
+}};
 
 pub types = TypeModule();
 """

@@ -4,7 +4,7 @@ import re
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
-from packaging.version import Version
+from packaging.version import Version as _PackagingVersion
 
 from ._version import __version__
 from .asts import (
@@ -35,7 +35,6 @@ from .asts import (
     ASTTryCatch,
     ASTUnary,
     ASTVarDecl,
-    ASTVersion,
     ASTVersionReq,
     ASTVisitor,
     ASTWhile,
@@ -53,9 +52,9 @@ from .errors import (
     SafulateScopeError,
     SafulateTypeError,
     SafulateValueError,
-    # SafulateVersionConflict,
+    SafulateVersionConflict,
 )
-from .libs.regex import SafPattern
+from .lib_manager import LibManager
 from .native_context import NativeContext
 from .objects import (
     SafBaseObject,
@@ -69,11 +68,13 @@ from .objects import (
     SafType,
     null,
 )
-from .lib_manager import LibManager
+from .properties import cached_property
 from .tokens import SoftKeyword, Token, TokenType
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+    from .libs.regex import SafPattern as _SafPattern
 
 __all__ = ("TreeWalker",)
 
@@ -84,7 +85,7 @@ class TreeWalker(ASTVisitor):
     def __init__(
         self, *, env: Environment | None = None, lib_manager: LibManager | None = None
     ) -> None:
-        self.version = Version(__version__)
+        self.version = _PackagingVersion(__version__)
         self.import_cache: dict[str, SafObject] = {}
 
         self.libs = lib_manager or LibManager()
@@ -93,6 +94,12 @@ class TreeWalker(ASTVisitor):
             self.env = env
         else:
             self.env = Environment().add_builtins()
+
+    @cached_property
+    def regex_pattern_cls(self) -> type[_SafPattern]:
+        from .libs.regex import SafPattern
+
+        return SafPattern
 
     def ctx(self, token: Token) -> NativeContext:
         return NativeContext(self, token)
@@ -430,53 +437,40 @@ class TreeWalker(ASTVisitor):
                 obj, "get_attr", SafStr(node.attr.lexeme)
             )
 
-    def visit_version(self, node: ASTVersion) -> SafBaseObject:
-        raise RuntimeError("version not allowed")
-
     def visit_version_req(self, node: ASTVersionReq) -> SafBaseObject:
-        raise RuntimeError("version not allowed")
-
-    # def visit_version(self, node: ASTVersion) -> VersionValue:
-    #     major = SafNum(node.major)
-    #     minor = null if node.minor is None else SafNum(node.minor)
-    #     micro = null if node.micro is None else SafNum(node.micro)
-
-    #     return VersionValue(major=major, minor=minor, micro=micro)
-
-    # def visit_version_req(self, node: ASTVersionReq) -> SafBaseObject:
-    #     with ErrorManager(token=node.token):
-    #         match node.version.visit(self):
-    #             case VersionValue() as ver_value:
-    #                 ver = Version(str(ver_value))
-    #                 if ver != self.version:
-    #                     raise SafulateVersionConflict(
-    #                         f"Current version (v{self.version}) is not equal to the required version (v{ver})"
-    #                     )
-    #             case VersionConstraintValue(constraint="-", left=null) as const:
-    #                 ver = Version(str(const.right))
-
-    #                 if self.version > ver:
-    #                     raise SafulateVersionConflict(
-    #                         f"Current version (v{self.version}) is above the maximum set version allowed (v{ver})"
-    #                     )
-    #             case VersionConstraintValue(constraint="+", left=null) as const:
-    #                 ver = Version(str(const.right))
-
-    #                 if self.version < ver:
-    #                     raise SafulateVersionConflict(
-    #                         f"Current version (v{self.version}) is below the minimum set version allowed (v{ver})"
-    #                     )
-    #             case VersionConstraintValue(constraint="-") as const:
-    #                 left_ver = Version(str(const.left))
-    #                 right_ver = Version(str(const.right))
-
-    #                 if not (left_ver < self.version < right_ver):
-    #                     raise SafulateVersionConflict(
-    #                         f"Current version (v{self.version}) outside of the allowed range ({const})"
-    #                     )
-    #             case _ as x:
-    #                 raise RuntimeError(f"Unknown version req combination: {x!r}")
-    #         return null  # pyright: ignore[reportPossiblyUnboundVariable] # pyright is high
+        with ErrorManager(token=node.keyword):
+            match (node.left, node.op, node.right):
+                case (_PackagingVersion() as ver, None, None):
+                    left = str(ver)
+                    right = str(self.version)
+                    if len(left) < len(right):
+                        left, right = right, left
+                    if not left.startswith(right):
+                        raise SafulateVersionConflict(
+                            f"Current version (v{self.version}) is not equal to the required version (v{ver})"
+                        )
+                case (_PackagingVersion() as left, Token(type=TokenType.MINUS), None):
+                    if self.version > left:
+                        raise SafulateVersionConflict(
+                            f"Current version (v{self.version}) is above the maximum set version allowed (v{left})"
+                        )
+                case (_PackagingVersion() as left, Token(type=TokenType.PLUS), None):
+                    if self.version < left:
+                        raise SafulateVersionConflict(
+                            f"Current version (v{self.version}) is below the minimum set version allowed (v{left})"
+                        )
+                case (
+                    _PackagingVersion() as left,
+                    Token(TokenType.MINUS),
+                    _PackagingVersion() as right,
+                ):
+                    if not (left < self.version < right):
+                        raise SafulateVersionConflict(
+                            f"Current version (v{self.version}) outside of the allowed range (v{left}-v{right})"
+                        )
+                case _ as x:
+                    raise RuntimeError(f"Unknown version req combination: {x!r}")
+            return null  # pyright: ignore[reportPossiblyUnboundVariable] # pyright is high
 
     def visit_import_req(self, node: ASTImportReq) -> SafBaseObject:
         with ErrorManager(token=node.source):
@@ -595,4 +589,4 @@ class TreeWalker(ASTVisitor):
         return val
 
     def visit_regex(self, node: ASTRegex) -> SafBaseObject:
-        return SafPattern(re.compile(node.value.lexeme[2:-1]))
+        return self.regex_pattern_cls(re.compile(node.value.lexeme[2:-1]))

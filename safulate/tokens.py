@@ -13,7 +13,6 @@ class TokenType(Enum):
     ID = "ID"
     PRIV_ID = "PRIV_ID"
     NUM = "NUM"
-    VER = "VER"
     FSTR_START = "FSTR_START"
     FSTR_MIDDLE = "FSTR_MIDDLE"
     FSTR_END = "FSTR_END"
