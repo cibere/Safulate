@@ -220,8 +220,8 @@ class TreeWalker(ASTVisitor):
                 raise SafulateValueError(msg)
 
             if is_break:
-                raise SafulateBreakoutError(amount)
-            raise SafulateInvalidContinue(amount)
+                raise SafulateBreakoutError(amount, node.keyword)
+            raise SafulateInvalidContinue(amount, node.keyword)
 
     def visit_break(self, node: ASTBreak) -> SafBaseObject:
         return self._visit_continue_and_break(node)

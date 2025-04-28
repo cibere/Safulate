@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, TypeVar
 
-from .mock import MockToken
 from .properties import cached_property
 from .tokens import Token, TokenType
 
@@ -183,14 +182,14 @@ class SafulateTypeError(SafulateError):
 
 
 class SafulateInvalidReturn(SafulateError):
-    def __init__(self, value: SafBaseObject, token: Token = MockToken()) -> None:
+    def __init__(self, value: SafBaseObject, token: Token) -> None:
         self.value = value
 
         super().__init__("Return used outside of function", token)
 
 
 class SafulateInvalidContinue(SafulateError):
-    def __init__(self, amount: int, token: Token = MockToken()) -> None:
+    def __init__(self, amount: int, token: Token) -> None:
         self.amount = amount
 
         super().__init__("Continue used in a context where it isn't allowed", token)
@@ -211,7 +210,7 @@ class SafulateInvalidContinue(SafulateError):
 
 
 class SafulateBreakoutError(SafulateError):
-    def __init__(self, amount: int, token: Token = MockToken()) -> None:
+    def __init__(self, amount: int, token: Token) -> None:
         self.amount = amount
 
         super().__init__("No more loops to break out of", token)
