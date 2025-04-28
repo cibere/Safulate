@@ -76,6 +76,12 @@ class ParamType(Enum):
     kwarg = 4
     arg_or_kwarg = 5
 
+    def to_arg_type_str(self) -> str:
+        return {
+            ParamType.kwarg: "keyword ",
+            ParamType.arg: "positional ",
+        }.get(self, "")
+
 
 @dataclass
 class ASTFuncDecl_Param:

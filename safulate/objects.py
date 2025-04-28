@@ -6,7 +6,7 @@ from collections import defaultdict
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Concatenate, TypeVar, cast, final
 
-from .asts import ASTBlock, ASTFuncDecl_Param, ParamType
+from .asts import ASTBlock, ASTFuncDecl_Param, ASTNode, ASTVisitor, ParamType
 from .errors import (
     SafulateAttributeError,
     SafulateIndexError,
@@ -817,6 +817,17 @@ class SafFunc(SafObject):
         self.partial_args = partial_args or ()
         self.partial_kwargs = partial_kwargs or {}
 
+    def _resolve_default(
+        self,
+        default: ASTNode | None | SafBaseObject,
+        visitor: ASTVisitor,
+        error_msg_callback: Callable[[], str],
+    ) -> SafBaseObject:
+        if default is None:
+            raise SafulateValueError(error_msg_callback())
+
+        return default if isinstance(default, SafBaseObject) else default.visit(visitor)
+
     def _validate_params(
         self, ctx: NativeContext, *init_args: SafBaseObject, **kwargs: SafBaseObject
     ) -> dict[str, SafBaseObject]:
@@ -840,48 +851,27 @@ class SafFunc(SafObject):
                 passable_params[param.name.lexeme] = arg
             elif kwargs:
                 if not param.is_kwarg:
-                    if param.default is None:
-                        raise SafulateValueError(
-                            f"Required positional argument was not passed: {param.name.lexeme!r}"
-                        )
-                    passable_params[param.name.lexeme] = (
-                        param.default
-                        if isinstance(param.default, SafBaseObject)
-                        else param.default.visit(ctx.interpreter)
+                    passable_params[param.name.lexeme] = self._resolve_default(
+                        param.default,
+                        ctx.interpreter,
+                        lambda: f"Required positional argument was not passed: {param.name.lexeme!r}",
                     )
                 else:
                     if param.name.lexeme not in kwargs:
-                        if param.default is None:
-                            arg_type = {
-                                ParamType.kwarg: "keyword ",
-                                ParamType.arg: "positional ",
-                            }.get(param.type, "")
-                            raise SafulateValueError(
-                                f"Required {arg_type}argument was not passed: {param.name.lexeme!r}"
-                            )
-                        else:
-                            passable_params[param.name.lexeme] = (
-                                param.default
-                                if isinstance(param.default, SafBaseObject)
-                                else param.default.visit(ctx.interpreter)
-                            )
+                        passable_params[param.name.lexeme] = self._resolve_default(
+                            param.default,
+                            ctx.interpreter,
+                            lambda: f"Required {param.type.to_arg_type_str()}argument was not passed: {param.name.lexeme!r}",
+                        )
                     else:
                         passable_params[param.name.lexeme] = kwargs.pop(
                             param.name.lexeme
                         )
             else:
-                if param.default is None:
-                    arg_type = {
-                        ParamType.kwarg: "keyword ",
-                        ParamType.arg: "positional ",
-                    }.get(param.type, "")
-                    raise SafulateValueError(
-                        f"Required {arg_type}argument was not passed: {param.name.lexeme!r}"
-                    )
-                passable_params[param.name.lexeme] = (
-                    param.default
-                    if isinstance(param.default, SafBaseObject)
-                    else param.default.visit(ctx.interpreter)
+                passable_params[param.name.lexeme] = self._resolve_default(
+                    param.default,
+                    ctx.interpreter,
+                    lambda: f"Required {param.type.to_arg_type_str()}argument was not passed: {param.name.lexeme!r}",
                 )
 
         if args:
