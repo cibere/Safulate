@@ -884,15 +884,9 @@ class SafFunc(SafObject):
             )
         return passable_params
 
-    @spec_meth("altcall")
-    def altcall(
-        self, ctx: NativeContext, *args: SafBaseObject, **kwargs: SafBaseObject
-    ) -> SafBaseObject:
-        if ctx.token.lexeme == "ADD-TO-START":
-            args = (*args, *self.partial_args)
-        else:
-            args = (*self.partial_args, *args)
-
+    def with_partial_params(
+        self, args: tuple[SafBaseObject, ...], kwargs: dict[str, SafBaseObject]
+    ) -> SafFunc:
         return SafFunc(
             name=self.name,
             params=self.params,
@@ -900,7 +894,21 @@ class SafFunc(SafObject):
             parent=self.parent,
             extra_vars=self.extra_vars,
             partial_args=args,
-            partial_kwargs=self.partial_kwargs | kwargs,
+            partial_kwargs=kwargs,
+        )
+
+    @spec_meth("neg")
+    def neg(self, ctx: NativeContext) -> SafFunc:
+        return self.with_partial_params(
+            tuple(reversed(self.partial_args)), self.partial_kwargs
+        )
+
+    @spec_meth("altcall")
+    def altcall(
+        self, ctx: NativeContext, *args: SafBaseObject, **kwargs: SafBaseObject
+    ) -> SafBaseObject:
+        return self.with_partial_params(
+            (*self.partial_args, *args), self.partial_kwargs | kwargs
         )
 
     @spec_meth("call")
