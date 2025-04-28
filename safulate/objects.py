@@ -307,10 +307,12 @@ class SafType(SafBaseObject):
         return SafStr(f"<type {self.name!r}>")
 
     @public_method("check")
-    def check(self, ctx: NativeContext, obj: SafBaseObject) -> SafNum:
+    def check(self, ctx: NativeContext, obj: SafBaseObject) -> SafBool:
         obj_type = obj.specs["type"]
-        return SafNum(
-            1 if isinstance(obj_type, SafType) and obj_type.name == self.name else 0
+        return (
+            true
+            if isinstance(obj_type, SafType) and obj_type.name == self.name
+            else false
         )
 
 
