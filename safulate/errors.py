@@ -24,6 +24,7 @@ __all__ = (
     "SafulateInvalidReturn",
     "SafulateKeyError",
     "SafulateNameError",
+    "SafulateRuntimeError",
     "SafulateSyntaxError",
     "SafulateTypeError",
     "SafulateValueError",
@@ -234,4 +235,8 @@ class SafulateScopeError(SafulateError):
 
 
 class SafulateIndexError(SafulateError):
+    pass
+
+
+class SafulateRuntimeError(SafulateError):
     pass
