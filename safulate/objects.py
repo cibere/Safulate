@@ -799,7 +799,7 @@ class SafList(SafObject):
 class SafFunc(SafObject):
     def __init__(
         self,
-        name: Token | None,
+        name: Token | None | SafBaseObject,
         params: list[ASTFuncDecl_Param],
         body: ASTBlock | Callable[Concatenate[NativeContext, ...], SafBaseObject],
         parent: SafBaseObject | None = None,
@@ -807,12 +807,18 @@ class SafFunc(SafObject):
         partial_args: tuple[SafBaseObject, ...] | None = None,
         partial_kwargs: dict[str, SafBaseObject] | None = None,
     ) -> None:
-        super().__init__("func")
+        match name:
+            case SafBaseObject():
+                name_value = name
+            case Token():
+                name_value = SafStr(name.lexeme)
+            case None:
+                name_value = null
 
-        self.name = name
+        super().__init__("func", {"parent": parent or null, "name": name_value})
+
         self.params = params
         self.body = body
-        self.parent = parent
         self.extra_vars = extra_vars or {}
         self.partial_args = partial_args or ()
         self.partial_kwargs = partial_kwargs or {}
@@ -888,10 +894,10 @@ class SafFunc(SafObject):
         self, args: tuple[SafBaseObject, ...], kwargs: dict[str, SafBaseObject]
     ) -> SafFunc:
         return SafFunc(
-            name=self.name,
+            name=self.public_attrs["name"],
             params=self.params,
             body=self.body,
-            parent=self.parent,
+            parent=self.public_attrs["parent"],
             extra_vars=self.extra_vars,
             partial_args=args,
             partial_kwargs=kwargs,
@@ -927,8 +933,9 @@ class SafFunc(SafObject):
             return self.body(ctx, *args, **kwargs)
 
         ret_value = null
-        with ctx.interpreter.scope(source=self.parent):
-            ctx.interpreter.env["parent"] = self.parent or null
+        parent = self.public_attrs["parent"]
+        with ctx.interpreter.scope(source=parent):
+            ctx.interpreter.env["parent"] = parent
 
             for param, value in [*params.items(), *self.extra_vars.items()]:
                 ctx.interpreter.env.declare(param)
@@ -943,7 +950,8 @@ class SafFunc(SafObject):
 
     @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> SafStr:
-        suffix = f" {self.name.lexeme!r}" if self.name else ""
+        name = self.public_attrs["name"]
+        suffix = f" {name.repr_spec(ctx)}" if isinstance(name, SafStr) else ""
         return SafStr(f"<func{suffix}>")
 
     @classmethod
