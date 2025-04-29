@@ -235,12 +235,25 @@ class TreeWalker(ASTVisitor):
 
     def visit_var_decl(self, node: ASTVarDecl) -> SafBaseObject:
         value = null if node.value is None else node.value.visit(self)
-        match node.keyword.type:
-            case TokenType.PUB:
+        match node.keyword:
+            case Token(type=TokenType.PUB):
                 self.env.declare(node.name)
                 self.env[node.name] = value
-            case TokenType.PRIV:
+            case Token(type=TokenType.PRIV):
                 self.env.set_priv(node.name, value)
+            case Token(lexme=SoftKeyword.SPEC.value):
+                if self.env.scope is None:
+                    raise SafulateScopeError(
+                        "specs can only be set in an edit object statement",
+                        node.keyword,
+                    )
+
+                if node.name.lexeme not in self.env.scope.specs:
+                    raise SafulateValueError(
+                        f"there is no spec named {node.name.lexeme!r}", node.name
+                    ) from None
+
+                self.env.scope.specs[node.name.lexeme] = value
             case _:
                 raise RuntimeError(f"Unknown var decl keyword: {node.keyword.type!r}")
         return value
@@ -253,45 +266,6 @@ class TreeWalker(ASTVisitor):
             extra_vars=self.env.values.copy(),
         )
         self.env._set_parent(value)
-
-        if node.name is None:
-            return value
-        elif node.scope_token is None:
-            node.scope_token = Token(TokenType.PUB, "pub", node.kw_token.start)
-
-        match node.scope_token:
-            case Token(type=TokenType.PUB):
-                self.env.declare(node.name)
-                self.env[node.name] = value
-            case Token(type=TokenType.PRIV):
-                self.env.set_priv(node.name, value)
-            case Token(lexme=SoftKeyword.SPEC.value):
-                if self.env.scope is None:
-                    raise SafulateScopeError(
-                        "specs can only be set in an edit object statement",
-                        node.kw_token,
-                    )
-
-                try:
-                    current_spec = self.env.scope.specs[node.name.lexeme]
-                    assert isinstance(current_spec, SafFunc)
-                except KeyError:
-                    raise SafulateValueError(
-                        f"there is no spec named {node.name.lexeme!r}", node.name
-                    ) from None
-
-                # if node.name.lexeme != "call" and value.arity != current_spec.arity:
-                #     raise SafulateValueError(
-                #         f"number of params for {node.name.lexeme!r} spec do not compare",
-                #         node.paren_token,
-                #     )
-
-                self.env.scope.specs[node.name.lexeme] = value
-                return value
-            case _:
-                raise RuntimeError(
-                    f"Unknown func decl scope keyword: {node.scope_token!r}"
-                )
         return value
 
     def visit_assign(self, node: ASTAssign) -> SafBaseObject:

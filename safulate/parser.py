@@ -211,17 +211,42 @@ class Parser:
 
         return ASTVarDecl(name=name, value=value, keyword=kw_token)
 
-    def func_decl(self, *, named: bool = True) -> ASTNode:
-        if named:
-            scope_token = self.match(TokenType.PUB, TokenType.PRIV)
-            kw_token = self.match(SoftKeyword.STRUCT, SoftKeyword.PROP) or scope_token
-            assert kw_token
-            name = self.consume(TokenType.ID, "Expected function name")
-        else:
-            scope_token = None
-            kw_token = self.advance()
-            name = None
+    def func_decl_stmt(self) -> ASTNode:
+        scope_token = self.match(TokenType.PUB, TokenType.PRIV, SoftKeyword.SPEC)
+        kw_token = self.match(SoftKeyword.STRUCT, SoftKeyword.PROP)
 
+        match (scope_token, kw_token):
+            case (None, None):
+                raise SafulateSyntaxError(
+                    "Scope keyword and declaration keyword both missing"
+                )
+            case (Token(), None):
+                kw_token = scope_token
+            case (None, Token()):
+                scope_token = kw_token
+            case (Token(), Token()):
+                pass
+
+        name = self.consume(TokenType.ID, "Expected function name")
+        func = self._func_decl(scope_token=scope_token, kw_token=kw_token, name=name)
+        self.consume(TokenType.SEMI, "Expected ';'")
+
+        return ASTVarDecl(
+            name=name,
+            value=func,
+            keyword=scope_token or Token(TokenType.PUB, "pub", kw_token.start),
+        )
+
+    def func_decl_expr(self) -> ASTNode:
+        kw_token = self.consume(
+            TokenType.PUB,
+            "Expected 'pub' keyword for func declaration as an expression",
+        )
+        return self._func_decl(scope_token=kw_token, kw_token=kw_token, name=None)
+
+    def _func_decl(
+        self, *, scope_token: Token, kw_token: Token, name: Token | None
+    ) -> ASTNode:
         paren_token = self.consume(TokenType.LPAR, "Expected '('")
 
         params: list[ASTFuncDecl_Param] = []
@@ -374,18 +399,34 @@ class Parser:
                 params=[],
             )
 
-        if name:
-            return ASTVarDecl(
-                name=name,
-                value=func,
-                keyword=scope_token or Token(TokenType.PUB, "pub", kw_token.start),
-            )
-        else:
-            return func
+        return func
 
     def stmt(self) -> ASTNode:
         if self.check(TokenType.LBRC):
             return self.block()
+        elif self.check_sequence(
+            (
+                TokenType.PUB,
+                TokenType.PRIV,
+                SoftKeyword.SPEC,
+                SoftKeyword.STRUCT,
+                SoftKeyword.PROP,
+            ),
+            TokenType.ID,
+            TokenType.LPAR,
+        ) or self.check_sequence(
+            (
+                TokenType.PUB,
+                TokenType.PRIV,
+            ),
+            (
+                SoftKeyword.STRUCT,
+                SoftKeyword.PROP,
+            ),
+            TokenType.ID,
+            TokenType.LPAR,
+        ):
+            return self.func_decl_stmt()
         elif kw_token := self.match(TokenType.WHILE):
             condition = self.expr()
             body = self.block()
@@ -615,33 +656,10 @@ class Parser:
         ):
             return self.var_decl()
         elif self.check_sequence(
-            (
-                TokenType.PUB,
-                TokenType.PRIV,
-                SoftKeyword.STRUCT,
-                SoftKeyword.PROP,
-                SoftKeyword.SPEC,
-            ),
-            TokenType.ID,
-            TokenType.LPAR,
-        ) or self.check_sequence(
-            (
-                TokenType.PUB,
-                TokenType.PRIV,
-            ),
-            (
-                SoftKeyword.STRUCT,
-                SoftKeyword.PROP,
-            ),
-            TokenType.ID,
-            TokenType.LPAR,
-        ):
-            return self.func_decl()
-        elif self.check_sequence(
             TokenType.PUB,
             TokenType.LPAR,
         ):
-            return self.func_decl(named=False)
+            return self.func_decl_expr()
         elif kw_token := self.match(TokenType.IF):
             condition = self.expr()
             body = self.block()
