@@ -32,6 +32,7 @@ __all__ = (
     "SafBool",
     "SafDict",
     "SafFunc",
+    "SafIterable",
     "SafList",
     "SafNull",
     "SafNum",
@@ -39,6 +40,7 @@ __all__ = (
     "SafProperty",
     "SafPythonError",
     "SafStr",
+    "SafTuple",
     "SafType",
     "false",
     "null",
@@ -232,7 +234,7 @@ class SafBaseObject(ABC):
             raise SafulateValueError("Cannot call this type")
 
     @spec_meth("iter")
-    def iter(self, ctx: NativeContext) -> SafList:
+    def iter(self, ctx: NativeContext) -> SafIterable:
         raise SafulateValueError("This type is not iterable")
 
     @spec_meth("get")
@@ -735,11 +737,65 @@ class SafStr(SafObject):
 # region Structures
 
 
-class SafList(SafObject):
-    def __init__(self, value: list[SafBaseObject]) -> None:
-        super().__init__("list")
+class SafIterable(SafObject):
+    value: list[SafBaseObject] | tuple[SafBaseObject, ...]
+
+    def __patched_init(self, *args: Any, **kwargs: Any) -> None:
+        raise RuntimeError("SafIterable should not be created directly")
+
+    if not TYPE_CHECKING:
+        __init__ = __patched_init
+
+    @spec_meth("bool")
+    def bool(self, ctx: NativeContext) -> SafBool:
+        return SafBool(len(self.value) != 0)
+
+    @spec_meth("altcall")
+    def altcall(self, ctx: NativeContext, idx: SafBaseObject) -> SafBaseObject:
+        if not isinstance(idx, SafNum):
+            raise SafulateTypeError(f"Expected num, got {idx.repr_spec(ctx)} instead.")
+
+        try:
+            return self.value[int(idx.value)]
+        except IndexError:
+            raise SafulateIndexError(f"Index {idx.repr_spec(ctx)} is out of range")
+
+    @spec_meth("iter")
+    def iter(self, ctx: NativeContext) -> SafIterable:
+        return self
+
+    @spec_meth("repr")
+    def repr(self, ctx: NativeContext) -> SafStr:
+        return SafStr(
+            "["
+            + ", ".join(
+                [
+                    cast("SafStr", ctx.invoke_spec(val, "repr")).value
+                    for val in self.value
+                ]
+            )
+            + "]"
+        )
+
+    @public_property("len")
+    def len(self, ctx: NativeContext) -> SafNum:
+        return SafNum(len(self.value))
+
+
+class SafTuple(SafIterable):
+    def __init__(self, value: tuple[SafBaseObject, ...]) -> None:
+        SafObject.__init__(self, "tuple")
 
         self.value = value
+
+
+class SafList(SafIterable):
+    value: list[SafBaseObject]
+
+    def __init__(self, value: list[SafBaseObject]) -> None:
+        SafObject.__init__(self, "list")
+
+        self.value = value  # pyright: ignore[reportIncompatibleVariableOverride]
 
     @public_method("append")
     def append(self, ctx: NativeContext, item: SafBaseObject) -> SafBaseObject:
@@ -759,41 +815,6 @@ class SafList(SafObject):
             return null
 
         return self.value.pop(int(index.value))
-
-    @spec_meth("bool")
-    def bool(self, ctx: NativeContext) -> SafBool:
-        return SafBool(len(self.value) != 0)
-
-    @spec_meth("altcall")
-    def altcall(self, ctx: NativeContext, idx: SafBaseObject) -> SafBaseObject:
-        if not isinstance(idx, SafNum):
-            raise SafulateTypeError(f"Expected num, got {idx.repr_spec(ctx)} instead.")
-
-        try:
-            return self.value[int(idx.value)]
-        except IndexError:
-            raise SafulateIndexError(f"Index {idx.repr_spec(ctx)} is out of range")
-
-    @spec_meth("iter")
-    def iter(self, ctx: NativeContext) -> SafList:
-        return self
-
-    @spec_meth("repr")
-    def repr(self, ctx: NativeContext) -> SafStr:
-        return SafStr(
-            "["
-            + ", ".join(
-                [
-                    cast("SafStr", ctx.invoke_spec(val, "repr")).value
-                    for val in self.value
-                ]
-            )
-            + "]"
-        )
-
-    @public_property("len")
-    def len(self, ctx: NativeContext) -> SafNum:
-        return SafNum(len(self.value))
 
 
 class SafFunc(SafObject):
@@ -896,6 +917,14 @@ class SafFunc(SafObject):
             partial_args=args,
             partial_kwargs=kwargs,
         )
+
+    @public_method("without_partial_params")
+    def without_partial_params(self, ctx: NativeContext) -> SafFunc:
+        return self.with_partial_params((), {})
+
+    @public_property("partial_args")
+    def partial_args_prop(self, ctx: NativeContext) -> SafTuple:
+        return SafTuple(self.partial_args)
 
     @spec_meth("neg")
     def neg(self, ctx: NativeContext) -> SafFunc:

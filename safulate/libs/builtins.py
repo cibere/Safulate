@@ -10,12 +10,13 @@ from safulate import (
     SafNum,
     SafObject,
     SafStr,
+    SafTuple,
     SafulateAssertionError,
     false,
     null,
+    public_method,
     true,
 )
-from safulate.objects import public_method
 
 
 class Builtins(SafObject):
@@ -30,6 +31,10 @@ class Builtins(SafObject):
     @public_method("quit")
     def quit_(self, ctx: NativeContext) -> Never:
         quit(1)
+
+    @public_method("tuple")
+    def tuple_(self, ctx: NativeContext, *values: SafBaseObject) -> SafTuple:
+        return SafTuple(values)
 
     @public_method("list")
     def list_(self, ctx: NativeContext, *values: SafBaseObject) -> SafList:
