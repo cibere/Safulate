@@ -1155,7 +1155,7 @@ class SafProperty(SafObject):
 
 
 MISSING: Any = object()
-null = SafNull()
+null = SafNull._create()
 true = SafBool._create(True)
 false = SafBool._create(False)
 
