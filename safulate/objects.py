@@ -1191,7 +1191,7 @@ class SafDict(SafObject):
         return SafStr(
             "{"
             + ", ".join(
-                f"{key!r}:{value.repr_spec(ctx)}"
+                f"{key.repr_spec(ctx)}:{value.repr_spec(ctx)}"
                 for _, (key, value) in self.data.items()
             )
             + "}"
@@ -1199,7 +1199,7 @@ class SafDict(SafObject):
 
     @spec_meth("altcall")
     def altcall(
-        self, ctx: NativeContext, key: SafBaseObject, default: SafBaseObject = MISSING
+        self, ctx: NativeContext, key: SafBaseObject, default: SafBaseObject = null
     ) -> SafBaseObject:
         return self.get(ctx, key, default)
 
@@ -1210,8 +1210,6 @@ class SafDict(SafObject):
         try:
             return self.data[key.hash_spec(ctx)][1]
         except KeyError:
-            if default is MISSING:
-                raise SafulateKeyError(f"Key {key.repr_spec(ctx)} was not found")
             return default
 
     @public_method("set")
