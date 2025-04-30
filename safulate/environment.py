@@ -79,4 +79,4 @@ class Environment:
 
     def _set_parent(self, val: SafBaseObject) -> None:
         if isinstance(val, SafFunc):
-            val.parent = self.scope
+            val.public_attrs["parent"] = self.scope or null
