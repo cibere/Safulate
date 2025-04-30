@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Iterator
 from functools import partial as partial_func
-from typing import TYPE_CHECKING, Any, Concatenate, Never, TypeVar, cast, final
+from typing import TYPE_CHECKING, Any, Concatenate, TypeVar, cast, final
 
 from .asts import ASTBlock, ASTFuncDecl_Param, ASTNode, ASTVisitor, ParamType
 from .errors import (
@@ -59,13 +59,28 @@ __all__ = (
 )
 
 
+def __mock_py_func(
+    name: str,
+) -> Callable[Concatenate[SafBaseObject, NativeContext, ...], SafBaseObject]:
+    def replacement(
+        self: SafBaseObject,
+        ctx: NativeContext,
+        *args: SafBaseObject,
+        **kwargs: SafBaseObject,
+    ) -> SafBaseObject:
+        return ctx.invoke_spec(self, name, *args, **kwargs)
+
+    return replacement
+
+
 def __method_deco(
     char: str, is_prop: bool
 ) -> Callable[[str], Callable[[NativeMethodT], NativeMethodT]]:
     def deco(name: str) -> Callable[[NativeMethodT], NativeMethodT]:
         def decorator(func: NativeMethodT) -> NativeMethodT:
-            setattr(func, "__safulate_native_method__", (char, name, is_prop))
-            return func
+            mock = __mock_py_func(name)
+            setattr(func, "__safulate_native_method__", (char, name, is_prop, func))
+            return mock  # pyright: ignore[reportReturnType]
 
         return decorator
 
@@ -92,12 +107,9 @@ class _DefaultSpecs:
         return SafFunc.from_native(key, partial_func(raw_spec, obj))
 
     def register(self, name: str) -> Callable[[DefaultSpecT], DefaultSpecT]:
-        def replacement(*args: Any, **kwargs: Any) -> Never:
-            raise RuntimeError(f"{name!r} spec shouldn't be called directly")
-
         def deco(func: DefaultSpecT) -> DefaultSpecT:
             self.raw_specs[name] = func
-            return replacement  # pyright: ignore[reportReturnType]
+            return __mock_py_func(name)  # pyright: ignore[reportReturnType]
 
         return deco
 
@@ -121,10 +133,10 @@ class SafBaseObject(ABC):
         for name, _ in inspect.getmembers(
             self.__class__, lambda attr: hasattr(attr, "__safulate_native_method__")
         ):
-            value = getattr(self, name)
-
-            type_, func_name, is_prop = getattr(value, "__safulate_native_method__")
-            func = SafFunc.from_native(name, value)
+            type_, func_name, is_prop, func = getattr(
+                getattr(self, name), "__safulate_native_method__"
+            )
+            func = SafFunc.from_native(name, func)
             data[type_][func_name] = SafProperty(func) if is_prop else func
         self._attrs_hook(data)
         return data
