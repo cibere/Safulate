@@ -4,6 +4,7 @@ import inspect
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable
+from functools import partial as partial_func
 from typing import TYPE_CHECKING, Any, Concatenate, TypeVar, cast, final
 
 from .asts import ASTBlock, ASTFuncDecl_Param, ASTNode, ASTVisitor, ParamType
@@ -17,6 +18,7 @@ from .errors import (
 )
 from .properties import cached_property
 from .tokens import Token, TokenType
+from .utils import FallbackDict
 
 if TYPE_CHECKING:
     from .native_context import NativeContext
@@ -25,6 +27,10 @@ SafBaseObjectT = TypeVar("SafBaseObjectT")
 NativeMethodT = TypeVar(
     "NativeMethodT",
     bound=Callable[Concatenate[Any, "NativeContext", ...], "SafBaseObject"],
+)
+DefaultSpecT = TypeVar(
+    "DefaultSpecT",
+    bound=Callable[Concatenate["SafBaseObject", "NativeContext", ...], "SafBaseObject"],
 )
 
 __all__ = (
@@ -71,6 +77,33 @@ private_method = __method_deco("$", is_prop=False)
 private_property = __method_deco("$", is_prop=True)
 spec_meth = __method_deco("%", is_prop=False)
 spec_prop = __method_deco("%", is_prop=True)
+
+
+class _DefaultSpecs:
+    def __init__(self) -> None:
+        self.raw_specs: dict[
+            str,
+            Callable[Concatenate[SafBaseObject, NativeContext, ...], SafBaseObject],
+        ] = {}
+        self.resolved_specs: dict[str, SafFunc] = {}
+
+    def get(self, key: str, *, obj: SafBaseObject) -> SafFunc:
+        if key not in self.resolved_specs:
+            raw_spec = self.raw_specs[key]
+            self.resolved_specs[key] = SafFunc.from_native(
+                key, partial_func(raw_spec, obj)
+            )
+        return self.resolved_specs[key]
+
+    def register(self, name: str) -> Callable[[DefaultSpecT], DefaultSpecT]:
+        def deco(func: DefaultSpecT) -> DefaultSpecT:
+            self.raw_specs[name] = func
+            return func
+
+        return deco
+
+
+_default_specs = _DefaultSpecs()
 
 # region Base
 
@@ -119,7 +152,9 @@ class SafBaseObject(ABC):
             self.__safulate_specs__ = {}
 
         self.__safulate_specs__.update(self._attrs["%"])
-        return self.__safulate_specs__
+        return FallbackDict(
+            self.__safulate_specs__, partial_func(_default_specs.get, obj=self)
+        )
 
     def __getitem__(self, key: str) -> SafBaseObject:
         try:
@@ -134,44 +169,74 @@ class SafBaseObject(ABC):
     def get_specs(self, ctx: NativeContext) -> SafBaseObject:
         return SafDict(self.specs.copy())
 
-    @spec_meth("add")
+    @_default_specs.register("add")
     def add(self, ctx: NativeContext, _other: SafBaseObject) -> SafBaseObject:
         raise SafulateValueError("Add is not defined for this type")
 
-    @spec_meth("sub")
+    @_default_specs.register("sub")
     def sub(self, ctx: NativeContext, _other: SafBaseObject) -> SafBaseObject:
         raise SafulateValueError("Subtract is not defined for this type")
 
-    @spec_meth("mul")
+    @_default_specs.register("mul")
     def mul(self, ctx: NativeContext, _other: SafBaseObject) -> SafBaseObject:
         raise SafulateValueError("Multiply is not defined for this type")
 
-    @spec_meth("div")
+    @_default_specs.register("div")
     def div(self, ctx: NativeContext, _other: SafBaseObject) -> SafBaseObject:
         raise SafulateValueError("Divide is not defined for this type")
 
-    @spec_meth("pow")
+    @_default_specs.register("pow")
     def pow(self, ctx: NativeContext, _other: SafBaseObject) -> SafBaseObject:
         raise SafulateValueError("Exponentiation is not defined for this type")
 
-    @spec_meth("uadd")
+    @_default_specs.register("uadd")
     def uadd(self, ctx: NativeContext) -> SafBaseObject:
         raise SafulateValueError("Unary add is not defined for this type")
 
-    @spec_meth("neg")
+    @_default_specs.register("neg")
     def neg(self, ctx: NativeContext) -> SafBaseObject:
         raise SafulateValueError("Unary minus is not defined for this type")
 
-    @spec_meth("eq")
+    @_default_specs.register("less")
+    def less(self, ctx: NativeContext, _other: SafBaseObject) -> SafBool:
+        raise SafulateValueError("Less than is not defined for this type")
+
+    @_default_specs.register("grtr")
+    def grtr(self, ctx: NativeContext, _other: SafBaseObject) -> SafBool:
+        raise SafulateValueError("Greater than is not defined for this type")
+
+    @_default_specs.register("lesseq")
+    def lesseq(self, ctx: NativeContext, _other: SafBaseObject) -> SafBool:
+        raise SafulateValueError("Less than or equal to is not defined for this type")
+
+    @_default_specs.register("grtreq")
+    def grtreq(self, ctx: NativeContext, _other: SafBaseObject) -> SafBool:
+        raise SafulateValueError(
+            "Greater than or equal to is not defined for this type"
+        )
+
+    @_default_specs.register("amp")
+    def amp(self, ctx: NativeContext, other: SafBaseObject) -> SafBaseObject:
+        raise SafulateValueError("amp is not defined for this type")
+
+    @_default_specs.register("pipe")
+    def pipe(self, ctx: NativeContext, other: SafBaseObject) -> SafBaseObject:
+        raise SafulateValueError("pipe is not defined for this type")
+
+    @_default_specs.register("eq")
     def eq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
         return SafBool(self == other)
 
-    @spec_meth("neq")
+    @_default_specs.register("neq")
     def neq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
         val = ctx.invoke_spec(self, "eq", other).bool_spec(ctx)
         return SafBool(not val)
 
-    @spec_meth("has_item")
+    @_default_specs.register("iter")
+    def iter(self, ctx: NativeContext) -> SafList:
+        raise SafulateValueError("This type is not iterable")
+
+    @_default_specs.register("has_item")
     def has_item(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
         val = ctx.invoke_spec(self, "iter")
         if not isinstance(val, SafList):
@@ -180,37 +245,11 @@ class SafBaseObject(ABC):
             )
         return SafBool(other in val.value)
 
-    @spec_meth("less")
-    def less(self, ctx: NativeContext, _other: SafBaseObject) -> SafBool:
-        raise SafulateValueError("Less than is not defined for this type")
-
-    @spec_meth("grtr")
-    def grtr(self, ctx: NativeContext, _other: SafBaseObject) -> SafBool:
-        raise SafulateValueError("Greater than is not defined for this type")
-
-    @spec_meth("lesseq")
-    def lesseq(self, ctx: NativeContext, _other: SafBaseObject) -> SafBool:
-        raise SafulateValueError("Less than or equal to is not defined for this type")
-
-    @spec_meth("grtreq")
-    def grtreq(self, ctx: NativeContext, _other: SafBaseObject) -> SafBool:
-        raise SafulateValueError(
-            "Greater than or equal to is not defined for this type"
-        )
-
-    @spec_meth("amp")
-    def amp(self, ctx: NativeContext, other: SafBaseObject) -> SafBaseObject:
-        raise SafulateValueError("amp is not defined for this type")
-
-    @spec_meth("pipe")
-    def pipe(self, ctx: NativeContext, other: SafBaseObject) -> SafBaseObject:
-        raise SafulateValueError("pipe is not defined for this type")
-
-    @spec_meth("not")
+    @_default_specs.register("not")
     def not_(self, ctx: NativeContext) -> SafBool:
         return SafBool(self.bool_spec(ctx))
 
-    @spec_meth("bool")
+    @_default_specs.register("bool")
     def bool(self, ctx: NativeContext) -> SafBool:
         return true
 
@@ -219,23 +258,19 @@ class SafBaseObject(ABC):
         call: Callable[Concatenate[Any, NativeContext, ...], SafBaseObject]
     else:
 
-        @spec_meth("altcall")
+        @_default_specs.register("altcall")
         def altcall(
             self, ctx: NativeContext, *args: SafBaseObject, **kwargs: SafBaseObject
         ) -> SafBaseObject:
             raise SafulateValueError("Cannot altcall this type")
 
-        @spec_meth("call")
+        @_default_specs.register("call")
         def call(
             self, ctx: NativeContext, *args: SafBaseObject, **kwargs: SafBaseObject
         ) -> SafBaseObject:
             raise SafulateValueError("Cannot call this type")
 
-    @spec_meth("iter")
-    def iter(self, ctx: NativeContext) -> SafList:
-        raise SafulateValueError("This type is not iterable")
-
-    @spec_meth("get")
+    @_default_specs.register("get")
     def get_spec(self, ctx: NativeContext) -> SafBaseObject:
         return self
 
@@ -243,15 +278,15 @@ class SafBaseObject(ABC):
     @abstractmethod
     def repr(self, ctx: NativeContext) -> SafBaseObject: ...
 
-    @spec_meth("str")
+    @_default_specs.register("str")
     def str(self, ctx: NativeContext) -> SafBaseObject:
         return ctx.invoke_spec(self, "repr")
 
-    @spec_meth("format")
+    @_default_specs.register("format")
     def format(self, ctx: NativeContext, val: SafBaseObject) -> SafBaseObject:
         raise SafulateValueError(f"Unknown format type {val.repr_spec(ctx)}")
 
-    @spec_meth("get_attr")
+    @_default_specs.register("get_attr")
     def get_attr(self, ctx: NativeContext, name: SafBaseObject) -> SafBaseObject:
         if not isinstance(name, SafStr):
             raise SafulateValueError(f"Expected str, got {name.repr_spec(ctx)} instead")
