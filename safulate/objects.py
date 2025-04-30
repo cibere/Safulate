@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Iterator
 from functools import partial as partial_func
-from typing import TYPE_CHECKING, Any, Concatenate, TypeVar, cast, final
+from typing import TYPE_CHECKING, Any, Concatenate, Never, TypeVar, cast, final
 
 from .asts import ASTBlock, ASTFuncDecl_Param, ASTNode, ASTVisitor, ParamType
 from .errors import (
@@ -86,20 +86,18 @@ class _DefaultSpecs:
             str,
             Callable[Concatenate[SafBaseObject, NativeContext, ...], SafBaseObject],
         ] = {}
-        self.resolved_specs: dict[str, SafFunc] = {}
 
     def get(self, key: str, *, obj: SafBaseObject) -> SafFunc:
-        if key not in self.resolved_specs:
-            raw_spec = self.raw_specs[key]
-            self.resolved_specs[key] = SafFunc.from_native(
-                key, partial_func(raw_spec, obj)
-            )
-        return self.resolved_specs[key]
+        raw_spec = self.raw_specs[key]
+        return SafFunc.from_native(key, partial_func(raw_spec, obj))
 
     def register(self, name: str) -> Callable[[DefaultSpecT], DefaultSpecT]:
+        def replacement(*args: Any, **kwargs: Any) -> Never:
+            raise RuntimeError(f"{name!r} spec shouldn't be called directly")
+
         def deco(func: DefaultSpecT) -> DefaultSpecT:
             self.raw_specs[name] = func
-            return func
+            return replacement  # pyright: ignore[reportReturnType]
 
         return deco
 
