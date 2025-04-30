@@ -39,6 +39,7 @@ __all__ = (
     "SafBool",
     "SafDict",
     "SafFunc",
+    "SafIterator",
     "SafList",
     "SafNull",
     "SafNum",
@@ -59,7 +60,7 @@ __all__ = (
 )
 
 
-def __mock_py_func(
+def _mock_py_func(
     name: str,
 ) -> Callable[Concatenate[SafBaseObject, NativeContext, ...], SafBaseObject]:
     def replacement(
@@ -78,7 +79,7 @@ def __method_deco(
 ) -> Callable[[str], Callable[[NativeMethodT], NativeMethodT]]:
     def deco(name: str) -> Callable[[NativeMethodT], NativeMethodT]:
         def decorator(func: NativeMethodT) -> NativeMethodT:
-            mock = __mock_py_func(name)
+            mock = _mock_py_func(name)
             setattr(func, "__safulate_native_method__", (char, name, is_prop, func))
             return mock  # pyright: ignore[reportReturnType]
 
@@ -109,7 +110,7 @@ class _DefaultSpecs:
     def register(self, name: str) -> Callable[[DefaultSpecT], DefaultSpecT]:
         def deco(func: DefaultSpecT) -> DefaultSpecT:
             self.raw_specs[name] = func
-            return __mock_py_func(name)  # pyright: ignore[reportReturnType]
+            return _mock_py_func(name)  # pyright: ignore[reportReturnType]
 
         return deco
 

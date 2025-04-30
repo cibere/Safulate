@@ -8,16 +8,19 @@ from safulate import (
     SafBaseObject,
     SafBool,
     SafDict,
+    SafIterator,
     SafList,
     SafNull,
     SafNum,
     SafObject,
     SafStr,
     SafulateTypeError,
+    false,
     null,
     public_method,
     public_property,
     spec_meth,
+    true,
 )
 
 types_code = """
@@ -249,12 +252,12 @@ class SafMatch(SafObject):
         )
 
     @spec_meth("iter")
-    def iter(self, ctx: NativeContext) -> SafList:
-        return self.groups(ctx)
+    def iter(self, ctx: NativeContext) -> SafIterator:
+        return SafIterator(x for x in self.groups(ctx).value)
 
     @spec_meth("bool")
     def bool(self, ctx: NativeContext) -> SafBool:
-        return SafBool(self.match)
+        return true if (self.match) else false
 
     @spec_meth("altcall")
     def altcall(self, ctx: NativeContext, key: SafBaseObject) -> SafBaseObject:
