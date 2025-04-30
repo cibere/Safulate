@@ -236,12 +236,12 @@ class SafBaseObject(ABC):
 
     @_default_specs.register("eq")
     def eq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
-        return SafBool(self == other)
+        return true if self == other else false
 
     @_default_specs.register("neq")
     def neq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
         val = ctx.invoke_spec(self, "eq", other).bool_spec(ctx)
-        return SafBool(not val)
+        return true if not val else false
 
     @_default_specs.register("iter")
     def iter(self, ctx: NativeContext) -> SafIterator:
@@ -257,7 +257,7 @@ class SafBaseObject(ABC):
 
     @_default_specs.register("not")
     def not_(self, ctx: NativeContext) -> SafBool:
-        return SafBool(self.bool_spec(ctx))
+        return true if (self.bool_spec(ctx)) else false
 
     @_default_specs.register("bool")
     def bool(self, ctx: NativeContext) -> SafBool:
@@ -408,7 +408,7 @@ class SafNull(SafObject):
 
     @spec_meth("eq")
     def eq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
-        return SafBool(isinstance(other, SafNull))
+        return true if (isinstance(other, SafNull)) else false
 
     @spec_meth("bool")
     def bool(self, ctx: NativeContext) -> SafBool:
@@ -470,7 +470,7 @@ class SafNum(SafObject):
         if not isinstance(other, SafNum):
             raise SafulateValueError("Equality is not defined for number and this type")
 
-        return SafBool(self.value == other.value)
+        return true if (self.value == other.value) else false
 
     @spec_meth("neq")
     def neq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
@@ -479,7 +479,7 @@ class SafNum(SafObject):
                 "Non-equality is not defined for number and this type"
             )
 
-        return SafBool(self.value != other.value)
+        return true if (self.value != other.value) else false
 
     @spec_meth("less")
     def less(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
@@ -488,7 +488,7 @@ class SafNum(SafObject):
                 "Less than is not defined for number and this type"
             )
 
-        return SafBool(self.value < other.value)
+        return true if (self.value < other.value) else false
 
     @spec_meth("grtr")
     def grtr(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
@@ -497,7 +497,7 @@ class SafNum(SafObject):
                 "Greater than is not defined for number and this type"
             )
 
-        return SafBool(self.value > other.value)
+        return true if (self.value > other.value) else false
 
     @spec_meth("lesseq")
     def lesseq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
@@ -506,7 +506,7 @@ class SafNum(SafObject):
                 "Less than or equal to is not defined for number and this type"
             )
 
-        return SafBool(self.value <= other.value)
+        return true if (self.value <= other.value) else false
 
     @spec_meth("grtreq")
     def grtreq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
@@ -515,11 +515,11 @@ class SafNum(SafObject):
                 "Greater than or equal to is not defined for number and this type",
             )
 
-        return SafBool(self.value >= other.value)
+        return true if (self.value >= other.value) else false
 
     @spec_meth("bool")
     def bool(self, ctx: NativeContext) -> SafBool:
-        return SafBool(self.value != 0)
+        return true if (self.value != 0) else false
 
     @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> SafStr:
@@ -530,11 +530,19 @@ class SafNum(SafObject):
 
 
 class SafBool(SafNum):
-    def __init__(self, status: Any) -> None:
-        self.status: bool = bool(status)
+    status: bool
+
+    def __init__(self) -> None:
+        raise RuntimeError("SafBool should not be invoked directly")
+
+    @classmethod
+    def _create(cls, value: bool) -> SafBool:
+        self = cls.__new__(cls)
+        self.status = value
         self.value = int(self.status)
 
         SafObject.__init__(self, str(self.status).lower())
+        return self
 
     @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> SafStr:
@@ -591,7 +599,7 @@ class SafStr(SafObject):
 
     @spec_meth("bool")
     def bool(self, ctx: NativeContext) -> SafBool:
-        return SafBool(len(self.value) != 0)
+        return true if (len(self.value) != 0) else false
 
     @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> SafStr:
@@ -603,7 +611,9 @@ class SafStr(SafObject):
 
     @spec_meth("eq")
     def eq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
-        return SafBool(isinstance(other, SafStr) and other.value == self.value)
+        return (
+            true if (isinstance(other, SafStr) and other.value == self.value) else false
+        )
 
     @public_method("format")
     def format_(self, ctx: NativeContext, *args: SafBaseObject) -> SafBaseObject:
@@ -660,7 +670,7 @@ class SafStr(SafObject):
             raise SafulateTypeError(
                 f"Expected str, received {sub.repr_spec(ctx)} instead"
             )
-        return SafBool(self.value.endswith(sub.value))
+        return true if (self.value.endswith(sub.value)) else false
 
     @public_method("index")
     def index(self, ctx: NativeContext, sub: SafBaseObject) -> SafBaseObject:
@@ -672,43 +682,43 @@ class SafStr(SafObject):
 
     @public_method("is_alnum")
     def isalnum(self, ctx: NativeContext) -> SafBool:
-        return SafBool(self.value.isalnum())
+        return true if (self.value.isalnum()) else false
 
     @public_method("is_alpha")
     def isalpha(self, ctx: NativeContext) -> SafBool:
-        return SafBool(self.value.isalpha())
+        return true if (self.value.isalpha()) else false
 
     @public_method("is_ascii")
     def isascii(self, ctx: NativeContext) -> SafBool:
-        return SafBool(self.value.isascii())
+        return true if (self.value.isascii()) else false
 
     @public_method("is_decimal")
     def isdecimal(self, ctx: NativeContext) -> SafBool:
-        return SafBool(self.value.isdecimal())
+        return true if (self.value.isdecimal()) else false
 
     @public_method("is_digit")
     def isdigit(self, ctx: NativeContext) -> SafBool:
-        return SafBool(self.value.isdigit())
+        return true if (self.value.isdigit()) else false
 
     @public_method("is_lower")
     def islower(self, ctx: NativeContext) -> SafBool:
-        return SafBool(self.value.islower())
+        return true if (self.value.islower()) else false
 
     @public_method("is_numeric")
     def isnumeric(self, ctx: NativeContext) -> SafBool:
-        return SafBool(self.value.isnumeric())
+        return true if (self.value.isnumeric()) else false
 
     @public_method("is_space")
     def isspace(self, ctx: NativeContext) -> SafBool:
-        return SafBool(self.value.isspace())
+        return true if (self.value.isspace()) else false
 
     @public_method("is_title")
     def istitle(self, ctx: NativeContext) -> SafBool:
-        return SafBool(self.value.istitle())
+        return true if (self.value.istitle()) else false
 
     @public_method("is_upper")
     def isupper(self, ctx: NativeContext) -> SafBool:
-        return SafBool(self.value.isupper())
+        return true if (self.value.isupper()) else false
 
     @public_method("lower")
     def lower(self, ctx: NativeContext) -> SafBaseObject:
@@ -811,7 +821,7 @@ class _SafIterable(SafObject):
 
     @spec_meth("bool")
     def bool(self, ctx: NativeContext) -> SafBool:
-        return SafBool(len(self.value) != 0)
+        return true if (len(self.value) != 0) else false
 
     @spec_meth("altcall")
     def altcall(self, ctx: NativeContext, idx: SafBaseObject) -> SafBaseObject:
@@ -1102,8 +1112,8 @@ class SafProperty(SafObject):
 
 MISSING: Any = object()
 null = SafNull()
-true = SafBool(True)
-false = SafBool(False)
+true = SafBool._create(True)
+false = SafBool._create(False)
 
 
 class SafDict(SafObject):
@@ -1184,7 +1194,7 @@ class SafDict(SafObject):
 
     @spec_meth("bool")
     def bool(self, ctx: NativeContext) -> SafBool:
-        return SafBool(self.data)
+        return true if (self.data) else false
 
 
 # region Error
