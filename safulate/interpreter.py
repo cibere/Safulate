@@ -66,7 +66,9 @@ from .objects import (
     SafProperty,
     SafStr,
     SafType,
+    false,
     null,
+    true,
 )
 from .properties import cached_property
 from .tokens import SoftKeyword, Token, TokenType
@@ -306,9 +308,11 @@ class TreeWalker(ASTVisitor):
                         return right
                     return null
                 case TokenType.AND:
-                    return SafNum(
-                        1 if left.bool_spec(ctx) and right.bool_spec(ctx) else 0
+                    return (
+                        true if left.bool_spec(ctx) and right.bool_spec(ctx) else false
                     )
+                case TokenType.EQEQEQ:
+                    return true if id(left) == id(right) else false
                 case _:
                     raise ValueError(
                         f"Invalid token type {node.op.type.name} for binary operator"
@@ -363,7 +367,9 @@ class TreeWalker(ASTVisitor):
                         raise SafulateValueError(
                             f"Can not unpack, {val.repr_spec(ctx)} is not a dictionary"
                         )
-                    kwargs.update(val.data)
+                    kwargs.update(
+                        {key.str_spec(ctx): value for key, value in val.data.values()}
+                    )
                 case _:
                     raise RuntimeError(
                         f"Unhandled param: {param_type}, {name}, {value}"
@@ -545,7 +551,7 @@ class TreeWalker(ASTVisitor):
         return SafList([child.visit(self) for child in node.children])
 
     def visit_format(self, node: ASTFormat) -> SafBaseObject:
-        spec = {"r": "repr", "s": "str"}.get(node.spec.lexeme)
+        spec = {"r": "repr", "s": "str", "h": "hash"}.get(node.spec.lexeme)
         args: tuple[SafBaseObject, ...] = ()
 
         if spec is None:

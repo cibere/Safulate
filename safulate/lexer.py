@@ -64,7 +64,7 @@ class Lexer:
         )
     }
     trisymbol_tokens: ClassVar[dict[str, TokenType]] = {
-        sym.value: sym for sym in (TokenType.STARSTAREQ,)
+        sym.value: sym for sym in (TokenType.STARSTAREQ, TokenType.EQEQEQ)
     }
     hard_keywords: ClassVar[dict[str, TokenType]] = {
         sym.value: sym

@@ -729,7 +729,7 @@ class Parser:
         )
 
     def equality(self) -> ASTNode:
-        return self.binary_op(self.sum, TokenType.EQEQ, TokenType.NEQ)
+        return self.binary_op(self.sum, TokenType.EQEQ, TokenType.NEQ, TokenType.EQEQEQ)
 
     def sum(self) -> ASTNode:
         return self.binary_op(self.product, TokenType.PLUS, TokenType.MINUS)

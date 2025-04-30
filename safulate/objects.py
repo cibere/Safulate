@@ -172,7 +172,7 @@ class SafBaseObject(ABC):
 
     @private_method("get_specs")
     def get_specs(self, ctx: NativeContext) -> SafBaseObject:
-        return SafDict(self.specs.copy())
+        return SafDict.from_data(ctx, self.specs.copy())
 
     @_default_specs.register("add")
     def add(self, ctx: NativeContext, _other: SafBaseObject) -> SafBaseObject:
@@ -286,6 +286,10 @@ class SafBaseObject(ABC):
     def str(self, ctx: NativeContext) -> SafBaseObject:
         return ctx.invoke_spec(self, "repr")
 
+    @_default_specs.register("hash")
+    def hash(self, ctx: NativeContext) -> SafNum:
+        return SafNum(hash((self.__class__, id(self))))
+
     @_default_specs.register("format")
     def format(self, ctx: NativeContext, val: SafBaseObject) -> SafBaseObject:
         raise SafulateValueError(f"Unknown format type {val.repr_spec(ctx)}")
@@ -324,6 +328,9 @@ class SafBaseObject(ABC):
 
     def str_spec(self, ctx: NativeContext) -> str:
         return self.run_spec("str", SafStr, ctx).value
+
+    def hash_spec(self, ctx: NativeContext) -> int | float:
+        return self.run_spec("hash", SafNum, ctx).value
 
     def bool_spec(self, ctx: NativeContext) -> bool:
         val = self.run_spec("bool", SafBool, ctx)
@@ -394,7 +401,13 @@ class SafObject(SafBaseObject):
 
 class SafNull(SafObject):
     def __init__(self) -> None:
-        super().__init__("null")
+        raise RuntimeError("null should not be constructed directly")
+
+    @classmethod
+    def _create(cls) -> SafNull:
+        self = super().__new__(cls)
+        SafObject.__init__(self, "null")
+        return self
 
     @spec_meth("str")
     def str(self, ctx: NativeContext) -> SafStr:
@@ -418,6 +431,10 @@ class SafNum(SafObject):
         super().__init__("num")
 
         self.value = value
+
+    @spec_meth("hash")
+    def hash(self, ctx: NativeContext) -> SafNum:
+        return SafNum(hash((self.__class__, self.value)))
 
     @spec_meth("add")
     def add(self, ctx: NativeContext, other: SafBaseObject) -> SafNum:
@@ -560,6 +577,10 @@ class SafStr(SafObject):
         super().__init__("str")
 
         self.value = value.encode("ascii").decode("unicode_escape")
+
+    @spec_meth("hash")
+    def hash(self, ctx: NativeContext) -> SafNum:
+        return SafNum(hash((self.__class__, self.value)))
 
     @spec_meth("altcall")
     def altcall(self, ctx: NativeContext, idx: SafBaseObject) -> SafStr:
@@ -817,6 +838,10 @@ class SafIterator(SafObject):
 class _SafIterable(SafObject):
     value: list[SafBaseObject] | tuple[SafBaseObject]
 
+    @spec_meth("hash")
+    def hash(self, ctx: NativeContext) -> SafNum:
+        return SafNum(hash((self.__class__, self.value)))
+
     @spec_meth("bool")
     def bool(self, ctx: NativeContext) -> SafBool:
         return true if (len(self.value) != 0) else false
@@ -845,10 +870,12 @@ class _SafIterable(SafObject):
 
 
 class SafTuple(_SafIterable):
-    def __init__(self, value: list[SafBaseObject]) -> None:
+    value: tuple[SafBaseObject, ...]
+
+    def __init__(self, value: tuple[SafBaseObject, ...]) -> None:
         super().__init__("tuple")
 
-        self.value = value
+        self.value = value  # pyright: ignore[reportIncompatibleVariableOverride]
 
     @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> SafStr:
@@ -953,7 +980,7 @@ class SafFunc(SafObject):
                 passable_params[param.name.lexeme] = SafList(args)
                 args = []
             elif param.type is ParamType.varkwarg:
-                passable_params[param.name.lexeme] = SafDict(kwargs)
+                passable_params[param.name.lexeme] = SafDict.from_data(ctx, kwargs)
                 kwargs = {}
             elif args:
                 if not param.is_arg:
@@ -1008,6 +1035,21 @@ class SafFunc(SafObject):
             extra_vars=self.extra_vars,
             partial_args=args,
             partial_kwargs=kwargs,
+        )
+
+    @spec_meth("hash")
+    def hash(self, ctx: NativeContext) -> SafNum:
+        return SafNum(
+            hash(
+                (
+                    self.__class__,
+                    self.params,
+                    self.body,
+                    self.extra_vars,
+                    self.partial_args,
+                    self.partial_kwargs,
+                )
+            )
         )
 
     @spec_meth("neg")
@@ -1095,6 +1137,10 @@ class SafProperty(SafObject):
 
         self.func = func
 
+    @spec_meth("hash")
+    def hash(self, ctx: NativeContext) -> SafNum:
+        return SafNum(hash((self.__class__, self.func)))
+
     @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> SafStr:
         return SafStr(f"<property {self.func.repr_spec(ctx)}>")
@@ -1115,17 +1161,38 @@ false = SafBool._create(False)
 
 
 class SafDict(SafObject):
-    def __init__(self, data: dict[str, SafBaseObject]) -> None:
+    data: dict[
+        int | float, tuple[SafBaseObject, SafBaseObject]
+    ]  # dict[hash, (key, value)]
+
+    def __init__(self) -> None:
         super().__init__("dict")
 
-        self.data = data
+        self.data = {}
+
+    @classmethod
+    def from_data(
+        cls,
+        ctx: NativeContext,
+        initial: dict[SafBaseObject, SafBaseObject] | dict[str, SafBaseObject],
+    ) -> SafDict:
+        self = cls()
+        for key, value in initial.items():
+            key = SafStr(key) if isinstance(key, str) else key
+            self.set(ctx, key, value)
+        return self
+
+    @spec_meth("hash")
+    def hash(self, ctx: NativeContext) -> SafNum:
+        return SafNum(hash((self.__class__, self.data)))
 
     @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> SafStr:
         return SafStr(
             "{"
             + ", ".join(
-                f"{key!r}:{value.repr_spec(ctx)}" for key, value in self.data.items()
+                f"{key!r}:{value.repr_spec(ctx)}"
+                for _, (key, value) in self.data.items()
             )
             + "}"
         )
@@ -1141,7 +1208,7 @@ class SafDict(SafObject):
         self, ctx: NativeContext, key: SafBaseObject, default: SafBaseObject = null
     ) -> SafBaseObject:
         try:
-            return self.data[key.str_spec(ctx)]
+            return self.data[key.hash_spec(ctx)][1]
         except KeyError:
             if default is MISSING:
                 raise SafulateKeyError(f"Key {key.repr_spec(ctx)} was not found")
@@ -1151,22 +1218,20 @@ class SafDict(SafObject):
     def set(
         self, ctx: NativeContext, key: SafBaseObject, value: SafBaseObject
     ) -> SafBaseObject:
-        self.data[key.repr_spec(ctx)] = value
+        self.data[key.hash_spec(ctx)] = (key, value)
         return value
 
     @public_method("keys")
     def keys(self, ctx: NativeContext) -> SafList:
-        return SafList([SafStr(x) for x in list(self.data.keys())])
+        return SafList([key for (key, _) in list(self.data.values())])
 
     @public_method("values")
     def values(self, ctx: NativeContext) -> SafList:
-        return SafList(list(self.data.values()))
+        return SafList([value for (_, value) in list(self.data.values())])
 
     @public_method("items")
     def items(self, ctx: NativeContext) -> SafList:
-        return SafList(
-            [SafList([SafStr(key), value]) for key, value in self.data.items()]
-        )
+        return SafList([SafTuple(entry) for entry in list(self.data.values())])
 
     @public_method("pop")
     def pop(
@@ -1176,7 +1241,7 @@ class SafDict(SafObject):
         default: SafBaseObject | None = None,
     ) -> SafBaseObject:
         try:
-            return self.data.pop(key.repr_spec(ctx))
+            return self.data.pop(key.hash_spec(ctx))[1]
         except KeyError:
             if default is None:
                 raise SafulateKeyError(f"Key {key.repr_spec(ctx)} was not found")

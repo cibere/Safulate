@@ -65,7 +65,8 @@ class NativeContext:
             return null
 
         if isinstance(obj, dict):
-            return SafDict(
+            return SafDict.from_data(
+                self,
                 {
                     key: self.python_to_values(value)
                     for key, value in cast("dict[Any, Any]", obj).items()
@@ -92,8 +93,8 @@ class NativeContext:
         match obj:
             case SafDict():
                 return {
-                    key: value
-                    for key, raw_value in obj.data.items()
+                    self.value_to_python(key, repr_fallback=repr_fallback): value
+                    for key, raw_value in obj.data.values()
                     if (
                         (
                             value := self.value_to_python(

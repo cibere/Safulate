@@ -37,15 +37,15 @@ class Builtins(SafObject):
 
     @public_method("dict")
     def dict_(self, ctx: NativeContext, **data: SafBaseObject) -> SafDict:
-        return SafDict(data)
+        return SafDict.from_data(ctx, data)
 
     @public_method("globals")
     def get_globals(self, ctx: NativeContext) -> SafBaseObject:
-        return SafDict(dict(list(ctx.walk_envs())[-1].values.items()))
+        return SafDict.from_data(ctx, dict(list(ctx.walk_envs())[-1].values.items()))
 
     @public_method("locals")
     def get_locals(self, ctx: NativeContext) -> SafBaseObject:
-        return SafDict(dict(next(ctx.walk_envs()).values.items()))
+        return SafDict.from_data(ctx, dict(next(ctx.walk_envs()).values.items()))
 
     @public_method("rollback_scope")
     def rollback_scope(self, ctx: NativeContext) -> SafBaseObject:

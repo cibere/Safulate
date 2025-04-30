@@ -243,12 +243,13 @@ class SafMatch(SafObject):
 
     @public_method("as_dict")
     def as_dict(self, ctx: NativeContext) -> SafDict:
-        return SafDict(
+        return SafDict.from_data(
+            ctx,
             {
-                item.value[0].str_spec(ctx): item.value[1]
+                item.value[0]: item.value[1]
                 for item in self.groups(ctx).value
                 if isinstance(item, SafList)
-            }
+            },
         )
 
     @spec_meth("iter")
