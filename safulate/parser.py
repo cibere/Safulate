@@ -223,7 +223,7 @@ class Parser:
             case (Token(), None):
                 kw_token = scope_token
             case (None, Token()):
-                scope_token = kw_token
+                scope_token = Token(TokenType.PUB, "pub", kw_token.start)
             case (Token(), Token()):
                 pass
 
@@ -231,11 +231,7 @@ class Parser:
         func = self._func_decl(scope_token=scope_token, kw_token=kw_token, name=name)
         self.consume(TokenType.SEMI, "Expected ';'")
 
-        return ASTVarDecl(
-            name=name,
-            value=func,
-            keyword=scope_token or Token(TokenType.PUB, "pub", kw_token.start),
-        )
+        return ASTVarDecl(name=name, value=func, keyword=scope_token)
 
     def func_decl_expr(self) -> ASTNode:
         kw_token = self.consume(

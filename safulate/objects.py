@@ -3,13 +3,14 @@ from __future__ import annotations
 import inspect
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from functools import partial as partial_func
 from typing import TYPE_CHECKING, Any, Concatenate, TypeVar, cast, final
 
 from .asts import ASTBlock, ASTFuncDecl_Param, ASTNode, ASTVisitor, ParamType
 from .errors import (
     SafulateAttributeError,
+    SafulateBreakoutError,
     SafulateIndexError,
     SafulateInvalidReturn,
     SafulateKeyError,
@@ -233,17 +234,16 @@ class SafBaseObject(ABC):
         return SafBool(not val)
 
     @_default_specs.register("iter")
-    def iter(self, ctx: NativeContext) -> SafList:
+    def iter(self, ctx: NativeContext) -> SafIterator:
         raise SafulateValueError("This type is not iterable")
+
+    @_default_specs.register("next")
+    def next(self, ctx: NativeContext) -> SafBaseObject:
+        raise SafulateValueError("next is not defined for this type")
 
     @_default_specs.register("has_item")
     def has_item(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
-        val = ctx.invoke_spec(self, "iter")
-        if not isinstance(val, SafList):
-            raise SafulateValueError(
-                f"iter spec returned {val.repr_spec(ctx)}, expected list"
-            )
-        return SafBool(other in val.value)
+        raise SafulateValueError("has_item is not defined for this type")
 
     @_default_specs.register("not")
     def not_(self, ctx: NativeContext) -> SafBool:
@@ -328,6 +328,14 @@ class SafBaseObject(ABC):
                 f"expected return for bool spec to be a bool, got {val.repr_spec(ctx)} instead"
             )
         return bool(val.value)
+
+    def iter_spec(self, ctx: NativeContext) -> Iterator[SafBaseObject]:
+        iterator = ctx.invoke_spec(self, "iter")
+        try:
+            while 1:
+                yield ctx.invoke_spec(iterator, "next")
+        except SafulateBreakoutError as e:
+            e.check()
 
 
 class SafType(SafBaseObject):
@@ -568,8 +576,8 @@ class SafStr(SafObject):
         return SafStr(self.value * int(other.value))
 
     @spec_meth("iter")
-    def iter(self, ctx: NativeContext) -> SafList:
-        return SafList([SafStr(char) for char in self.value])
+    def iter(self, ctx: NativeContext) -> SafIterator:
+        return SafIterator(SafStr(char) for char in self.value)
 
     @spec_meth("bool")
     def bool(self, ctx: NativeContext) -> SafBool:
@@ -770,11 +778,79 @@ class SafStr(SafObject):
 # region Structures
 
 
-class SafList(SafObject):
+class SafIterator(SafObject):
+    def __init__(self, value: Iterator[SafBaseObject]) -> None:
+        super().__init__("generator")
+
+        self.value = value
+
+    @spec_meth("next")
+    def next(self, ctx: NativeContext) -> SafBaseObject:
+        try:
+            return next(self.value)
+        except StopIteration:
+            raise SafulateBreakoutError(1, ctx.token)
+
+    @spec_meth("repr")
+    def repr(self, ctx: NativeContext) -> SafStr:
+        return SafStr("<generator>")
+
+
+class _SafIterable(SafObject):
+    value: list[SafBaseObject] | tuple[SafBaseObject]
+
+    @spec_meth("bool")
+    def bool(self, ctx: NativeContext) -> SafBool:
+        return SafBool(len(self.value) != 0)
+
+    @spec_meth("altcall")
+    def altcall(self, ctx: NativeContext, idx: SafBaseObject) -> SafBaseObject:
+        if not isinstance(idx, SafNum):
+            raise SafulateTypeError(f"Expected num, got {idx.repr_spec(ctx)} instead.")
+
+        try:
+            return self.value[int(idx.value)]
+        except IndexError:
+            raise SafulateIndexError(f"Index {idx.repr_spec(ctx)} is out of range")
+
+    @spec_meth("iter")
+    def iter(self, ctx: NativeContext) -> SafIterator:
+        return SafIterator(obj for obj in self.value)
+
+    @public_property("len")
+    def len(self, ctx: NativeContext) -> SafNum:
+        return SafNum(len(self.value))
+
+    @spec_meth("has_item")
+    def has_item(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
+        return true if other in self.value else false
+
+
+class SafTuple(_SafIterable):
+    def __init__(self, value: list[SafBaseObject]) -> None:
+        super().__init__("tuple")
+
+        self.value = value
+
+    @spec_meth("repr")
+    def repr(self, ctx: NativeContext) -> SafStr:
+        return SafStr(
+            "("
+            + ", ".join(
+                [
+                    cast("SafStr", ctx.invoke_spec(val, "repr")).value
+                    for val in self.value
+                ]
+            )
+            + ")"
+        )
+
+
+class SafList(_SafIterable):
     def __init__(self, value: list[SafBaseObject]) -> None:
         super().__init__("list")
 
-        self.value = value
+        self.value: list[SafBaseObject] = value  # pyright: ignore[reportIncompatibleVariableOverride]
 
     @public_method("append")
     def append(self, ctx: NativeContext, item: SafBaseObject) -> SafBaseObject:
@@ -795,24 +871,6 @@ class SafList(SafObject):
 
         return self.value.pop(int(index.value))
 
-    @spec_meth("bool")
-    def bool(self, ctx: NativeContext) -> SafBool:
-        return SafBool(len(self.value) != 0)
-
-    @spec_meth("altcall")
-    def altcall(self, ctx: NativeContext, idx: SafBaseObject) -> SafBaseObject:
-        if not isinstance(idx, SafNum):
-            raise SafulateTypeError(f"Expected num, got {idx.repr_spec(ctx)} instead.")
-
-        try:
-            return self.value[int(idx.value)]
-        except IndexError:
-            raise SafulateIndexError(f"Index {idx.repr_spec(ctx)} is out of range")
-
-    @spec_meth("iter")
-    def iter(self, ctx: NativeContext) -> SafList:
-        return self
-
     @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> SafStr:
         return SafStr(
@@ -825,10 +883,6 @@ class SafList(SafObject):
             )
             + "]"
         )
-
-    @public_property("len")
-    def len(self, ctx: NativeContext) -> SafNum:
-        return SafNum(len(self.value))
 
 
 class SafFunc(SafObject):
@@ -1111,8 +1165,8 @@ class SafDict(SafObject):
             return default
 
     @spec_meth("iter")
-    def iter(self, ctx: NativeContext) -> SafList:
-        return self.keys(ctx)
+    def iter(self, ctx: NativeContext) -> SafIterator:
+        return SafIterator(obj for obj in self.keys(ctx).value)
 
     @spec_meth("has")
     def has(self, ctx: NativeContext, key: SafBaseObject) -> SafNum:

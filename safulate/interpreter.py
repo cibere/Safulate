@@ -161,19 +161,16 @@ class TreeWalker(ASTVisitor):
         return val
 
     def visit_for_loop(self, node: ASTForLoop) -> SafBaseObject:
-        src = node.source.visit(self)
-        if not isinstance(src, SafList):
-            with ErrorManager(token=node.var_name):
-                src = self.ctx(node.var_name).invoke_spec(src, "iter")
-                if not isinstance(src, SafList):
-                    raise SafulateValueError(
-                        f"{src.repr_spec(self.ctx(node.var_name))} is not iterable"
-                    )
+        ctx = self.ctx(node.var_name)
+        src = ctx.invoke_spec(node.source.visit(self), "iter")
 
-        loops = src.value.copy()
         val = null
-        while loops:
-            item = loops.pop(0)
+        while 1:
+            try:
+                item = ctx.invoke_spec(src, "next")
+            except SafulateBreakoutError as e:
+                e.check()
+                break
 
             try:
                 with self.scope() as env:
@@ -181,7 +178,12 @@ class TreeWalker(ASTVisitor):
                     env[node.var_name] = item
                     val = node.body.visit(self)
             except SafulateInvalidContinue as e:
-                e.handle_skips(loops)
+                for _ in range(e.amount):
+                    try:
+                        item = ctx.invoke_spec(src, "next")
+                    except SafulateBreakoutError as e:
+                        e.check()
+                        break
             except SafulateBreakoutError as e:
                 e.check()
                 break
@@ -241,21 +243,21 @@ class TreeWalker(ASTVisitor):
                 self.env[node.name] = value
             case Token(type=TokenType.PRIV):
                 self.env.set_priv(node.name, value)
-            case Token(lexme=SoftKeyword.SPEC.value):
+            case Token(lexeme=SoftKeyword.SPEC.value):
                 if self.env.scope is None:
                     raise SafulateScopeError(
                         "specs can only be set in an edit object statement",
                         node.keyword,
                     )
 
-                if node.name.lexeme not in self.env.scope.specs:
-                    raise SafulateValueError(
-                        f"there is no spec named {node.name.lexeme!r}", node.name
-                    ) from None
+                # if node.name.lexeme not in self.env.scope.specs:
+                #     raise SafulateValueError(
+                #         f"there is no spec named {node.name.lexeme!r}", node.name
+                #     ) from None
 
                 self.env.scope.specs[node.name.lexeme] = value
             case _:
-                raise RuntimeError(f"Unknown var decl keyword: {node.keyword.type!r}")
+                raise RuntimeError(f"Unknown var decl keyword: {node.keyword!r}")
         return value
 
     def visit_func_decl(self, node: ASTFuncDecl) -> SafBaseObject:
@@ -354,11 +356,7 @@ class TreeWalker(ASTVisitor):
                     )
                 case ParamType.vararg:
                     val = ctx.invoke_spec(value.visit(self), "iter")
-                    if not isinstance(val, SafList):
-                        raise SafulateValueError(
-                            f"Can not unpack, {val.repr_spec(ctx)} is not iterable"
-                        )
-                    args.extend(val.value)
+                    args.extend(val.iter_spec(ctx))
                 case ParamType.varkwarg:
                     val = value.visit(self)
                     if not isinstance(val, SafDict):
