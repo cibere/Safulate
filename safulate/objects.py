@@ -402,6 +402,10 @@ class SafNull(SafObject):
     def __init__(self) -> None:
         super().__init__("null")
 
+    @spec_meth("str")
+    def str(self, ctx: NativeContext) -> SafStr:
+        return SafStr("")
+
     @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> SafStr:
         return SafStr("null")
