@@ -809,9 +809,6 @@ class Parser:
         return callee
 
     def list_syntax(self) -> ASTNode:
-        if not self.check(TokenType.LSQB):
-            return self.atom()
-
         self.consume(TokenType.LSQB, "Expected '['")
         parts: list[ASTBlock] = []
         temp: list[ASTNode] = []
@@ -834,6 +831,8 @@ class Parser:
             expr = self.expr()
             self.consume(TokenType.RPAR, "Expected ')'")
             return expr
+        elif self.check(TokenType.LSQB):
+            return self.list_syntax()
 
         if self.check(TokenType.FSTR_START):
             return self.fstring()
