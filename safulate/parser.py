@@ -213,7 +213,7 @@ class Parser:
 
     def func_decl_stmt(self) -> ASTNode:
         scope_token = self.match(TokenType.PUB, TokenType.PRIV, SoftKeyword.SPEC)
-        kw_token = self.match(SoftKeyword.STRUCT, SoftKeyword.PROP)
+        kw_token = self.match(SoftKeyword.STRUCT, SoftKeyword.PROP, TokenType.TYPE)
 
         match (scope_token, kw_token):
             case (None, None):
@@ -306,49 +306,41 @@ class Parser:
 
         match decl_kw:
             case SoftKeyword.STRUCT:
-                func = ASTFuncDecl(
+                func = self._make_struct(
                     name=name,
                     params=params,
                     scope_token=scope_token,
                     kw_token=kw_token,
                     paren_token=paren_token,
-                    body=ASTBlock(
-                        [
-                            ASTReturn(
-                                keyword=Token(
-                                    TokenType.RETURN, "return", kw_token.start
-                                ),
-                                expr=ASTEditObject(
-                                    obj=ASTCall(
-                                        callee=ASTAtom(
-                                            Token(
-                                                TokenType.ID, "object", kw_token.start
-                                            )
-                                        ),
-                                        paren=Token(
-                                            TokenType.LPAR, "(", kw_token.start
-                                        ),
-                                        params=[
-                                            (
-                                                ParamType.arg,
-                                                None,
-                                                ASTAtom(
-                                                    Token(
-                                                        TokenType.STR,
-                                                        f"{name.lexeme}",
-                                                        name.start,
-                                                    )
-                                                ),
-                                            )
-                                        ]
-                                        if name
-                                        else [],
-                                    ),
-                                    block=body,
-                                ),
+                    body=body,
+                )
+            case TokenType.TYPE:
+                if decos:
+                    raise SafulateSyntaxError("Properties can't take decorators")
+                if name is None:
+                    raise SafulateSyntaxError("types must have a name")
+                return ASTCall(
+                    callee=ASTAtom(Token.mock(TokenType.TYPE, start=kw_token.start)),
+                    paren=paren_token,
+                    params=[
+                        (
+                            ParamType.arg,
+                            None,
+                            ASTAtom(Token(TokenType.STR, name.lexeme, name.start)),
+                        ),
+                        (
+                            ParamType.kwarg,
+                            "constructor",
+                            self._make_struct(
+                                name=name,
+                                params=params,
+                                body=body,
+                                scope_token=scope_token,
+                                kw_token=kw_token,
+                                paren_token=paren_token,
                             ),
-                        ]
-                    ),
+                        ),
+                    ],
                 )
             case SoftKeyword.PROP:
                 if params:
@@ -397,6 +389,54 @@ class Parser:
 
         return func
 
+    def _make_struct(
+        self,
+        name: Token | None,
+        params: list[ASTFuncDecl_Param],
+        scope_token: Token,
+        kw_token: Token,
+        paren_token: Token,
+        body: ASTBlock,
+    ) -> ASTFuncDecl:
+        return ASTFuncDecl(
+            name=name,
+            params=params,
+            scope_token=scope_token,
+            kw_token=kw_token,
+            paren_token=paren_token,
+            body=ASTBlock(
+                [
+                    ASTReturn(
+                        keyword=Token(TokenType.RETURN, "return", kw_token.start),
+                        expr=ASTEditObject(
+                            obj=ASTCall(
+                                callee=ASTAtom(
+                                    Token(TokenType.ID, "object", kw_token.start)
+                                ),
+                                paren=Token(TokenType.LPAR, "(", kw_token.start),
+                                params=[
+                                    (
+                                        ParamType.arg,
+                                        None,
+                                        ASTAtom(
+                                            Token(
+                                                TokenType.STR,
+                                                f"{name.lexeme}",
+                                                name.start,
+                                            )
+                                        ),
+                                    )
+                                ]
+                                if name
+                                else [],
+                            ),
+                            block=body,
+                        ),
+                    ),
+                ]
+            ),
+        )
+
     def stmt(self) -> ASTNode:
         if self.check(TokenType.LBRC):
             return self.block()
@@ -407,6 +447,7 @@ class Parser:
                 SoftKeyword.SPEC,
                 SoftKeyword.STRUCT,
                 SoftKeyword.PROP,
+                TokenType.TYPE,
             ),
             TokenType.ID,
             TokenType.LPAR,
@@ -415,10 +456,7 @@ class Parser:
                 TokenType.PUB,
                 TokenType.PRIV,
             ),
-            (
-                SoftKeyword.STRUCT,
-                SoftKeyword.PROP,
-            ),
+            (SoftKeyword.STRUCT, SoftKeyword.PROP, TokenType.TYPE),
             TokenType.ID,
             TokenType.LPAR,
         ):
@@ -686,7 +724,7 @@ class Parser:
 
         name = self.advance()  # We know it's the right type b/c of check above
         op = self.advance()
-        value = self.assign()
+        value = self.expr()
 
         match op.type:
             case TokenType.PLUSEQ:
@@ -839,7 +877,11 @@ class Parser:
         elif token := self.match(TokenType.RSTRING):
             return ASTRegex(value=token)
         elif not self.check(
-            TokenType.NUM, TokenType.STR, TokenType.ID, TokenType.PRIV_ID
+            TokenType.NUM,
+            TokenType.STR,
+            TokenType.ID,
+            TokenType.PRIV_ID,
+            TokenType.TYPE,
         ):
             raise SafulateSyntaxError("Expected expression", self.peek())
 

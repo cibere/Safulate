@@ -75,6 +75,7 @@ class TokenType(Enum):
     CONTINUE = "continue"
     PUB = "pub"
     PRIV = "priv"
+    TYPE = "type"
 
 
 class SoftKeyword(Enum):
@@ -100,3 +101,18 @@ class Token:
     def __repr__(self) -> str:
         mid = repr(self.lexeme).replace('"', '\\"')
         return f'"<{self.type.name},{mid},{self.start}>"'
+
+    @classmethod
+    def mock(
+        cls,
+        token_type: TokenType,
+        /,
+        *,
+        lexme: str | None = None,
+        start: int | None = None,
+    ) -> Token:
+        return Token(
+            type=token_type,
+            lexeme=token_type.value if lexme is None else lexme,
+            start=-1 if start is None else start,
+        )

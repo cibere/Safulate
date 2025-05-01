@@ -82,6 +82,7 @@ class Lexer:
             TokenType.HAS,
             TokenType.PUB,
             TokenType.PRIV,
+            TokenType.TYPE,
         )
     }
 

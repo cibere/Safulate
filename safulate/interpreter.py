@@ -391,6 +391,8 @@ class TreeWalker(ASTVisitor):
                 return self.env[node.token]
             case TokenType.PRIV_ID:
                 return self.env.get_priv(node.token)
+            case TokenType.TYPE:
+                return SafType.base_type()
             case _:
                 raise ValueError(f"Invalid atom type {node.token.type.name}")
 

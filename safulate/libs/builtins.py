@@ -10,17 +10,32 @@ from safulate import (
     SafNum,
     SafObject,
     SafStr,
+    SafTuple,
+    SafType,
     SafulateAssertionError,
     false,
     null,
+    public_method,
     true,
 )
-from safulate.objects import public_method
 
 
 class Builtins(SafObject):
     def __init__(self) -> None:
-        super().__init__("builtins", {"null": null, "true": true, "false": false})
+        super().__init__(
+            "builtins",
+            {
+                "null": null,
+                "true": true,
+                "false": false,
+                "dict": SafDict().type,
+                "list": SafList([]).type,
+                "tuple": SafTuple(()).type,
+                "str": SafStr("").type,
+                "num": SafNum(0).type,
+                "object": SafType.object_type(),
+            },
+        )
 
     @public_method("print")
     def print_(self, ctx: NativeContext, *args: SafBaseObject) -> SafBaseObject:
@@ -30,14 +45,6 @@ class Builtins(SafObject):
     @public_method("quit")
     def quit_(self, ctx: NativeContext) -> Never:
         quit(1)
-
-    @public_method("list")
-    def list_(self, ctx: NativeContext, *values: SafBaseObject) -> SafList:
-        return SafList(list(values))
-
-    @public_method("dict")
-    def dict_(self, ctx: NativeContext, **data: SafBaseObject) -> SafDict:
-        return SafDict.from_data(ctx, data)
 
     @public_method("globals")
     def get_globals(self, ctx: NativeContext) -> SafBaseObject:
@@ -52,17 +59,6 @@ class Builtins(SafObject):
         if ctx.env.parent:
             ctx.interpreter.env = ctx.env.parent
         return null
-
-    @public_method("object")
-    def create_object(
-        self, ctx: NativeContext, name: SafBaseObject = null
-    ) -> SafBaseObject:
-        return SafObject(
-            name=f"Custom Object @ {ctx.token.start}"
-            if name is null
-            else name.str_spec(ctx),
-            attrs={},
-        )
 
     @public_method("assert")
     def assert_(
@@ -82,10 +78,6 @@ class Builtins(SafObject):
             attrs.update({f"%{key}": val for key, val in obj.specs.items()})
 
         return SafList([SafStr(attr) for attr in attrs])
-
-    @public_method("type")
-    def get_type(self, ctx: NativeContext, obj: SafBaseObject) -> SafBaseObject:
-        return obj.specs["type"]
 
 
 def load(ctx: NativeContext) -> SafObject:

@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Iterator
 from functools import partial as partial_func
-from typing import TYPE_CHECKING, Any, Concatenate, TypeVar, cast, final
+from typing import TYPE_CHECKING, Any, Concatenate, Self, TypeVar, cast, final
 
 from .asts import ASTBlock, ASTFuncDecl_Param, ASTNode, ASTVisitor, ParamType
 from .errors import (
@@ -47,6 +47,7 @@ __all__ = (
     "SafProperty",
     "SafPythonError",
     "SafStr",
+    "SafTuple",
     "SafType",
     "false",
     "null",
@@ -117,6 +118,11 @@ class SafBaseObject(ABC):
     __safulate_public_attrs__: dict[str, SafBaseObject] | None = None
     __safulate_private_attrs__: dict[str, SafBaseObject] | None = None
     __safulate_specs__: dict[str, SafBaseObject] | None = None
+    init: (
+        Callable[Concatenate[type[Any], NativeContext, ...], Self]
+        | SafBaseObject
+        | None
+    ) = None
 
     def _attrs_hook(self, attrs: defaultdict[str, dict[str, SafBaseObject]]) -> None:
         return
@@ -350,11 +356,36 @@ class SafBaseObject(ABC):
 
 
 class SafType(SafBaseObject):
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, *, struct: SafBaseObject | None = None) -> None:
         self.name = name
+        self.struct = struct
+
+    @classmethod
+    def base_type(cls) -> Self:
+        def struct(
+            ctx: NativeContext, inp: SafBaseObject, *, constructor: SafBaseObject = null
+        ) -> SafType:
+            if constructor is null:
+                return cast("SafType", inp.specs["type"])
+            return cls(inp.str_spec(ctx), struct=constructor)
+
+        self = cls("type", struct=SafFunc.from_native("type", struct))
+        return self
+
+    @classmethod
+    def object_type(cls) -> Self:
+        def struct(ctx: NativeContext, name: SafBaseObject = null) -> SafObject:
+            return SafObject(
+                name=f"Custom Object @ {ctx.token.start}"
+                if name is null
+                else name.str_spec(ctx),
+                attrs={},
+            )
+
+        return cls("object", struct=SafFunc.from_native("object", struct))
 
     def _attrs_hook(self, attrs: defaultdict[str, dict[str, SafBaseObject]]) -> None:
-        attrs["%"]["type"] = SafType("type")
+        attrs["%"]["type"] = self.base_type()
 
     @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> SafStr:
@@ -368,6 +399,15 @@ class SafType(SafBaseObject):
             if isinstance(obj_type, SafType) and obj_type.name == self.name
             else false
         )
+
+    @spec_meth("call")
+    def call(
+        self, ctx: NativeContext, *args: SafBaseObject, **kwargs: SafBaseObject
+    ) -> SafBaseObject:
+        if self.struct is None:
+            raise SafulateTypeError(f"The {self.name!r} type can not be initialized")
+
+        return ctx.invoke(self.struct, *args, **kwargs)
 
 
 class SafObject(SafBaseObject):
@@ -383,7 +423,16 @@ class SafObject(SafBaseObject):
     def _attrs_hook(self, attrs: defaultdict[str, dict[str, SafBaseObject]]) -> None:
         if self.__saf_init_attrs__:
             attrs[""].update(self.__saf_init_attrs__)
-        attrs["%"]["type"] = SafType(self.__saf_typename__)
+
+        match self.init:
+            case None:
+                struct = None
+            case SafFunc():
+                struct = self.init
+            case _:
+                struct = SafFunc.from_native("init", self.init)  # pyright: ignore[reportArgumentType]
+
+        attrs["%"]["type"] = SafType(self.__saf_typename__, struct=struct)
 
     @property
     def type(self) -> SafType:
@@ -431,6 +480,14 @@ class SafNum(SafObject):
         super().__init__("num")
 
         self.value = value
+
+    @classmethod
+    def init(cls, ctx: NativeContext, inp: SafBaseObject) -> Self:
+        string = inp.str_spec(ctx)
+        try:
+            return cls(float(string))
+        except ValueError:
+            raise SafulateValueError(f"Could not convert {string!r} into a number")
 
     @spec_meth("hash")
     def hash(self, ctx: NativeContext) -> SafNum:
@@ -551,6 +608,10 @@ class SafBool(SafNum):
         raise RuntimeError("SafBool should not be invoked directly")
 
     @classmethod
+    def init(cls, ctx: NativeContext, inp: SafBaseObject) -> Self:
+        return ctx.invoke_spec(inp, "bool")  # pyright: ignore[reportReturnType]
+
+    @classmethod
     def _create(cls, value: bool) -> SafBool:
         self = cls.__new__(cls)
         self.status = value
@@ -577,6 +638,13 @@ class SafStr(SafObject):
         super().__init__("str")
 
         self.value = value.encode("ascii").decode("unicode_escape")
+
+    @classmethod
+    def init(cls, ctx: NativeContext, inp: SafBaseObject) -> Self:
+        try:
+            return cls(inp.str_spec(ctx))
+        except UnicodeDecodeError as e:
+            raise SafulateValueError(str(e)) from None
 
     @spec_meth("hash")
     def hash(self, ctx: NativeContext) -> SafNum:
@@ -877,6 +945,10 @@ class SafTuple(_SafIterable):
 
         self.value = value  # pyright: ignore[reportIncompatibleVariableOverride]
 
+    @classmethod
+    def init(cls, ctx: NativeContext, *items: SafBaseObject) -> Self:
+        return cls(items)
+
     @spec_meth("repr")
     def repr(self, ctx: NativeContext) -> SafStr:
         return SafStr(
@@ -896,6 +968,10 @@ class SafList(_SafIterable):
         super().__init__("list")
 
         self.value: list[SafBaseObject] = value  # pyright: ignore[reportIncompatibleVariableOverride]
+
+    @classmethod
+    def init(cls, ctx: NativeContext, *items: SafBaseObject) -> Self:
+        return cls(list(items))
 
     @public_method("append")
     def append(self, ctx: NativeContext, item: SafBaseObject) -> SafBaseObject:
@@ -1083,7 +1159,7 @@ class SafFunc(SafObject):
 
         ret_value = null
         parent = self.public_attrs["parent"]
-        with ctx.interpreter.scope(source=parent):
+        with ctx.interpreter.scope(source=None if parent is null else parent):
             ctx.interpreter.env["parent"] = parent
 
             for param, value in [*params.items(), *self.extra_vars.items()]:
@@ -1137,6 +1213,14 @@ class SafProperty(SafObject):
 
         self.func = func
 
+    @classmethod
+    def init(cls, ctx: NativeContext, func: SafBaseObject) -> Self:
+        if not isinstance(func, SafFunc):
+            raise SafulateTypeError(
+                f"Expected func, got {func.repr_spec(ctx)} instead."
+            )
+        return cls(func)
+
     @spec_meth("hash")
     def hash(self, ctx: NativeContext) -> SafNum:
         return SafNum(hash((self.__class__, self.func)))
@@ -1171,11 +1255,15 @@ class SafDict(SafObject):
         self.data = {}
 
     @classmethod
+    def init(cls, ctx: NativeContext, **items: SafBaseObject) -> Self:
+        return cls.from_data(ctx, items)
+
+    @classmethod
     def from_data(
         cls,
         ctx: NativeContext,
         initial: dict[SafBaseObject, SafBaseObject] | dict[str, SafBaseObject],
-    ) -> SafDict:
+    ) -> Self:
         self = cls()
         for key, value in initial.items():
             key = SafStr(key) if isinstance(key, str) else key
