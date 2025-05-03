@@ -315,7 +315,7 @@ class Parser:
             if self.match_sequence(TokenType.DOT, TokenType.DOT):
                 vararg_reached = True
                 param_type = ParamType.vararg
-            elif self.match(TokenType.ELIPSE):
+            elif self.match(TokenType.ELLIPSIS):
                 param_type = ParamType.varkwarg
                 varkwarg_reached = True
 
@@ -889,7 +889,7 @@ class Parser:
 
                     if not self.match(close_paren):
                         while True:
-                            if self.match(TokenType.ELIPSE):
+                            if self.match(TokenType.ELLIPSIS):
                                 params.append((ParamType.varkwarg, None, self.expr()))
                             elif self.match_sequence(TokenType.DOT, TokenType.DOT):
                                 params.append((ParamType.vararg, None, self.expr()))
@@ -962,7 +962,7 @@ class Parser:
             TokenType.ID,
             TokenType.PRIV_ID,
             TokenType.TYPE,
-            TokenType.ELIPSE,
+            TokenType.ELLIPSIS,
         ):
             raise SafulateSyntaxError("Expected expression", self.peek())
 

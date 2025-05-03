@@ -38,6 +38,7 @@ __all__ = (
     "SafBaseObject",
     "SafBool",
     "SafDict",
+    "SafEllipsis",
     "SafFunc",
     "SafIterator",
     "SafList",
@@ -880,6 +881,15 @@ class SafStr(SafObject):
                 f"Expected str, received {delimiter.repr_spec(ctx)} instead"
             )
         return SafList([SafStr(part) for part in self.value.split(delimiter.value)])
+
+
+class SafEllipsis(SafObject):
+    def __init__(self) -> None:
+        super().__init__("ellipsis")
+
+    @spec_meth("repr")
+    def repr(self, ctx: NativeContext) -> SafStr:
+        return SafStr("<ellipsis>")
 
 
 # region Structures

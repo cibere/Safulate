@@ -22,7 +22,7 @@ class TokenType(Enum):
     # trisymbols
     STARSTAREQ = "**="
     EQEQEQ = "==="
-    ELIPSE = "..."
+    ELLIPSIS = "..."
 
     # bisymbols
     STARSTAR = "**"

@@ -59,6 +59,7 @@ from .native_context import NativeContext
 from .objects import (
     SafBaseObject,
     SafDict,
+    SafEllipsis,
     SafFunc,
     SafList,
     SafNum,
@@ -392,6 +393,8 @@ class TreeWalker(ASTVisitor):
                 return self.env.get_priv(node.token)
             case TokenType.TYPE:
                 return SafType.base_type()
+            case TokenType.ELLIPSIS:
+                return SafEllipsis()
             case _:
                 raise ValueError(f"Invalid atom type {node.token.type.name}")
 
