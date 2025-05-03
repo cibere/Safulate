@@ -1128,12 +1128,6 @@ class SafFunc(SafObject):
             )
         )
 
-    @spec_meth("neg")
-    def neg(self, ctx: NativeContext) -> SafFunc:
-        return self.with_partial_params(
-            tuple(reversed(self.partial_args)), self.partial_kwargs
-        )
-
     @spec_meth("altcall")
     def altcall(
         self, ctx: NativeContext, *args: SafBaseObject, **kwargs: SafBaseObject
@@ -1178,6 +1172,18 @@ class SafFunc(SafObject):
         name = self.public_attrs["name"]
         suffix = f" {name.repr_spec(ctx)}" if isinstance(name, SafStr) else ""
         return SafStr(f"<func{suffix}>")
+
+    @public_property("partial_args")
+    def partial_args_prop(self, ctx: NativeContext) -> SafTuple:
+        return SafTuple(self.partial_args)
+
+    @public_property("partial_kwargs")
+    def partial_kwargs_prop(self, ctx: NativeContext) -> SafDict:
+        return SafDict.from_data(ctx, self.partial_kwargs)
+
+    @public_method("without_partials")
+    def without_partials(self, ctx: NativeContext) -> SafFunc:
+        return self.with_partial_params((), {})
 
     @classmethod
     def from_native(

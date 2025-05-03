@@ -359,8 +359,7 @@ class TreeWalker(ASTVisitor):
                         f"Kwarg without name: {param_type}, {name}, {value}"
                     )
                 case ParamType.vararg:
-                    val = ctx.invoke_spec(value.visit(self), "iter")
-                    args.extend(val.iter_spec(ctx))
+                    args.extend(value.visit(self).iter_spec(ctx))
                 case ParamType.varkwarg:
                     val = value.visit(self)
                     if not isinstance(val, SafDict):
@@ -553,12 +552,18 @@ class TreeWalker(ASTVisitor):
         return SafList([child.visit(self) for child in node.children])
 
     def visit_format(self, node: ASTFormat) -> SafBaseObject:
-        spec = {"r": "repr", "s": "str", "h": "hash"}.get(node.spec.lexeme)
         args: tuple[SafBaseObject, ...] = ()
 
-        if spec is None:
-            args = (SafStr(node.spec.lexeme),)
-            spec = "format"
+        match node.spec.lexeme:
+            case "r":
+                spec = "repr"
+            case "s":
+                spec = "str"
+            case "h":
+                spec = "hash"
+            case _:
+                args = (SafStr(node.spec.lexeme),)
+                spec = "format"
 
         return self.ctx(node.spec).invoke_spec(node.obj.visit(self), spec, *args)
 

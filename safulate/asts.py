@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from enum import Enum
 from typing import TYPE_CHECKING
+
+from .utils import Enum
 
 if TYPE_CHECKING:
     from packaging.version import Version as _PackagingVersion

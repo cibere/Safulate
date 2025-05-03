@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+
+from .utils import Enum
 
 __all__ = "SoftKeyword", "Token", "TokenType"
 
@@ -21,6 +22,7 @@ class TokenType(Enum):
     # trisymbols
     STARSTAREQ = "**="
     EQEQEQ = "==="
+    ELIPSE = "..."
 
     # bisymbols
     STARSTAR = "**"
@@ -99,8 +101,7 @@ class Token:
     start: int
 
     def __repr__(self) -> str:
-        mid = repr(self.lexeme).replace('"', '\\"')
-        return f'"<{self.type.name},{mid},{self.start}>"'
+        return f"Token(type={self.type!r}, lexeme={self.lexeme!r}, start={self.start})"
 
     @classmethod
     def mock(
@@ -115,4 +116,17 @@ class Token:
             type=token_type,
             lexeme=token_type.value if lexme is None else lexme,
             start=-1 if start is None else start,
+        )
+
+    def with_type(
+        self,
+        token_type: TokenType,
+        /,
+        *,
+        lexme: str | None = None,
+    ) -> Token:
+        return Token(
+            token_type,
+            lexeme=token_type.value if lexme is None else lexme,
+            start=self.start,
         )
