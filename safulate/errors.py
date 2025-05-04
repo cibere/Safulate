@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, TypeVar
 
+from .enums import TokenType
 from .properties import cached_property
-from .tokens import Token, TokenType
+from .tokens import Token
 
 if TYPE_CHECKING:
     from collections.abc import Callable

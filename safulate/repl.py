@@ -4,13 +4,14 @@ import msgspec
 
 from .asts import ASTNode
 from .cli import Options
+from .enums import TokenType
 from .environment import Environment
 from .errors import SafulateError
 from .interpreter import TreeWalker
 from .lexer import Lexer
 from .objects import SafBaseObject, SafNull
 from .parser import Parser
-from .tokens import Token, TokenType
+from .tokens import Token
 
 REPL_GREETING = "\033[34;1mTest v0.0.0\033[0m"
 

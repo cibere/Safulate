@@ -38,10 +38,10 @@ from .asts import (
     ASTVarDecl,
     ASTVersionReq,
     ASTWhile,
-    ParamType,
 )
+from .enums import ParamType, SoftKeyword, TokenType
 from .errors import SafulateSyntaxError
-from .tokens import SoftKeyword, Token, TokenType
+from .tokens import Token
 
 if TYPE_CHECKING:
     from collections.abc import Callable

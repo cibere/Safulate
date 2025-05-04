@@ -38,8 +38,8 @@ from .asts import (
     ASTVersionReq,
     ASTVisitor,
     ASTWhile,
-    ParamType,
 )
+from .enums import ParamType, SoftKeyword, TokenType
 from .environment import Environment
 from .errors import (
     ErrorManager,
@@ -72,7 +72,7 @@ from .objects import (
     true,
 )
 from .properties import cached_property
-from .tokens import SoftKeyword, Token, TokenType
+from .tokens import Token
 
 if TYPE_CHECKING:
     from collections.abc import Iterator

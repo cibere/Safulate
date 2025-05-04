@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import ClassVar
 
+from .enums import TokenType
 from .errors import ErrorManager, SafulateSyntaxError
-from .tokens import Token, TokenType
+from .tokens import Token
 
 __all__ = ("Lexer",)
 

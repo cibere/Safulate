@@ -7,7 +7,8 @@ from collections.abc import Callable, Iterator
 from functools import partial as partial_func
 from typing import TYPE_CHECKING, Any, Concatenate, Self, TypeVar, cast, final
 
-from .asts import ASTBlock, ASTFuncDecl_Param, ASTNode, ASTVisitor, ParamType
+from .asts import ASTBlock, ASTFuncDecl_Param, ASTNode, ASTVisitor
+from .enums import ParamType, TokenType
 from .errors import (
     SafulateAttributeError,
     SafulateBreakoutError,
@@ -18,7 +19,7 @@ from .errors import (
     SafulateValueError,
 )
 from .properties import cached_property
-from .tokens import Token, TokenType
+from .tokens import Token
 from .utils import FallbackDict
 
 if TYPE_CHECKING:

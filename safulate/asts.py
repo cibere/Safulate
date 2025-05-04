@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .utils import Enum
+from .enums import ParamType
 
 if TYPE_CHECKING:
     from packaging.version import Version as _PackagingVersion
@@ -68,20 +68,6 @@ class ASTVarDecl(ASTNode):
 
     def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_var_decl(self)
-
-
-class ParamType(Enum):
-    vararg = 1
-    varkwarg = 2
-    arg = 3
-    kwarg = 4
-    arg_or_kwarg = 5
-
-    def to_arg_type_str(self) -> str:
-        return {
-            ParamType.kwarg: "keyword ",
-            ParamType.arg: "positional ",
-        }.get(self, "")
 
 
 @dataclass
