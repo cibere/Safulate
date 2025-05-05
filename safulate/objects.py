@@ -1207,7 +1207,7 @@ class SafFunc(SafObject):
         ret_value = null
         parent = self.public_attrs["parent"]
         with ctx.interpreter.scope(source=None if parent is null else parent):
-            ctx.interpreter.env["parent"] = parent
+            ctx.interpreter.env["par"] = parent
 
             for param, value in [*params.items(), *self.extra_vars.items()]:
                 ctx.interpreter.env.declare(param)
