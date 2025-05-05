@@ -1,4 +1,5 @@
 from ._version import __version__ as __version__
+from .enums import *
 from .environment import *
 from .errors import *
 from .interpreter import *

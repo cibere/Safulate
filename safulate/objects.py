@@ -5,10 +5,29 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Iterator
 from functools import partial as partial_func
-from typing import TYPE_CHECKING, Any, Concatenate, Self, TypeVar, cast, final
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Concatenate,
+    Self,
+    TypedDict,
+    TypeVar,
+    cast,
+    final,
+)
 
 from .asts import ASTBlock, ASTFuncDecl_Param, ASTNode, ASTVisitor
-from .enums import ParamType, TokenType
+from .enums import (
+    AttrSpec,
+    BinarySpec,
+    CallSpec,
+    FormatSpec,
+    ParamType,
+    SpecName,
+    TokenType,
+    UnarySpec,
+    spec_name_from_str,
+)
 from .errors import (
     SafulateAttributeError,
     SafulateBreakoutError,
@@ -76,26 +95,42 @@ def __method_deco(
     return deco
 
 
-public_method = __method_deco("", is_prop=False)
-public_property = __method_deco("", is_prop=True)
-private_method = __method_deco("$", is_prop=False)
-private_property = __method_deco("$", is_prop=True)
-spec_meth = __method_deco("%", is_prop=False)
-spec_prop = __method_deco("%", is_prop=True)
+def __spec_deco(
+    *, is_prop: bool
+) -> Callable[[SpecName], Callable[[NativeMethodT], NativeMethodT]]:
+    def deco(name: SpecName) -> Callable[[NativeMethodT], NativeMethodT]:
+        def decorator(func: NativeMethodT) -> NativeMethodT:
+            setattr(func, "__safulate_native_method__", ("spec", name, is_prop))
+            return func
+
+        return decorator
+
+    return deco
+
+
+public_method = __method_deco("pub", is_prop=False)
+public_property = __method_deco("pub", is_prop=True)
+private_method = __method_deco("priv", is_prop=False)
+private_property = __method_deco("priv", is_prop=True)
+spec_meth = __spec_deco(is_prop=False)
+spec_prop = __spec_deco(is_prop=True)
 
 
 class _DefaultSpecs:
     def __init__(self) -> None:
         self.raw_specs: dict[
-            str,
+            SpecName,
             Callable[Concatenate[SafBaseObject, NativeContext, ...], SafBaseObject],
-        ] = {}
+        ] = {FormatSpec.repr: lambda obj, ctx: SafStr(f"<{obj.__class__.__name__}>")}
 
-    def get(self, key: str, *, obj: SafBaseObject) -> SafFunc:
+    def get(self, key: SpecName, *, obj: SafBaseObject) -> SafFunc:
         raw_spec = self.raw_specs[key]
-        return SafFunc.from_native(key, partial_func(raw_spec, obj))
+        return SafFunc.from_native(key.name, partial_func(raw_spec, obj))
 
-    def register(self, name: str) -> Callable[[DefaultSpecT], DefaultSpecT]:
+    def get_from_str(self, key: str, *, obj: SafBaseObject) -> SafFunc:
+        return self.get(key=spec_name_from_str(key), obj=obj)
+
+    def register(self, name: SpecName) -> Callable[[DefaultSpecT], DefaultSpecT]:
         def replacement(
             self: SafBaseObject,
             ctx: NativeContext,
@@ -116,22 +151,28 @@ _default_specs = _DefaultSpecs()
 # region Base
 
 
+class _RawAttrs(TypedDict):
+    pub: dict[str, SafBaseObject]
+    priv: dict[str, SafBaseObject]
+    spec: dict[SpecName, SafBaseObject]
+
+
 class SafBaseObject(ABC):
     __safulate_public_attrs__: dict[str, SafBaseObject] | None = None
     __safulate_private_attrs__: dict[str, SafBaseObject] | None = None
-    __safulate_specs__: dict[str, SafBaseObject] | None = None
+    __safulate_specs__: dict[SpecName, SafBaseObject] | None = None
     init: (
         Callable[Concatenate[type[Any], NativeContext, ...], Self]
         | SafBaseObject
         | None
     ) = None
 
-    def _attrs_hook(self, attrs: defaultdict[str, dict[str, SafBaseObject]]) -> None:
+    def _attrs_hook(self, attrs: _RawAttrs) -> None:
         return
 
     @cached_property
-    def _attrs(self) -> defaultdict[str, dict[str, SafBaseObject]]:
-        data: defaultdict[str, dict[str, SafBaseObject]] = defaultdict(dict)
+    def _attrs(self) -> _RawAttrs:
+        data: _RawAttrs = defaultdict(dict)  # pyright: ignore[reportAssignmentType]
         for name, _ in inspect.getmembers(
             self.__class__, lambda attr: hasattr(attr, "__safulate_native_method__")
         ):
@@ -148,7 +189,7 @@ class SafBaseObject(ABC):
         if self.__safulate_public_attrs__ is None:
             self.__safulate_public_attrs__ = {}
 
-        self.__safulate_public_attrs__.update(self._attrs[""])
+        self.__safulate_public_attrs__.update(self._attrs["pub"])
         return self.__safulate_public_attrs__
 
     @cached_property
@@ -156,15 +197,15 @@ class SafBaseObject(ABC):
         if self.__safulate_private_attrs__ is None:
             self.__safulate_private_attrs__ = {}
 
-        self.__safulate_private_attrs__.update(self._attrs["$"])
+        self.__safulate_private_attrs__.update(self._attrs["priv"])
         return self.__safulate_private_attrs__
 
     @cached_property
-    def specs(self) -> dict[str, SafBaseObject]:
+    def specs(self) -> dict[SpecName, SafBaseObject]:
         if self.__safulate_specs__ is None:
             self.__safulate_specs__ = {}
 
-        self.__safulate_specs__.update(self._attrs["%"])
+        self.__safulate_specs__.update(self._attrs["spec"])
         return FallbackDict(
             self.__safulate_specs__, partial_func(_default_specs.get, obj=self)
         )
@@ -180,88 +221,86 @@ class SafBaseObject(ABC):
 
     @private_method("get_specs")
     def get_specs(self, ctx: NativeContext) -> SafBaseObject:
-        return SafDict.from_data(ctx, self.specs.copy())
+        return SafDict.from_data(
+            ctx, {key.name: value for key, value in self.specs.items()}
+        )
 
-    @_default_specs.register("add")
+    @_default_specs.register(BinarySpec.add)
     def add(self, ctx: NativeContext, _other: SafBaseObject) -> SafBaseObject:
         raise SafulateValueError("Add is not defined for this type")
 
-    @_default_specs.register("sub")
+    @_default_specs.register(BinarySpec.sub)
     def sub(self, ctx: NativeContext, _other: SafBaseObject) -> SafBaseObject:
         raise SafulateValueError("Subtract is not defined for this type")
 
-    @_default_specs.register("mul")
+    @_default_specs.register(BinarySpec.mul)
     def mul(self, ctx: NativeContext, _other: SafBaseObject) -> SafBaseObject:
         raise SafulateValueError("Multiply is not defined for this type")
 
-    @_default_specs.register("div")
+    @_default_specs.register(BinarySpec.div)
     def div(self, ctx: NativeContext, _other: SafBaseObject) -> SafBaseObject:
         raise SafulateValueError("Divide is not defined for this type")
 
-    @_default_specs.register("pow")
+    @_default_specs.register(BinarySpec.pow)
     def pow(self, ctx: NativeContext, _other: SafBaseObject) -> SafBaseObject:
         raise SafulateValueError("Exponentiation is not defined for this type")
 
-    @_default_specs.register("uadd")
+    @_default_specs.register(UnarySpec.uadd)
     def uadd(self, ctx: NativeContext) -> SafBaseObject:
         raise SafulateValueError("Unary add is not defined for this type")
 
-    @_default_specs.register("neg")
+    @_default_specs.register(UnarySpec.neg)
     def neg(self, ctx: NativeContext) -> SafBaseObject:
         raise SafulateValueError("Unary minus is not defined for this type")
 
-    @_default_specs.register("less")
+    @_default_specs.register(BinarySpec.less)
     def less(self, ctx: NativeContext, _other: SafBaseObject) -> SafBool:
         raise SafulateValueError("Less than is not defined for this type")
 
-    @_default_specs.register("grtr")
+    @_default_specs.register(BinarySpec.grtr)
     def grtr(self, ctx: NativeContext, _other: SafBaseObject) -> SafBool:
         raise SafulateValueError("Greater than is not defined for this type")
 
-    @_default_specs.register("lesseq")
+    @_default_specs.register(BinarySpec.lesseq)
     def lesseq(self, ctx: NativeContext, _other: SafBaseObject) -> SafBool:
         raise SafulateValueError("Less than or equal to is not defined for this type")
 
-    @_default_specs.register("grtreq")
+    @_default_specs.register(BinarySpec.grtreq)
     def grtreq(self, ctx: NativeContext, _other: SafBaseObject) -> SafBool:
         raise SafulateValueError(
             "Greater than or equal to is not defined for this type"
         )
 
-    @_default_specs.register("amp")
+    @_default_specs.register(BinarySpec.amp)
     def amp(self, ctx: NativeContext, other: SafBaseObject) -> SafBaseObject:
         raise SafulateValueError("amp is not defined for this type")
 
-    @_default_specs.register("pipe")
+    @_default_specs.register(BinarySpec.pipe)
     def pipe(self, ctx: NativeContext, other: SafBaseObject) -> SafBaseObject:
         raise SafulateValueError("pipe is not defined for this type")
 
-    @_default_specs.register("eq")
+    @_default_specs.register(BinarySpec.eq)
     def eq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
         return true if self == other else false
 
-    @_default_specs.register("neq")
+    @_default_specs.register(BinarySpec.neq)
     def neq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
-        val = ctx.invoke_spec(self, "eq", other).bool_spec(ctx)
+        val = ctx.invoke_spec(self, BinarySpec.eq, other).bool_spec(ctx)
         return true if not val else false
 
-    @_default_specs.register("iter")
+    @_default_specs.register(CallSpec.iter)
     def iter(self, ctx: NativeContext) -> SafIterator:
         raise SafulateValueError("This type is not iterable")
 
-    @_default_specs.register("next")
+    @_default_specs.register(CallSpec.next)
     def next(self, ctx: NativeContext) -> SafBaseObject:
         raise SafulateValueError("next is not defined for this type")
 
-    @_default_specs.register("has_item")
+    @_default_specs.register(BinarySpec.has_item)
     def has_item(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
         raise SafulateValueError("has_item is not defined for this type")
 
-    @_default_specs.register("not")
-    def not_(self, ctx: NativeContext) -> SafBool:
-        return true if (self.bool_spec(ctx)) else false
-
-    @_default_specs.register("bool")
+    @_default_specs.register(UnarySpec.bool)
     def bool(self, ctx: NativeContext) -> SafBool:
         return true
 
@@ -270,46 +309,46 @@ class SafBaseObject(ABC):
         call: Callable[Concatenate[Any, NativeContext, ...], SafBaseObject]
     else:
 
-        @_default_specs.register("altcall")
+        @_default_specs.register(CallSpec.altcall)
         def altcall(
             self, ctx: NativeContext, *args: SafBaseObject, **kwargs: SafBaseObject
         ) -> SafBaseObject:
-            raise SafulateValueError("Cannot altcall this type")
+            raise SafulateValueError(f"{self.repr_spec(ctx)} is not altcallable")
 
-        @_default_specs.register("call")
+        @_default_specs.register(CallSpec.call)
         def call(
             self, ctx: NativeContext, *args: SafBaseObject, **kwargs: SafBaseObject
         ) -> SafBaseObject:
-            raise SafulateValueError("Cannot call this type")
+            raise SafulateValueError(f"{self.repr_spec(ctx)} is not callable")
 
-    @_default_specs.register("get")
+    @_default_specs.register(CallSpec.get)
     def get_spec(self, ctx: NativeContext) -> SafBaseObject:
         return self
 
-    @spec_meth("repr")
+    @spec_meth(FormatSpec.repr)
     @abstractmethod
     def repr(self, ctx: NativeContext) -> SafBaseObject: ...
 
-    @_default_specs.register("str")
+    @_default_specs.register(FormatSpec.str)
     def str(self, ctx: NativeContext) -> SafBaseObject:
-        return ctx.invoke_spec(self, "repr")
+        return ctx.invoke_spec(self, FormatSpec.repr)
 
-    @_default_specs.register("hash")
+    @_default_specs.register(FormatSpec.hash)
     def hash(self, ctx: NativeContext) -> SafNum:
         return SafNum(hash((self.__class__, id(self))))
 
-    @_default_specs.register("format")
+    @_default_specs.register(CallSpec.format)
     def format(self, ctx: NativeContext, val: SafBaseObject) -> SafBaseObject:
         raise SafulateValueError(f"Unknown format type {val.repr_spec(ctx)}")
 
-    @_default_specs.register("get_attr")
+    @_default_specs.register(CallSpec.get_attr)
     def get_attr(self, ctx: NativeContext, name: SafBaseObject) -> SafBaseObject:
         if not isinstance(name, SafStr):
             raise SafulateValueError(f"Expected str, got {name.repr_spec(ctx)} instead")
         val = self.public_attrs.get(name.value)
         if val is None:
             raise SafulateAttributeError(f"Attribute Not Found: {name.repr_spec(ctx)}")
-        return ctx.invoke_spec(val, "get")
+        return ctx.invoke_spec(val, CallSpec.get)
 
     @final
     def __str__(self) -> str:
@@ -320,7 +359,10 @@ class SafBaseObject(ABC):
         raise RuntimeError("use repr_spec instead")
 
     def run_spec(
-        self, spec_name: str, return_value: type[SafBaseObjectT], ctx: NativeContext
+        self,
+        spec_name: SpecName,
+        return_value: type[SafBaseObjectT],
+        ctx: NativeContext,
     ) -> SafBaseObjectT:
         value = ctx.invoke_spec(self, spec_name)
         if not isinstance(value, return_value):
@@ -332,16 +374,16 @@ class SafBaseObject(ABC):
         return value
 
     def repr_spec(self, ctx: NativeContext) -> str:
-        return self.run_spec("repr", SafStr, ctx).value
+        return self.run_spec(FormatSpec.repr, SafStr, ctx).value
 
     def str_spec(self, ctx: NativeContext) -> str:
-        return self.run_spec("str", SafStr, ctx).value
+        return self.run_spec(FormatSpec.str, SafStr, ctx).value
 
     def hash_spec(self, ctx: NativeContext) -> int | float:
-        return self.run_spec("hash", SafNum, ctx).value
+        return self.run_spec(FormatSpec.hash, SafNum, ctx).value
 
     def bool_spec(self, ctx: NativeContext) -> bool:
-        val = self.run_spec("bool", SafBool, ctx)
+        val = self.run_spec(UnarySpec.bool, SafBool, ctx)
         if int(val.value) not in (1, 0):
             raise SafulateValueError(
                 f"expected return for bool spec to be a bool, got {val.repr_spec(ctx)} instead"
@@ -349,10 +391,10 @@ class SafBaseObject(ABC):
         return bool(val.value)
 
     def iter_spec(self, ctx: NativeContext) -> Iterator[SafBaseObject]:
-        iterator = ctx.invoke_spec(self, "iter")
+        iterator = ctx.invoke_spec(self, CallSpec.iter)
         try:
             while 1:
-                yield ctx.invoke_spec(iterator, "next")
+                yield ctx.invoke_spec(iterator, CallSpec.next)
         except SafulateBreakoutError as e:
             e.check()
 
@@ -368,7 +410,7 @@ class SafType(SafBaseObject):
             ctx: NativeContext, inp: SafBaseObject, *, constructor: SafBaseObject = null
         ) -> SafType:
             if constructor is null:
-                return cast("SafType", inp.specs["type"])
+                return cast("SafType", inp.specs[AttrSpec.type])
             return cls(inp.str_spec(ctx), struct=constructor)
 
         self = cls("type", struct=SafFunc.from_native("type", struct))
@@ -386,23 +428,23 @@ class SafType(SafBaseObject):
 
         return cls("object", struct=SafFunc.from_native("object", struct))
 
-    def _attrs_hook(self, attrs: defaultdict[str, dict[str, SafBaseObject]]) -> None:
-        attrs["%"]["type"] = self.base_type()
+    def _attrs_hook(self, attrs: _RawAttrs) -> None:
+        attrs["spec"][AttrSpec.type] = self.base_type()
 
-    @spec_meth("repr")
+    @spec_meth(FormatSpec.repr)
     def repr(self, ctx: NativeContext) -> SafStr:
         return SafStr(f"<type {self.name!r}>")
 
     @public_method("check")
     def check(self, ctx: NativeContext, obj: SafBaseObject) -> SafBool:
-        obj_type = obj.specs["type"]
+        obj_type = obj.specs[AttrSpec.type]
         return (
             true
             if isinstance(obj_type, SafType) and obj_type.name == self.name
             else false
         )
 
-    @spec_meth("call")
+    @spec_meth(CallSpec.call)
     def call(
         self, ctx: NativeContext, *args: SafBaseObject, **kwargs: SafBaseObject
     ) -> SafBaseObject:
@@ -422,9 +464,9 @@ class SafObject(SafBaseObject):
         self.__saf_typename__ = name
         self.__saf_init_attrs__ = attrs
 
-    def _attrs_hook(self, attrs: defaultdict[str, dict[str, SafBaseObject]]) -> None:
+    def _attrs_hook(self, attrs: _RawAttrs) -> None:
         if self.__saf_init_attrs__:
-            attrs[""].update(self.__saf_init_attrs__)
+            attrs["pub"].update(self.__saf_init_attrs__)
 
         match self.init:
             case None:
@@ -434,15 +476,15 @@ class SafObject(SafBaseObject):
             case _:
                 struct = SafFunc.from_native("init", self.init)  # pyright: ignore[reportArgumentType]
 
-        attrs["%"]["type"] = SafType(self.__saf_typename__, struct=struct)
+        attrs["spec"][AttrSpec.type] = SafType(self.__saf_typename__, struct=struct)
 
     @property
     def type(self) -> SafType:
-        typ = self.specs["type"]
+        typ = self.specs[AttrSpec.type]
         assert isinstance(typ, SafType)
         return typ
 
-    @spec_meth("repr")
+    @spec_meth(FormatSpec.repr)
     def repr(self, ctx: NativeContext) -> SafStr:
         return SafStr(f"<{self.type.name}>")
 
@@ -460,19 +502,19 @@ class SafNull(SafObject):
         SafObject.__init__(self, "null")
         return self
 
-    @spec_meth("str")
+    @spec_meth(FormatSpec.str)
     def str(self, ctx: NativeContext) -> SafStr:
         return SafStr("")
 
-    @spec_meth("repr")
+    @spec_meth(FormatSpec.repr)
     def repr(self, ctx: NativeContext) -> SafStr:
         return SafStr("null")
 
-    @spec_meth("eq")
+    @spec_meth(BinarySpec.eq)
     def eq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
         return true if (isinstance(other, SafNull)) else false
 
-    @spec_meth("bool")
+    @spec_meth(UnarySpec.bool)
     def bool(self, ctx: NativeContext) -> SafBool:
         return false
 
@@ -491,38 +533,38 @@ class SafNum(SafObject):
         except ValueError:
             raise SafulateValueError(f"Could not convert {string!r} into a number")
 
-    @spec_meth("hash")
+    @spec_meth(FormatSpec.hash)
     def hash(self, ctx: NativeContext) -> SafNum:
         return SafNum(hash((self.__class__, self.value)))
 
-    @spec_meth("add")
+    @spec_meth(BinarySpec.add)
     def add(self, ctx: NativeContext, other: SafBaseObject) -> SafNum:
         if not isinstance(other, SafNum):
             raise SafulateValueError("Add is not defined for number and this type")
 
         return SafNum(self.value + other.value)
 
-    @spec_meth("sub")
+    @spec_meth(BinarySpec.sub)
     def sub(self, ctx: NativeContext, other: SafBaseObject) -> SafNum:
         if not isinstance(other, SafNum):
             raise SafulateValueError("Subtract is not defined for number and this type")
 
         return SafNum(self.value - other.value)
 
-    @spec_meth("mul")
+    @spec_meth(BinarySpec.mul)
     def mul(self, ctx: NativeContext, other: SafBaseObject) -> SafNum:
         if not isinstance(other, SafNum):
             raise SafulateValueError("Multiply is not defined for number and this type")
 
         return SafNum(self.value * other.value)
 
-    @spec_meth("div")
+    @spec_meth(BinarySpec.div)
     def div(self, ctx: NativeContext, other: SafBaseObject) -> SafNum:
         if not isinstance(other, SafNum):
             raise SafulateValueError("Divide is not defined for number and this type")
         return SafNum(self.value / other.value)
 
-    @spec_meth("pow")
+    @spec_meth(BinarySpec.pow)
     def pow(self, ctx: NativeContext, other: SafBaseObject) -> SafNum:
         if not isinstance(other, SafNum):
             raise SafulateValueError(
@@ -531,22 +573,22 @@ class SafNum(SafObject):
 
         return SafNum(self.value**other.value)
 
-    @spec_meth("uadd")
+    @spec_meth(UnarySpec.uadd)
     def uadd(self, ctx: NativeContext) -> SafNum:
         return SafNum(self.value)
 
-    @spec_meth("neg")
+    @spec_meth(UnarySpec.neg)
     def neg(self, ctx: NativeContext) -> SafNum:
         return SafNum(-self.value)
 
-    @spec_meth("eq")
+    @spec_meth(BinarySpec.eq)
     def eq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
         if not isinstance(other, SafNum):
             raise SafulateValueError("Equality is not defined for number and this type")
 
         return true if (self.value == other.value) else false
 
-    @spec_meth("neq")
+    @spec_meth(BinarySpec.neq)
     def neq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
         if not isinstance(other, SafNum):
             raise SafulateValueError(
@@ -555,7 +597,7 @@ class SafNum(SafObject):
 
         return true if (self.value != other.value) else false
 
-    @spec_meth("less")
+    @spec_meth(BinarySpec.less)
     def less(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
         if not isinstance(other, SafNum):
             raise SafulateValueError(
@@ -564,7 +606,7 @@ class SafNum(SafObject):
 
         return true if (self.value < other.value) else false
 
-    @spec_meth("grtr")
+    @spec_meth(BinarySpec.grtr)
     def grtr(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
         if not isinstance(other, SafNum):
             raise SafulateValueError(
@@ -573,7 +615,7 @@ class SafNum(SafObject):
 
         return true if (self.value > other.value) else false
 
-    @spec_meth("lesseq")
+    @spec_meth(BinarySpec.lesseq)
     def lesseq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
         if not isinstance(other, SafNum):
             raise SafulateValueError(
@@ -582,7 +624,7 @@ class SafNum(SafObject):
 
         return true if (self.value <= other.value) else false
 
-    @spec_meth("grtreq")
+    @spec_meth(BinarySpec.grtreq)
     def grtreq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
         if not isinstance(other, SafNum):
             raise SafulateValueError(
@@ -591,11 +633,11 @@ class SafNum(SafObject):
 
         return true if (self.value >= other.value) else false
 
-    @spec_meth("bool")
+    @spec_meth(UnarySpec.bool)
     def bool(self, ctx: NativeContext) -> SafBool:
         return true if (self.value != 0) else false
 
-    @spec_meth("repr")
+    @spec_meth(FormatSpec.repr)
     def repr(self, ctx: NativeContext) -> SafStr:
         if self.value % 1 == 0 and "e" not in str(self.value):
             return SafStr(str(int(self.value)))
@@ -611,7 +653,7 @@ class SafBool(SafNum):
 
     @classmethod
     def init(cls, ctx: NativeContext, inp: SafBaseObject) -> Self:
-        return ctx.invoke_spec(inp, "bool")  # pyright: ignore[reportReturnType]
+        return ctx.invoke_spec(inp, UnarySpec.bool)  # pyright: ignore[reportReturnType]
 
     @classmethod
     def _create(cls, value: bool) -> SafBool:
@@ -622,15 +664,15 @@ class SafBool(SafNum):
         SafObject.__init__(self, str(self.status).lower())
         return self
 
-    @spec_meth("repr")
+    @spec_meth(FormatSpec.repr)
     def repr(self, ctx: NativeContext) -> SafStr:
         return SafStr(self.type.name)
 
-    @spec_meth("str")
+    @spec_meth(FormatSpec.str)
     def str(self, ctx: NativeContext) -> SafStr:
         return self.repr(ctx)
 
-    @spec_meth("bool")
+    @spec_meth(UnarySpec.bool)
     def bool(self, ctx: NativeContext) -> SafBool:
         return self
 
@@ -648,21 +690,21 @@ class SafStr(SafObject):
         except UnicodeDecodeError as e:
             raise SafulateValueError(str(e)) from None
 
-    @spec_meth("hash")
+    @spec_meth(FormatSpec.hash)
     def hash(self, ctx: NativeContext) -> SafNum:
         return SafNum(hash((self.__class__, self.value)))
 
-    @spec_meth("altcall")
+    @spec_meth(CallSpec.altcall)
     def altcall(self, ctx: NativeContext, idx: SafBaseObject) -> SafStr:
         if not isinstance(idx, SafNum):
             raise SafulateTypeError(f"Expected num, got {idx.repr_spec(ctx)} instead")
 
         return SafStr(self.value[int(idx.value)])
 
-    @spec_meth("add")
+    @spec_meth(BinarySpec.add)
     def add(self, ctx: NativeContext, other: SafBaseObject) -> SafStr:
         if not isinstance(other, SafStr):
-            other = ctx.invoke_spec(other, "str")
+            other = ctx.invoke_spec(other, FormatSpec.str)
         if not isinstance(other, SafStr):
             raise SafulateValueError(
                 f"{other.repr_spec(ctx)} could not be converted into a string"
@@ -670,7 +712,7 @@ class SafStr(SafObject):
 
         return SafStr(self.value + other.value)
 
-    @spec_meth("mul")
+    @spec_meth(BinarySpec.mul)
     def mul(self, ctx: NativeContext, other: SafBaseObject) -> SafStr:
         if not isinstance(other, SafNum):
             raise SafulateValueError("Multiply is not defined for string and this type")
@@ -682,23 +724,23 @@ class SafStr(SafObject):
 
         return SafStr(self.value * int(other.value))
 
-    @spec_meth("iter")
+    @spec_meth(CallSpec.iter)
     def iter(self, ctx: NativeContext) -> SafIterator:
         return SafIterator(SafStr(char) for char in self.value)
 
-    @spec_meth("bool")
+    @spec_meth(UnarySpec.bool)
     def bool(self, ctx: NativeContext) -> SafBool:
         return true if (len(self.value) != 0) else false
 
-    @spec_meth("repr")
+    @spec_meth(FormatSpec.repr)
     def repr(self, ctx: NativeContext) -> SafStr:
         return SafStr(repr(self.value))
 
-    @spec_meth("str")
+    @spec_meth(FormatSpec.str)
     def str(self, ctx: NativeContext) -> SafStr:
         return SafStr(self.value)
 
-    @spec_meth("eq")
+    @spec_meth(BinarySpec.eq)
     def eq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
         return (
             true if (isinstance(other, SafStr) and other.value == self.value) else false
@@ -888,7 +930,7 @@ class SafEllipsis(SafObject):
     def __init__(self) -> None:
         super().__init__("ellipsis")
 
-    @spec_meth("repr")
+    @spec_meth(FormatSpec.repr)
     def repr(self, ctx: NativeContext) -> SafStr:
         return SafStr("<ellipsis>")
 
@@ -902,14 +944,14 @@ class SafIterator(SafObject):
 
         self.value = value
 
-    @spec_meth("next")
+    @spec_meth(CallSpec.next)
     def next(self, ctx: NativeContext) -> SafBaseObject:
         try:
             return next(self.value)
         except StopIteration:
             raise SafulateBreakoutError(1, ctx.token)
 
-    @spec_meth("repr")
+    @spec_meth(FormatSpec.repr)
     def repr(self, ctx: NativeContext) -> SafStr:
         return SafStr("<generator>")
 
@@ -917,15 +959,15 @@ class SafIterator(SafObject):
 class _SafIterable(SafObject):
     value: list[SafBaseObject] | tuple[SafBaseObject]
 
-    @spec_meth("hash")
+    @spec_meth(FormatSpec.hash)
     def hash(self, ctx: NativeContext) -> SafNum:
         return SafNum(hash((self.__class__, self.value)))
 
-    @spec_meth("bool")
+    @spec_meth(UnarySpec.bool)
     def bool(self, ctx: NativeContext) -> SafBool:
         return true if (len(self.value) != 0) else false
 
-    @spec_meth("altcall")
+    @spec_meth(CallSpec.altcall)
     def altcall(self, ctx: NativeContext, idx: SafBaseObject) -> SafBaseObject:
         if not isinstance(idx, SafNum):
             raise SafulateTypeError(f"Expected num, got {idx.repr_spec(ctx)} instead.")
@@ -935,7 +977,7 @@ class _SafIterable(SafObject):
         except IndexError:
             raise SafulateIndexError(f"Index {idx.repr_spec(ctx)} is out of range")
 
-    @spec_meth("iter")
+    @spec_meth(CallSpec.iter)
     def iter(self, ctx: NativeContext) -> SafIterator:
         return SafIterator(obj for obj in self.value)
 
@@ -943,7 +985,7 @@ class _SafIterable(SafObject):
     def len(self, ctx: NativeContext) -> SafNum:
         return SafNum(len(self.value))
 
-    @spec_meth("has_item")
+    @spec_meth(BinarySpec.has_item)
     def has_item(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
         return true if other in self.value else false
 
@@ -960,13 +1002,13 @@ class SafTuple(_SafIterable):
     def init(cls, ctx: NativeContext, *items: SafBaseObject) -> Self:
         return cls(items)
 
-    @spec_meth("repr")
+    @spec_meth(FormatSpec.repr)
     def repr(self, ctx: NativeContext) -> SafStr:
         return SafStr(
             "("
             + ", ".join(
                 [
-                    cast("SafStr", ctx.invoke_spec(val, "repr")).value
+                    cast("SafStr", ctx.invoke_spec(val, FormatSpec.repr)).value
                     for val in self.value
                 ]
             )
@@ -1003,13 +1045,13 @@ class SafList(_SafIterable):
 
         return self.value.pop(int(index.value))
 
-    @spec_meth("repr")
+    @spec_meth(FormatSpec.repr)
     def repr(self, ctx: NativeContext) -> SafStr:
         return SafStr(
             "["
             + ", ".join(
                 [
-                    cast("SafStr", ctx.invoke_spec(val, "repr")).value
+                    cast("SafStr", ctx.invoke_spec(val, FormatSpec.repr)).value
                     for val in self.value
                 ]
             )
@@ -1124,7 +1166,7 @@ class SafFunc(SafObject):
             partial_kwargs=kwargs,
         )
 
-    @spec_meth("hash")
+    @spec_meth(FormatSpec.hash)
     def hash(self, ctx: NativeContext) -> SafNum:
         return SafNum(
             hash(
@@ -1139,7 +1181,7 @@ class SafFunc(SafObject):
             )
         )
 
-    @spec_meth("altcall")
+    @spec_meth(CallSpec.altcall)
     def altcall(
         self, ctx: NativeContext, *args: SafBaseObject, **kwargs: SafBaseObject
     ) -> SafBaseObject:
@@ -1147,7 +1189,7 @@ class SafFunc(SafObject):
             (*self.partial_args, *args), self.partial_kwargs | kwargs
         )
 
-    @spec_meth("call")
+    @spec_meth(CallSpec.call)
     def call(
         self, ctx: NativeContext, *args: SafBaseObject, **kwargs: SafBaseObject
     ) -> SafBaseObject:
@@ -1178,7 +1220,7 @@ class SafFunc(SafObject):
 
         return ret_value
 
-    @spec_meth("repr")
+    @spec_meth(FormatSpec.repr)
     def repr(self, ctx: NativeContext) -> SafStr:
         name = self.public_attrs["name"]
         suffix = f" {name.repr_spec(ctx)}" if isinstance(name, SafStr) else ""
@@ -1238,15 +1280,15 @@ class SafProperty(SafObject):
             )
         return cls(func)
 
-    @spec_meth("hash")
+    @spec_meth(FormatSpec.hash)
     def hash(self, ctx: NativeContext) -> SafNum:
         return SafNum(hash((self.__class__, self.func)))
 
-    @spec_meth("repr")
+    @spec_meth(FormatSpec.repr)
     def repr(self, ctx: NativeContext) -> SafStr:
         return SafStr(f"<property {self.func.repr_spec(ctx)}>")
 
-    @spec_meth("get")
+    @spec_meth(CallSpec.get)
     def get_spec(self, ctx: NativeContext) -> SafBaseObject:
         return ctx.invoke(self.func)
 
@@ -1287,11 +1329,11 @@ class SafDict(SafObject):
             self.set(ctx, key, value)
         return self
 
-    @spec_meth("hash")
+    @spec_meth(FormatSpec.hash)
     def hash(self, ctx: NativeContext) -> SafNum:
         return SafNum(hash((self.__class__, self.data)))
 
-    @spec_meth("repr")
+    @spec_meth(FormatSpec.repr)
     def repr(self, ctx: NativeContext) -> SafStr:
         return SafStr(
             "{"
@@ -1302,7 +1344,7 @@ class SafDict(SafObject):
             + "}"
         )
 
-    @spec_meth("altcall")
+    @spec_meth(CallSpec.altcall)
     def altcall(
         self, ctx: NativeContext, key: SafBaseObject, default: SafBaseObject = null
     ) -> SafBaseObject:
@@ -1350,15 +1392,15 @@ class SafDict(SafObject):
                 raise SafulateKeyError(f"Key {key.repr_spec(ctx)} was not found")
             return default
 
-    @spec_meth("iter")
+    @spec_meth(CallSpec.iter)
     def iter(self, ctx: NativeContext) -> SafIterator:
         return SafIterator(obj for obj in self.keys(ctx).value)
 
-    @spec_meth("has")
-    def has(self, ctx: NativeContext, key: SafBaseObject) -> SafNum:
-        return SafNum(int(key in self.data))
+    @spec_meth(BinarySpec.has_item)
+    def has_item(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
+        return true if other.hash_spec(ctx) in self.data else false
 
-    @spec_meth("bool")
+    @spec_meth(UnarySpec.bool)
     def bool(self, ctx: NativeContext) -> SafBool:
         return true if (self.data) else false
 
@@ -1370,11 +1412,11 @@ class SafPythonError(SafObject):
     def __init__(self, error: str, msg: str, obj: SafBaseObject = null) -> None:
         super().__init__(error, {"value": obj, "msg": SafStr(msg)})
 
-    @spec_meth("str")
+    @spec_meth(FormatSpec.str)
     def str(self, ctx: NativeContext) -> SafStr:
         return SafStr(f"{self.type.name}: {self.public_attrs['msg'].str_spec(ctx)}")
 
-    @spec_meth("repr")
+    @spec_meth(FormatSpec.repr)
     def repr(self, ctx: NativeContext) -> SafStr:
         return SafStr(
             f"<{self.type.name} msg={self.public_attrs['msg'].repr_spec(ctx)} value={self.public_attrs['value'].repr_spec(ctx)}>"

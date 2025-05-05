@@ -228,7 +228,6 @@ class ASTAtom(ASTNode):
 class ASTAttr(ASTNode):
     expr: ASTNode
     attr: Token
-    is_spec: bool = False
 
     def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_attr(self)

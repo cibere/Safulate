@@ -39,11 +39,19 @@ from .asts import (
     ASTVisitor,
     ASTWhile,
 )
-from .enums import ParamType, SoftKeyword, TokenType
+from .enums import (
+    BinarySpec,
+    CallSpec,
+    FormatSpec,
+    ParamType,
+    SoftKeyword,
+    TokenType,
+    UnarySpec,
+    spec_name_from_str,
+)
 from .environment import Environment
 from .errors import (
     ErrorManager,
-    SafulateAttributeError,
     SafulateBreakoutError,
     SafulateError,
     SafulateImportError,
@@ -165,12 +173,12 @@ class TreeWalker(ASTVisitor):
 
     def visit_for_loop(self, node: ASTForLoop) -> SafBaseObject:
         ctx = self.ctx(node.var_name)
-        src = ctx.invoke_spec(node.source.visit(self), "iter")
+        src = ctx.invoke_spec(node.source.visit(self), CallSpec.iter)
 
         val = null
         while 1:
             try:
-                item = ctx.invoke_spec(src, "next")
+                item = ctx.invoke_spec(src, CallSpec.next)
             except SafulateBreakoutError as e:
                 e.check()
                 break
@@ -183,7 +191,7 @@ class TreeWalker(ASTVisitor):
             except SafulateInvalidContinue as e:
                 for _ in range(e.amount):
                     try:
-                        item = ctx.invoke_spec(src, "next")
+                        item = ctx.invoke_spec(src, CallSpec.next)
                     except SafulateBreakoutError as e:
                         e.check()
                         break
@@ -253,12 +261,14 @@ class TreeWalker(ASTVisitor):
                         node.keyword,
                     )
 
-                # if node.name.lexeme not in self.env.scope.specs:
-                #     raise SafulateValueError(
-                #         f"there is no spec named {node.name.lexeme!r}", node.name
-                #     ) from None
+                try:
+                    spec = spec_name_from_str(node.name.lexeme)
+                except ValueError:
+                    raise SafulateValueError(
+                        f"there is no spec named {node.name.lexeme!r}", node.name
+                    ) from None
 
-                self.env.scope.specs[node.name.lexeme] = value
+                self.env.scope.specs[spec] = value
             case _:
                 raise RuntimeError(f"Unknown var decl keyword: {node.keyword!r}")
         return value
@@ -281,26 +291,11 @@ class TreeWalker(ASTVisitor):
     def visit_binary(self, node: ASTBinary) -> SafBaseObject:
         left = node.left.visit(self)
         right = node.right.visit(self)
-
-        spec_name = {
-            TokenType.PLUS: "add",
-            TokenType.MINUS: "sub",
-            TokenType.STAR: "mul",
-            TokenType.STARSTAR: "pow",
-            TokenType.SLASH: "div",
-            TokenType.EQEQ: "eq",
-            TokenType.NEQ: "neq",
-            TokenType.LESS: "less",
-            TokenType.GRTR: "grtr",
-            TokenType.LESSEQ: "lesseq",
-            TokenType.GRTREQ: "grtreq",
-            TokenType.AMP: "amp",
-            TokenType.PIPE: "pipe",
-            TokenType.HAS: "has_item",
-        }.get(node.op.type)
-
         ctx = self.ctx(node.op)
-        if spec_name is None:
+
+        try:
+            spec = BinarySpec(node.op.type)
+        except ValueError as e:
             match node.op.type:
                 case TokenType.OR:
                     if left.bool_spec(ctx):
@@ -317,34 +312,31 @@ class TreeWalker(ASTVisitor):
                 case _:
                     raise ValueError(
                         f"Invalid token type {node.op.type.name} for binary operator"
-                    )
+                    ) from e
 
         with ErrorManager(token=node.op):
-            return ctx.invoke_spec(left, spec_name, right)
+            return ctx.invoke_spec(left, spec, right)
 
     def visit_unary(self, node: ASTUnary) -> SafBaseObject:
         right = node.right.visit(self)
-
-        spec_name = {
-            TokenType.PLUS: "uadd",
-            TokenType.MINUS: "neg",
-            TokenType.NOT: "not",
-            TokenType.BOOL: "bool",
-        }.get(node.op.type, None)
-        if spec_name is None:
-            raise ValueError(
-                f"Invalid token type {node.op.type.name} for unary operator"
-            )
+        ctx = self.ctx(node.op)
 
         with ErrorManager(token=node.op):
-            return self.ctx(node.op).invoke_spec(right, spec_name)
+            try:
+                spec = UnarySpec(node.op.type)
+            except ValueError as e:
+                if node.op.type is TokenType.NOT:
+                    return false if right.bool_spec(ctx) else true
+                else:
+                    raise ValueError(
+                        f"Invalid token type {node.op.type.name} for unary operator"
+                    ) from e
+
+            return self.ctx(node.op).invoke_spec(right, spec)
 
     def visit_call(self, node: ASTCall) -> SafBaseObject:
-        func = node.callee.visit(self)
         ctx = self.ctx(node.paren)
-
-        if node.paren.type is TokenType.LSQB:
-            func = func.specs["altcall"]
+        func = node.callee.visit(self).specs[CallSpec(node.paren.type)]
 
         args: list[SafBaseObject] = []
         kwargs: dict[str, SafBaseObject] = {}
@@ -407,16 +399,8 @@ class TreeWalker(ASTVisitor):
                     f"Invalid token type {node.attr.type.name} for attribute access"
                 )
 
-            if node.is_spec:
-                try:
-                    return obj.specs[node.attr.lexeme]
-                except KeyError:
-                    raise SafulateAttributeError(
-                        f"No spec named {node.attr.lexeme!r}", node.attr
-                    )
-
             return self.ctx(node.attr).invoke_spec(
-                obj, "get_attr", SafStr(node.attr.lexeme)
+                obj, CallSpec.get_attr, SafStr(node.attr.lexeme)
             )
 
     def visit_version_req(self, node: ASTVersionReq) -> SafBaseObject:
@@ -540,7 +524,7 @@ class TreeWalker(ASTVisitor):
             expr, body = cases.pop(0)
             ctx = self.ctx(node.kw)
 
-            res = ctx.invoke_spec(key, "eq", expr.visit(self))
+            res = ctx.invoke_spec(key, BinarySpec.eq, expr.visit(self))
             if not res.bool_spec(ctx):
                 continue
 
@@ -557,16 +541,11 @@ class TreeWalker(ASTVisitor):
     def visit_format(self, node: ASTFormat) -> SafBaseObject:
         args: tuple[SafBaseObject, ...] = ()
 
-        match node.spec.lexeme:
-            case "r":
-                spec = "repr"
-            case "s":
-                spec = "str"
-            case "h":
-                spec = "hash"
-            case _:
-                args = (SafStr(node.spec.lexeme),)
-                spec = "format"
+        try:
+            spec = FormatSpec(node.spec.lexeme)
+        except ValueError:
+            args = (SafStr(node.spec.lexeme),)
+            spec = CallSpec.format
 
         return self.ctx(node.spec).invoke_spec(node.obj.visit(self), spec, *args)
 

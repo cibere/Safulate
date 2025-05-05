@@ -4,6 +4,8 @@ import re
 import sys
 
 from safulate import (
+    CallSpec,
+    FormatSpec,
     NativeContext,
     SafBaseObject,
     SafBool,
@@ -15,6 +17,7 @@ from safulate import (
     SafObject,
     SafStr,
     SafulateTypeError,
+    UnarySpec,
     false,
     null,
     public_method,
@@ -39,11 +42,11 @@ class SafPattern(SafObject):
 
         self.pattern = pattern
 
-    @spec_meth("repr")
+    @spec_meth(FormatSpec.repr)
     def repr(self, ctx: NativeContext) -> SafStr:
         return SafStr(f"<regex pattern {self.pattern!r}>")
 
-    @spec_meth("str")
+    @spec_meth(FormatSpec.str)
     def str(self, ctx: NativeContext) -> SafStr:
         return self.get_pattern_prop(ctx)
 
@@ -216,7 +219,7 @@ class SafMatch(SafObject):
         self.match = match
         self.pattern = pattern
 
-    @spec_meth("repr")
+    @spec_meth(FormatSpec.repr)
     def repr(self, ctx: NativeContext) -> SafStr:
         return SafStr(f"<Match groups={self.groups(ctx).repr_spec(ctx)}>")
 
@@ -252,15 +255,15 @@ class SafMatch(SafObject):
             },
         )
 
-    @spec_meth("iter")
+    @spec_meth(CallSpec.iter)
     def iter(self, ctx: NativeContext) -> SafIterator:
         return SafIterator(x for x in self.groups(ctx).value)
 
-    @spec_meth("bool")
+    @spec_meth(UnarySpec.bool)
     def bool(self, ctx: NativeContext) -> SafBool:
         return true if (self.match) else false
 
-    @spec_meth("altcall")
+    @spec_meth(CallSpec.altcall)
     def altcall(self, ctx: NativeContext, key: SafBaseObject) -> SafBaseObject:
         match key:
             case SafStr():
