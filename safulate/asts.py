@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .enums import ParamType
+from .enums import ParamType, TokenType
 
 if TYPE_CHECKING:
     from packaging.version import Version as _PackagingVersion
@@ -215,6 +215,20 @@ class ASTCall(ASTNode):
     def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_call(self)
 
+    @classmethod
+    def get_attr(cls, *, expr: ASTNode, dot: Token, attr: Token) -> ASTCall:
+        return cls(
+            callee=expr,
+            paren=dot,
+            params=[
+                (
+                    ParamType.arg,
+                    None,
+                    ASTAtom(attr.with_type(TokenType.STR, lexme=attr.lexeme)),
+                )
+            ],
+        )
+
 
 @dataclass
 class ASTAtom(ASTNode):
@@ -222,15 +236,6 @@ class ASTAtom(ASTNode):
 
     def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_atom(self)
-
-
-@dataclass
-class ASTAttr(ASTNode):
-    expr: ASTNode
-    attr: Token
-
-    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
-        return visitor.visit_attr(self)
 
 
 @dataclass
@@ -374,8 +379,6 @@ class ASTVisitor(ABC):
     def visit_call(self, node: ASTCall) -> SafBaseObject: ...
     @abstractmethod
     def visit_atom(self, node: ASTAtom) -> SafBaseObject: ...
-    @abstractmethod
-    def visit_attr(self, node: ASTAttr) -> SafBaseObject: ...
     @abstractmethod
     def visit_edit_object(self, node: ASTEditObject) -> SafBaseObject: ...
     @abstractmethod

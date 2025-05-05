@@ -149,11 +149,11 @@ class UnarySpec(Enum):
 class CallSpec(Enum):
     call = TokenType.LPAR
     altcall = TokenType.LSQB
-    get_attr = None
-    iter = None
-    next = None
-    format = None
-    get = None
+    get_attr = TokenType.DOT
+    iter = 0
+    next = 1
+    format = 2
+    get = 3
 
 
 class FormatSpec(Enum):
@@ -163,7 +163,7 @@ class FormatSpec(Enum):
 
 
 class AttrSpec(Enum):
-    type = None
+    type = 4
 
 
 SpecName = BinarySpec | UnarySpec | CallSpec | FormatSpec | AttrSpec

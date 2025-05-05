@@ -10,7 +10,6 @@ from ._version import __version__
 from .asts import (
     ASTAssign,
     ASTAtom,
-    ASTAttr,
     ASTBinary,
     ASTBlock,
     ASTBreak,
@@ -336,8 +335,6 @@ class TreeWalker(ASTVisitor):
 
     def visit_call(self, node: ASTCall) -> SafBaseObject:
         ctx = self.ctx(node.paren)
-        func = node.callee.visit(self).specs[CallSpec(node.paren.type)]
-
         args: list[SafBaseObject] = []
         kwargs: dict[str, SafBaseObject] = {}
 
@@ -367,8 +364,9 @@ class TreeWalker(ASTVisitor):
                         f"Unhandled param: {param_type}, {name}, {value}"
                     )
 
-        return self.ctx(node.paren).invoke(
-            func,
+        return self.ctx(node.paren).invoke_spec(
+            node.callee.visit(self),
+            CallSpec(node.paren.type),
             *args,
             **kwargs,
         )
@@ -389,19 +387,6 @@ class TreeWalker(ASTVisitor):
                 return SafEllipsis()
             case _:
                 raise ValueError(f"Invalid atom type {node.token.type.name}")
-
-    def visit_attr(self, node: ASTAttr) -> SafBaseObject:
-        obj = node.expr.visit(self)
-
-        with ErrorManager(token=node.attr):
-            if node.attr.type is not TokenType.ID:
-                raise ValueError(
-                    f"Invalid token type {node.attr.type.name} for attribute access"
-                )
-
-            return self.ctx(node.attr).invoke_spec(
-                obj, CallSpec.get_attr, SafStr(node.attr.lexeme)
-            )
 
     def visit_version_req(self, node: ASTVersionReq) -> SafBaseObject:
         with ErrorManager(token=node.keyword):

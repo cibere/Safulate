@@ -9,7 +9,6 @@ from packaging.version import Version as _PackagingVersion
 from .asts import (
     ASTAssign,
     ASTAtom,
-    ASTAttr,
     ASTBinary,
     ASTBlock,
     ASTBreak,
@@ -434,13 +433,14 @@ class Parser:
             func = ASTCall(
                 callee=ASTCall(
                     callee=ASTCall(
-                        callee=ASTAttr(
+                        callee=ASTCall.get_attr(
                             expr=deco,
                             attr=Token(
                                 type=TokenType.ID,
                                 lexeme="without_partials",
                                 start=token.start,
                             ),
+                            dot=Token.mock(TokenType.DOT, start=token.start),
                         ),
                         paren=Token(type=TokenType.LPAR, lexeme="(", start=token.start),
                         params=[],
@@ -455,25 +455,27 @@ class Parser:
                         (
                             ParamType.vararg,
                             None,
-                            ASTAttr(
+                            ASTCall.get_attr(
                                 expr=deco,
                                 attr=Token(
                                     type=TokenType.ID,
                                     lexeme="partial_args",
                                     start=token.start,
                                 ),
+                                dot=Token.mock(TokenType.DOT, start=token.start),
                             ),
                         ),
                         (
                             ParamType.varkwarg,
                             None,
-                            ASTAttr(
+                            ASTCall.get_attr(
                                 expr=deco,
                                 attr=Token(
                                     type=TokenType.ID,
                                     lexeme="partial_kwargs",
                                     start=token.start,
                                 ),
+                                dot=Token.mock(TokenType.DOT, start=token.start),
                             ),
                         ),
                     ],
@@ -716,7 +718,11 @@ class Parser:
                         ASTVarDecl(
                             name=name,
                             keyword=Token(TokenType.PUB, "pub", kwd.start),
-                            value=ASTAttr(expr=ASTAtom(name_token), attr=name),
+                            value=ASTCall.get_attr(
+                                expr=ASTAtom(name_token),
+                                attr=name,
+                                dot=Token.mock(TokenType.DOT, start=kwd.start),
+                            ),
                         )
                         for name in names
                     ],
@@ -914,8 +920,10 @@ class Parser:
 
                     callee = ASTCall(callee=callee, paren=token, params=params)
                 case TokenType.DOT:
-                    callee = ASTAttr(
-                        callee, self.consume(TokenType.ID, "Expected attribute name")
+                    callee = ASTCall.get_attr(
+                        expr=callee,
+                        attr=self.consume(TokenType.ID, "Expected attribute name"),
+                        dot=Token.mock(TokenType.DOT, start=token.start),
                     )
                 case TokenType.COLON:
                     callee = ASTFormat(
