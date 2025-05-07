@@ -118,6 +118,7 @@ class SoftKeyword(Enum):
     SPEC = "spec"
     STRUCT = "struct"
     PROP = "prop"
+    IN = "in"
 
     def __repr__(self) -> str:
         return repr(super().__repr__())
