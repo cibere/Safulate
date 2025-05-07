@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import inspect
 import re
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, NamedTuple, TypeVar
 
 from packaging.version import InvalidVersion
 from packaging.version import Version as _PackagingVersion
@@ -40,73 +41,93 @@ from .asts import (
 )
 from .enums import ParamType, SoftKeyword, TokenType
 from .errors import SafulateSyntaxError
+from .properties import cached_property
 from .tokens import Token
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
+    from typing import Protocol
 
+    class RegDecoFact(Protocol):
+        def __call__(
+            self,
+            *sequence: TokenType
+            | SoftKeyword
+            | tuple[TokenType | SoftKeyword | None, ...]
+            | Literal["any"],
+            check: Callable[[Parser], bool] | None = None,
+        ) -> Callable[[CaseCallbackT], CaseCallbackT]: ...
+
+
+CaseCallbackT = TypeVar("CaseCallbackT", bound="Callable[[Parser], ASTNode]")
 require_version_pattern = re.compile(
     r"v(?P<major>[0-9]+)\.(?P<minor>[0-9]+|x)(?:\.(?P<micro>[0-9]+))?"
 )
 ANY = "any"
+SAFULATE_CASE_INFO_ATTR = "__safulate_case_info__"
+
+
+class RegisteredCase(NamedTuple):
+    callback: Callable[[Parser], ASTNode]
+    check: Callable[[Parser], bool]
+    type: Literal["expr", "stmt"]
+
+
+def _reg_deco_maker(type_: Literal["expr", "stmt"], /) -> RegDecoFact:
+    def deco_fact(
+        *sequence: TokenType
+        | SoftKeyword
+        | tuple[TokenType | SoftKeyword | None, ...]
+        | Literal["any"],
+        check: Callable[[Parser], bool] | None = None,  # pyright: ignore[reportRedeclaration]
+    ) -> Callable[[CaseCallbackT], CaseCallbackT]:
+        if check is None:
+
+            def check(parser: Parser) -> bool:
+                return parser.check_sequence(*sequence)
+
+        def deco(func: CaseCallbackT) -> CaseCallbackT:
+            setattr(
+                func,
+                SAFULATE_CASE_INFO_ATTR,
+                RegisteredCase(callback=func, type=type_, check=check),
+            )
+            return func
+
+        return deco
+
+    return deco_fact
+
+
+reg_expr = _reg_deco_maker("expr")
+reg_stmt = _reg_deco_maker("stmt")
 
 
 class Parser:
-    """
-    (outdated) Formal Grammar
-
-    ```
-    program: decl*
-    decl:
-        | var-decl
-        | func-decl
-        | stmt
-    var-decl: "var" name:ID "=" value:expr ";"
-    func-decl: "func" name:ID "(" (params:ID ("," params:ID)*)? ")" body:block
-    scoped-block: source:ID "~" body:block
-    stmt:
-        | block
-        | "if" expr:expr body:block ("else" else:block)
-        | "while" expr:expr body:block
-        | "return" expr:expr? ";"
-        | "break" ";"
-        | expr:expr ";"
-    block: "{" stmts:decl* "}"
-    expr: assign
-    assign:
-        | target:ID op:aug-assign value:assign
-        | comparison
-    comparison:
-        | left:equality (op:(">" | "<" | ">=" | "<=") right:equality)*
-        | equality
-    equality:
-        | left:sum (op:("==" | "!=") right:sum)*
-        | sum
-    sum:
-        | left:product (op:("+" | "-") right:product)*
-        | product
-    product:
-        | left:unary (op:("*" | "/") right:unary)*
-        | unary
-    unary:
-        | op:("+" | "-") right:unary
-        | power
-    power:
-        | left:call ("**" right:call)*
-        | call
-    call:
-        | callee:atom ("(" (args:expr ("," args:expr)*)? ")" | "." attr:ID)*
-        | version
-    version:
-        | "v" major:NUM ("." minor:NUM)? ("." micro:NUM)?
-        | atom
-    atom: "(" expr:expr ")" | NUM | STR | ID
-    aug-assign: "="
-    ```
-    """
-
     def __init__(self) -> None:
         self.current = 0
+        self.cases: list[RegisteredCase] =  [
+            getattr(func, SAFULATE_CASE_INFO_ATTR)
+            for _name, func in inspect.getmembers(
+                self, lambda obj: hasattr(obj, SAFULATE_CASE_INFO_ATTR)
+            )
+        ]
+
+    @cached_property
+    def expr_cases(self) -> list[RegisteredCase]:
+        return [case for case in self.cases if case.type == "expr"]
+
+    @cached_property
+    def stmt_cases(self) -> list[RegisteredCase]:
+        return [case for case in self.cases if case.type == "stmt"]
+
+    def _execute_case(self, case: RegisteredCase) -> ASTNode | None:
+        return case.callback(self) if case.check(self) else None
+
+    def _execute_cases(self, cases: list[RegisteredCase]) -> ASTNode | None:
+        for case in cases:
+            if res := self._execute_case(case):
+                return res
 
     def parse(self, tokens: list[Token]) -> ASTNode:
         self.tokens = tokens
@@ -120,9 +141,6 @@ class Parser:
     def peek(self) -> Token:
         return self.tokens[self.current]
 
-    def peek_next(self) -> Token:
-        return self.tokens[self.current + 1]
-
     def compare(self, token: Token, type: TokenType | SoftKeyword) -> bool:
         if isinstance(type, TokenType):
             return token.type is type
@@ -131,12 +149,6 @@ class Parser:
 
     def check(self, *types: TokenType | SoftKeyword) -> bool:
         return any(self.compare(self.peek(), type) for type in types)
-
-    def check_next(self, *types: TokenType | SoftKeyword) -> bool:
-        return any(self.compare(self.peek_next(), type) for type in types)
-
-    def check_after_next(self, *types: TokenType | SoftKeyword) -> bool:
-        return any(self.compare(self.tokens[self.current + 2], type) for type in types)
 
     def _validate_sequence_token(
         self, entry: tuple[TokenType | SoftKeyword | None, ...], token: Token
@@ -211,7 +223,7 @@ class Parser:
     def consume(
         self,
         types: TokenType | SoftKeyword | tuple[TokenType | SoftKeyword, ...],
-        msg: str,
+        msg: str | None = None,
     ) -> Token:
         token = self.advance()
 
@@ -222,75 +234,30 @@ class Parser:
             if self.compare(token, typ):
                 return token
 
+        if msg is None:
+            if len(types) == 1:
+                msg = f"Expected {types[0].value!r}"
+            else:
+                msg = f"Expected one of the following: {', '.join(repr(typ) for typ in types)}"
+
         raise SafulateSyntaxError(msg, token)
 
-    def binary_op(
-        self, next_prec: Callable[[], ASTNode], *types: TokenType | SoftKeyword
-    ) -> ASTNode:
-        left = next_prec()
+    def walk_split_tokens(
+        self,
+        *,
+        delimiter: TokenType | SoftKeyword = TokenType.COMMA,
+        end: TokenType | SoftKeyword,
+    ) -> Iterator[Token]:
+        first_captured = bool(self.check(end))
 
-        while True:
-            op = self.match(*types)
-            if op and op.type is TokenType.TILDE:
-                return ASTEditObject(left, self.block())
-            elif op:
-                right = next_prec()
+        while first_captured is False or (self.check(delimiter)):
+            if first_captured:
+                self.consume(delimiter, None)
+            first_captured = True
 
-                left = ASTBinary(left, op, right)
-            else:
-                return left
+            yield self.peek()
 
-    def program(self) -> ASTNode:
-        stmts: list[ASTNode] = []
-
-        while not self.check(TokenType.EOF):
-            stmts.append(self.stmt())
-
-        return ASTProgram(stmts)
-
-    def var_decl(self) -> ASTNode:
-        keyword = self.consume(
-            (TokenType.PUB, TokenType.PRIV), "Expected var decl keyword"
-        )
-        name = self.consume(TokenType.ID, "Expected variable name")
-
-        if self.check(TokenType.COLON):
-            self.annotation()
-
-        return ASTVarDecl(
-            keyword=keyword,
-            name=name,
-            value=self.expr() if self.match(TokenType.EQ) else None,
-        )
-
-    def func_decl_stmt(self) -> ASTNode:
-        scope_token = self.match(TokenType.PUB, TokenType.PRIV, SoftKeyword.SPEC)
-        kw_token = self.match(SoftKeyword.STRUCT, SoftKeyword.PROP, TokenType.TYPE)
-
-        match (scope_token, kw_token):
-            case (None, None):
-                raise SafulateSyntaxError(
-                    "Scope keyword and declaration keyword both missing"
-                )
-            case (Token(), None):
-                kw_token = scope_token
-            case (None, Token()):
-                scope_token = Token(TokenType.PUB, "pub", kw_token.start)
-            case (Token(), Token()):
-                pass
-
-        name = self.consume(TokenType.ID, "Expected function name")
-        func = self._func_decl(scope_token=scope_token, kw_token=kw_token, name=name)
-        self.consume(TokenType.SEMI, "Expected ';'")
-
-        return ASTVarDecl(name=name, value=func, keyword=scope_token)
-
-    def func_decl_expr(self) -> ASTNode:
-        kw_token = self.consume(
-            TokenType.PUB,
-            "Expected 'pub' keyword for func declaration as an expression",
-        )
-        return self._func_decl(scope_token=kw_token, kw_token=kw_token, name=None)
+        self.consume(end, None)
 
     def _func_decl(
         self, *, scope_token: Token, kw_token: Token, name: Token | None
@@ -299,14 +266,9 @@ class Parser:
 
         params: list[ASTFuncDecl_Param] = []
         defaulted = False
-        first_captured = bool(self.check(TokenType.RPAR))
         vararg_reached = varkwarg_reached = False
 
-        while first_captured is False or (self.check(TokenType.COMMA)):
-            if first_captured:
-                self.consume(TokenType.COMMA, "Expected ','")
-            first_captured = True
-
+        for _ in self.walk_split_tokens(end=TokenType.RPAR):
             if varkwarg_reached:
                 raise SafulateSyntaxError("No params can follow varkwarg", self.peek())
 
@@ -332,19 +294,14 @@ class Parser:
                 ASTFuncDecl_Param(name=param_name, default=default, type=param_type)
             )
 
-        self.consume(TokenType.RPAR, "Expected ')'")
-
-        decos: list[tuple[Token, ASTNode]] = []
-        if self.match(TokenType.LSQB):
-            check_for_comma = False
-            while not self.match(TokenType.RSQB):
-                if check_for_comma:
-                    self.consume(TokenType.COMMA, "Expected ','")
-                check_for_comma = True
-
-                start_token = self.peek()
-                deco = self.expr()
-                decos.insert(0, (start_token, deco))
+        decos: list[tuple[Token, ASTNode]] = (
+            [
+                (start_token, self.expr())
+                for start_token in self.walk_split_tokens(end=TokenType.RSQB)
+            ]
+            if self.match(TokenType.LSQB)
+            else []
+        )
 
         if self.check(TokenType.COLON):
             self.annotation()
@@ -504,6 +461,46 @@ class Parser:
             params=params,
         )
 
+    def annotation(self) -> ASTNode:
+        self.consume(TokenType.COLON, "Expected ':' to start annotation")
+        return self.expr()
+
+    def program(self) -> ASTNode:
+        stmts: list[ASTNode] = []
+
+        while not self.check(TokenType.EOF):
+            stmts.append(self.stmt())
+
+        return ASTProgram(stmts)
+
+    # region Stmts
+
+    def stmt(self) -> ASTNode:
+        if node := self._execute_cases(self.stmt_cases):
+            return node
+
+        expr = self.expr()
+        self.consume(TokenType.SEMI, "Expected ';'")
+        return ASTExprStmt(expr)
+
+    @reg_stmt(TokenType.LBRC)
+    def block(self) -> ASTBlock:
+        # Only using consume because rules like `if` and `while` use it directly,
+        # `stmt` rule checks for `{` first
+        self.consume(TokenType.LBRC, "Expected '{'")
+        stmts: list[ASTNode] = []
+        while not self.check(TokenType.RBRC):
+            stmts.append(self.stmt())
+
+        self.consume(TokenType.RBRC, "Expected '}'")
+        return ASTBlock(stmts)
+
+    @reg_stmt(
+        (TokenType.PRIV, TokenType.PUB, None),
+        TokenType.TYPE,
+        TokenType.ID,
+        TokenType.LBRC,
+    )
     def type_decl(self) -> ASTNode:
         scope_token = self.match(TokenType.PUB, TokenType.PRIV)
         kw_token = self.consume(
@@ -525,17 +522,9 @@ class Parser:
             keyword=scope_token or kw_token.with_type(TokenType.PUB),
         )
 
-    def stmt(self) -> ASTNode:
-        if self.check(TokenType.LBRC):
-            return self.block()
-        elif self.check_sequence(
-            (TokenType.PRIV, TokenType.PUB, None),
-            TokenType.TYPE,
-            TokenType.ID,
-            TokenType.LBRC,
-        ):
-            return self.type_decl()
-        elif self.check_sequence(
+    @staticmethod
+    def func_decl_stmt_checker(parser: Parser) -> bool:
+        return parser.check_sequence(
             (
                 TokenType.PUB,
                 TokenType.PRIV,
@@ -546,7 +535,7 @@ class Parser:
             ),
             TokenType.ID,
             TokenType.LPAR,
-        ) or self.check_sequence(
+        ) or parser.check_sequence(
             (
                 TokenType.PUB,
                 TokenType.PRIV,
@@ -554,114 +543,72 @@ class Parser:
             (SoftKeyword.STRUCT, SoftKeyword.PROP, TokenType.TYPE),
             TokenType.ID,
             TokenType.LPAR,
-        ):
-            return self.func_decl_stmt()
-        elif kw_token := self.match(TokenType.WHILE):
-            condition = self.expr()
-            body = self.block()
-            self.consume(TokenType.SEMI, "Expected ';'")
-            return ASTWhile(condition=condition, body=body, kw_token=kw_token)
-        elif self.match(TokenType.FOR):
-            var = self.consume(
-                TokenType.ID, "Expected name of variable for loop iteration"
-            )
-            in_token = self.consume(TokenType.ID, "Expected 'in'")
-            if in_token.lexeme != "in":
-                raise SafulateSyntaxError("Expected 'in'")
-            src = self.expr()
-            body = self.block()
-            self.consume(TokenType.SEMI, "Expected ';'")
-            return ASTForLoop(var_name=var, source=src, body=body)
-        elif kwd := self.match(TokenType.RETURN):
-            expr = None
-            if not self.check(TokenType.SEMI):
-                expr = self.expr()
-            self.consume(TokenType.SEMI, "Expected ';'")
-            return ASTReturn(kwd, expr)
-        elif kwd := self.match(TokenType.BREAK):
-            expr = None if self.check(TokenType.SEMI) else self.expr()
-            self.consume(TokenType.SEMI, "Expected ';'")
-            return ASTBreak(kwd, expr)
-        elif kwd := self.match(TokenType.CONTINUE):
-            expr = None if self.check(TokenType.SEMI) else self.expr()
-            self.consume(TokenType.SEMI, "Expected ';'")
-            return ASTContinue(kwd, expr)
-        elif self.check(TokenType.REQ):
-            return self.require_stmt()
-        elif kwd := self.match(TokenType.RAISE):
-            expr = self.expr()
-            self.consume(TokenType.SEMI, "Expected ';'")
-            return ASTRaise(expr, kwd)
-        elif kwd := self.match(TokenType.DEL):
-            var = self.consume(TokenType.ID, "Expected ID for deletion")
-            self.consume(TokenType.SEMI, "Expected ';'")
-            return ASTDel(var)
-        elif kwd := self.match(TokenType.TRY):
-            body = self.block()
+        )
 
-            catch_branches: list[ASTTryCatch_CatchBranch] = []
-            while self.match(SoftKeyword.CATCH):
-                error_var: Token | None = None
-                target: tuple[Token, ASTNode] | None = None
+    @reg_stmt(check=func_decl_stmt_checker)
+    def func_decl_stmt(self) -> ASTNode:
+        scope_token = self.match(TokenType.PUB, TokenType.PRIV, SoftKeyword.SPEC)
+        kw_token = self.match(SoftKeyword.STRUCT, SoftKeyword.PROP, TokenType.TYPE)
 
-                while not self.check(TokenType.LBRC):
-                    if self.check_sequence(
-                        SoftKeyword.AS, TokenType.ID, TokenType.LBRC
-                    ):
-                        self.consume(SoftKeyword.AS, "Expected 'as'")
-                        error_var = self.consume(
-                            TokenType.ID, "Expected error var name"
-                        )
-                    else:
-                        target = (self.peek(), self.expr())
-
-                catch_branches.append(
-                    ASTTryCatch_CatchBranch(
-                        body=self.block(), target=(target), var=error_var
-                    )
+        match (scope_token, kw_token):
+            case (None, None):
+                raise SafulateSyntaxError(
+                    "Scope keyword and declaration keyword both missing"
                 )
+            case (Token(), None):
+                kw_token = scope_token
+            case (None, Token()):
+                scope_token = Token(TokenType.PUB, "pub", kw_token.start)
+            case (Token(), Token()):
+                pass
 
-            else_branch = None
-            if self.match(SoftKeyword.ELSE):
-                else_branch = self.block()
-
-            self.consume(TokenType.SEMI, "Expected ';'")
-            return ASTTryCatch(
-                body=body, catch_branches=catch_branches, else_branch=else_branch
-            )
-        elif kwd := self.match(SoftKeyword.SWITCH):
-            switch_expr = self.expr()
-            self.consume(TokenType.LBRC, "Expected '{'")
-            cases: list[tuple[ASTNode, ASTBlock]] = []
-            else_branch = None
-
-            while 1:
-                if not self.match(SoftKeyword.CASE):
-                    break
-
-                if self.check(TokenType.LBRC):
-                    if else_branch is not None:
-                        raise SafulateSyntaxError(
-                            "A plain case has already been registered", self.peek()
-                        )
-                    else_branch = self.block()
-                else:
-                    cases.append((self.expr(), self.block()))
-
-            if len(cases) == 0:
-                raise SafulateSyntaxError("Switch/Case requires at least 1 case", kwd)
-
-            self.consume(TokenType.SEMI, "Expected ';'")
-            self.consume(TokenType.RBRC, "Expected '}'")
-            self.consume(TokenType.SEMI, "Expected ';'")
-            return ASTSwitchCase(
-                cases=cases, expr=switch_expr, else_branch=else_branch, kw=kwd
-            )
-
-        expr = self.expr()
+        name = self.consume(TokenType.ID, "Expected function name")
+        func = self._func_decl(scope_token=scope_token, kw_token=kw_token, name=name)
         self.consume(TokenType.SEMI, "Expected ';'")
-        return ASTExprStmt(expr)
 
+        return ASTVarDecl(name=name, value=func, keyword=scope_token)
+
+    @reg_stmt(TokenType.WHILE)
+    def while_stmt(self) -> ASTNode:
+        kw_token = self.consume(TokenType.WHILE)
+        condition = self.expr()
+        body = self.block()
+
+        self.consume(TokenType.SEMI, "Expected ';'")
+        return ASTWhile(condition=condition, body=body, kw_token=kw_token)
+
+    @reg_stmt(TokenType.FOR)
+    def for_stmt(self) -> ASTNode:
+        self.consume(TokenType.FOR)
+        var = self.consume(TokenType.ID, "Expected name of variable for loop iteration")
+        self.consume(SoftKeyword.IN)
+        src = self.expr()
+        body = self.block()
+
+        self.consume(TokenType.SEMI, "Expected ';'")
+        return ASTForLoop(var_name=var, source=src, body=body)
+
+    @reg_stmt(TokenType.RETURN)
+    def return_stmt(self) -> ASTNode:
+        kwd = self.consume(TokenType.RETURN)
+        expr = None
+        if not self.check(TokenType.SEMI):
+            expr = self.expr()
+
+        self.consume(TokenType.SEMI, "Expected ';'")
+        return ASTReturn(kwd, expr)
+
+    @reg_stmt((TokenType.BREAK, TokenType.CONTINUE))
+    def continue_break_stmt(self) -> ASTNode:
+        kwd = self.consume((TokenType.BREAK, TokenType.CONTINUE))
+        expr = None if self.check(TokenType.SEMI) else self.expr()
+
+        self.consume(TokenType.SEMI, "Expected ';'")
+        return {TokenType.CONTINUE: ASTContinue, TokenType.BREAK: ASTBreak}[kwd.type](
+            kwd, expr
+        )
+
+    @reg_stmt(TokenType.REQ)
     def require_stmt(self) -> ASTNode:
         kwd = self.consume(TokenType.REQ, "Expected 'req'")
 
@@ -674,7 +621,7 @@ class Parser:
             names = []
             names.append(self.consume(TokenType.ID, "Expected ID"))
 
-            while self.check(TokenType.COMMA) and self.check_next(TokenType.ID):
+            while self.check_sequence(TokenType.COMMA, TokenType.ID):
                 self.advance()
                 names.append(self.consume(TokenType.ID, "Expected ID"))
 
@@ -770,50 +717,145 @@ class Parser:
         except InvalidVersion:
             raise SafulateSyntaxError("Invalid Verson", major) from None
 
-    def block(self) -> ASTBlock:
-        # Only using consume because rules like `if` and `while` use it directly,
-        # `stmt` rule checks for `{` first
-        self.consume(TokenType.LBRC, "Expected '{'")
-        stmts: list[ASTNode] = []
-        while not self.check(TokenType.RBRC):
-            stmts.append(self.stmt())
+    @reg_stmt(TokenType.RAISE)
+    def raise_stmt(self) -> ASTNode:
+        kwd = self.consume(TokenType.RAISE)
+        expr = self.expr()
 
+        self.consume(TokenType.SEMI, "Expected ';'")
+        return ASTRaise(expr, kwd)
+
+    @reg_stmt(TokenType.DEL)
+    def del_stmt(self) -> ASTNode:
+        self.consume(TokenType.DEL)
+        var = self.consume(TokenType.ID, "Expected ID for deletion")
+
+        self.consume(TokenType.SEMI, "Expected ';'")
+        return ASTDel(var)
+
+    @reg_stmt(TokenType.TRY)
+    def try_catch_stmt(self) -> ASTNode:
+        self.consume(TokenType.TRY)
+        body = self.block()
+
+        catch_branches: list[ASTTryCatch_CatchBranch] = []
+        while self.match(SoftKeyword.CATCH):
+            error_var: Token | None = None
+            target: tuple[Token, ASTNode] | None = None
+
+            while not self.check(TokenType.LBRC):
+                if self.check_sequence(SoftKeyword.AS, TokenType.ID, TokenType.LBRC):
+                    self.consume(SoftKeyword.AS)
+                    error_var = self.consume(TokenType.ID, "Expected error var name")
+                else:
+                    target = (self.peek(), self.expr())
+
+            catch_branches.append(
+                ASTTryCatch_CatchBranch(
+                    body=self.block(), target=(target), var=error_var
+                )
+            )
+
+        else_branch = None
+        if self.match(SoftKeyword.ELSE):
+            else_branch = self.block()
+
+        self.consume(TokenType.SEMI, "Expected ';'")
+        return ASTTryCatch(
+            body=body, catch_branches=catch_branches, else_branch=else_branch
+        )
+
+    @reg_stmt(SoftKeyword.SWITCH)
+    def switch_case_stmt(self) -> ASTNode:
+        kwd = self.consume(SoftKeyword.SWITCH)
+        switch_expr = self.expr()
+        self.consume(TokenType.LBRC, "Expected '{'")
+        cases: list[tuple[ASTNode, ASTBlock]] = []
+        else_branch = None
+
+        while 1:
+            if not self.match(SoftKeyword.CASE):
+                break
+
+            if self.check(TokenType.LBRC):
+                if else_branch is not None:
+                    raise SafulateSyntaxError(
+                        "A plain case has already been registered", self.peek()
+                    )
+                else_branch = self.block()
+            else:
+                cases.append((self.expr(), self.block()))
+
+        if len(cases) == 0:
+            raise SafulateSyntaxError("Switch/Case requires at least 1 case", kwd)
+
+        self.consume(TokenType.SEMI, "Expected ';'")
         self.consume(TokenType.RBRC, "Expected '}'")
-        return ASTBlock(stmts)
+        self.consume(TokenType.SEMI, "Expected ';'")
+        return ASTSwitchCase(
+            cases=cases, expr=switch_expr, else_branch=else_branch, kw=kwd
+        )
+
+    # region expr
 
     def expr(self) -> ASTNode:
-        if self.check(TokenType.PUB, TokenType.PRIV):
-            if self.check_next(TokenType.LPAR):
-                return self.func_decl_expr()
-            return self.var_decl()
-        elif kw_token := self.match(TokenType.IF):
-            condition = self.expr()
-            body = self.block()
-            else_branch = None
-            if self.match(SoftKeyword.ELSE):
-                else_branch = self.block()
-            return ASTIf(
-                condition=condition,
-                body=body,
-                else_branch=else_branch,
-                kw_token=kw_token,
-            )
-        return self.assign()
+        if expr := self._execute_cases(self.expr_cases):
+            return expr
 
+        raise SafulateSyntaxError("Expected Expression", self.peek())
+
+    @reg_expr((TokenType.PUB, TokenType.PRIV), TokenType.LPAR)
+    def func_decl_expr(self) -> ASTNode:
+        kw_token = self.consume(
+            TokenType.PUB,
+            "Expected 'pub' keyword for func declaration as an expression",
+        )
+        return self._func_decl(scope_token=kw_token, kw_token=kw_token, name=None)
+
+    @reg_expr((TokenType.PUB, TokenType.PRIV))
+    def var_decl(self) -> ASTNode:
+        keyword = self.consume(
+            (TokenType.PUB, TokenType.PRIV), "Expected var decl keyword"
+        )
+        name = self.consume(TokenType.ID, "Expected variable name")
+
+        if self.check(TokenType.COLON):
+            self.annotation()
+
+        return ASTVarDecl(
+            keyword=keyword,
+            name=name,
+            value=self.expr() if self.match(TokenType.EQ) else None,
+        )
+
+    @reg_expr(TokenType.IF)
+    def if_expr(self) -> ASTNode:
+        kw_token = self.consume(TokenType.IF)
+        condition = self.expr()
+        body = self.block()
+        else_branch = None
+        if self.match(SoftKeyword.ELSE):
+            else_branch = self.block()
+
+        return ASTIf(
+            condition=condition,
+            body=body,
+            else_branch=else_branch,
+            kw_token=kw_token,
+        )
+
+    @reg_expr(
+        TokenType.ID,
+        (
+            TokenType.EQ,
+            TokenType.PLUSEQ,
+            TokenType.MINUSEQ,
+            TokenType.STAREQ,
+            TokenType.STARSTAREQ,
+            TokenType.SLASHEQ,
+        ),
+    )
     def assign(self) -> ASTNode:
-        if not (
-            self.check(TokenType.ID)
-            and self.check_next(
-                TokenType.EQ,
-                TokenType.PLUSEQ,
-                TokenType.MINUSEQ,
-                TokenType.STAREQ,
-                TokenType.STARSTAREQ,
-                TokenType.SLASHEQ,
-            )
-        ):
-            return self.comparison()
-
         name = self.advance()  # We know it's the right type b/c of check above
         op = self.advance()
         value = self.expr()
@@ -843,44 +885,78 @@ class Parser:
                 pass
         return ASTAssign(name, value)
 
-    def comparison(self) -> ASTNode:
-        return self.binary_op(
-            self.equality,
-            TokenType.LESS,
-            TokenType.GRTR,
-            TokenType.LESSEQ,
-            TokenType.GRTREQ,
-            TokenType.AND,
-            TokenType.OR,
-            TokenType.HAS,
-            TokenType.AMP,
-            TokenType.PIPE,
-            TokenType.TILDE,
+    @reg_expr(TokenType.LSQB)
+    def list_syntax(self) -> ASTNode:
+        self.consume(TokenType.LSQB)
+        parts: list[ASTBlock] = []
+        temp: list[ASTNode] = []
+
+        while not self.check(TokenType.RSQB):
+            if self.check(TokenType.COMMA):
+                parts.append(ASTBlock(temp))
+                temp = []
+                self.advance()
+            else:
+                temp.append(self.expr())
+
+        parts.append(ASTBlock(temp))
+        self.consume(TokenType.RSQB, "Expected ']'")
+
+        return ASTList(parts)
+
+    @reg_expr(TokenType.LPAR)
+    def expr_group_syntax(self) -> ASTNode:
+        self.consume(TokenType.LPAR)
+        expr = self.expr()
+        self.consume(TokenType.RPAR)
+        return expr
+
+    @reg_expr(TokenType.FSTR_START)
+    def fstring(self) -> ASTNode:
+        parts: list[ASTNode] = []
+        start_token = self.peek()
+        end_reached = False
+
+        while 1:
+            if self.check(TokenType.FSTR_START, TokenType.FSTR_MIDDLE) or (
+                end_reached := self.check(TokenType.FSTR_END)
+            ):
+                self.tokens[self.current].type = TokenType.STR
+                parts.append(self.atom())
+            else:
+                parts.append(self.expr())
+            if end_reached:
+                break
+
+        node = parts.pop(0)
+        while parts:
+            node = ASTBinary(
+                node, Token(TokenType.PLUS, "", start_token.start), parts.pop(0)
+            )
+        return node
+
+    @reg_expr(TokenType.RSTRING)
+    def rstring(self) -> ASTNode:
+        return ASTRegex(value=self.consume(TokenType.RSTRING))
+
+    @reg_expr((TokenType.PLUS, TokenType.MINUS, TokenType.NOT))
+    def unary_ops(self) -> ASTNode:
+        return ASTUnary(op=self.advance(), right=self.expr())
+
+    @reg_expr(
+        (
+            TokenType.NUM,
+            TokenType.STR,
+            TokenType.ID,
+            TokenType.PRIV_ID,
+            TokenType.TYPE,
+            TokenType.ELLIPSIS,
         )
+    )
+    def atom(self) -> ASTNode:
+        return self.consume_binary_op(self.consume_calls(ASTAtom(self.advance())))
 
-    def equality(self) -> ASTNode:
-        return self.binary_op(self.sum, TokenType.EQEQ, TokenType.NEQ, TokenType.EQEQEQ)
-
-    def sum(self) -> ASTNode:
-        return self.binary_op(self.product, TokenType.PLUS, TokenType.MINUS)
-
-    def product(self) -> ASTNode:
-        return self.binary_op(self.unary, TokenType.STAR, TokenType.SLASH)
-
-    def unary(self) -> ASTNode:
-        op = self.match(TokenType.PLUS, TokenType.MINUS, TokenType.NOT)
-        if not op:
-            return self.power()
-
-        right = self.unary()
-        return ASTUnary(op, right)
-
-    def power(self) -> ASTNode:
-        return self.binary_op(self.call, TokenType.STARSTAR)
-
-    def call(self) -> ASTNode:
-        callee = self.atom()
-
+    def consume_calls(self, callee: ASTNode) -> ASTNode:
         while token := self.match(
             TokenType.LPAR, TokenType.DOT, TokenType.LSQB, TokenType.COLON
         ):
@@ -934,71 +1010,22 @@ class Parser:
 
         return callee
 
-    def list_syntax(self) -> ASTNode:
-        self.consume(TokenType.LSQB, "Expected '['")
-        parts: list[ASTBlock] = []
-        temp: list[ASTNode] = []
+    def _handle_comparison(self, *ops: TokenType) -> tuple[Token, ASTNode] | None:
+        for op in ops:
+            if token := self.match(op):
+                return token, self.expr()
 
-        while not self.check(TokenType.RSQB):
-            if self.check(TokenType.COMMA):
-                parts.append(ASTBlock(temp))
-                temp = []
-                self.advance()
-            else:
-                temp.append(self.expr())
-
-        parts.append(ASTBlock(temp))
-        self.consume(TokenType.RSQB, "Expected ']'")
-
-        return ASTList(parts)
-
-    def atom(self) -> ASTNode:
-        if self.match(TokenType.LPAR):
-            expr = self.expr()
-            self.consume(TokenType.RPAR, "Expected ')'")
-            return expr
-        elif self.check(TokenType.LSQB):
-            return self.list_syntax()
-
-        if self.check(TokenType.FSTR_START):
-            return self.fstring()
-        elif token := self.match(TokenType.RSTRING):
-            return ASTRegex(value=token)
-        elif not self.check(
-            TokenType.NUM,
-            TokenType.STR,
-            TokenType.ID,
-            TokenType.PRIV_ID,
-            TokenType.TYPE,
-            TokenType.ELLIPSIS,
-        ):
-            raise SafulateSyntaxError("Expected expression", self.peek())
-
-        return ASTAtom(self.advance())
-
-    def fstring(self) -> ASTNode:
-        parts: list[ASTNode] = []
-        start_token = self.peek()
-        end_reached = False
-
-        while 1:
-            if self.check(TokenType.FSTR_START, TokenType.FSTR_MIDDLE) or (
-                end_reached := self.check(TokenType.FSTR_END)
-            ):
-                self.tokens[self.current].type = TokenType.STR
-                parts.append(self.atom())
-            else:
-                parts.append(self.expr())
-            if end_reached:
-                break
-
-        node = parts.pop(0)
-        while parts:
-            node = ASTBinary(
-                node, Token(TokenType.PLUS, "", start_token.start), parts.pop(0)
-            )
-        return node
-
-    def annotation(self) -> ASTNode:
-        self.consume(TokenType.COLON, "Expected ':' to start annotation")
-        return self.expr()
+    def consume_binary_op(self, left: ASTNode) -> ASTNode:
+        res = self._handle_comparison(
+            TokenType.EQEQ,
+            TokenType.NEQ,
+            TokenType.EQEQEQ,
+            TokenType.PLUS,
+            TokenType.MINUS,
+            TokenType.STAR,
+            TokenType.SLASH,
+            TokenType.STARSTAR,
+        )
+        if res:
+            return ASTBinary(left=left, op=res[0], right=res[1])
+        return left
