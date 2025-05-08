@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from enum import Enum as _Enum
-from typing import cast
+from typing import TYPE_CHECKING, Any, Generic, Self, TypeVar, cast, overload
 
 __all__ = (
     "AttrSpec",
     "BinarySpec",
     "CallSpec",
+    "EnumAnd",
+    "EnumOr",
     "FormatSpec",
     "ParamType",
+    "SequenceConst",
     "SoftKeyword",
     "SpecName",
     "TokenType",
@@ -16,10 +19,131 @@ __all__ = (
     "spec_name_from_str",
 )
 
+if TYPE_CHECKING:
+    EnumT = TypeVar("EnumT", bound="Enum")
+    EnumAndT = TypeVar("EnumAndT", bound="Enum" | "EnumAnd[Any]" | "EnumOr[Any]")
+    EnumOrT = TypeVar("EnumOrT", bound="Enum" | "EnumAnd[Any]" | "EnumOr[Any]")
+else:
+    EnumT = TypeVar("EnumT")
+    EnumAndT = TypeVar("EnumAndT")
+    EnumOrT = TypeVar("EnumOrT")
+
 
 class Enum(_Enum):
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}.{self.name}"
+
+    def __or__(
+        self, other: EnumT | EnumOr[EnumT] | EnumAnd[EnumT]
+    ) -> EnumOr[Self | EnumT]:
+        return EnumOr(self, *other.value if isinstance(other, EnumOr) else (other,))
+
+    def __and__(
+        self, other: EnumT | EnumOr[EnumT] | EnumAnd[EnumT]
+    ) -> EnumAnd[Self | EnumT]:
+        return EnumAnd(self, *other.value if isinstance(other, EnumOr) else (other,))
+
+
+class EnumAnd(Generic[EnumAndT]):
+    def __init__(self, *vals: EnumAndT) -> None:
+        self.__val: tuple[EnumAndT, ...] = vals
+
+    # def __repr__(self) -> str:
+    #     return f"{self.__class__.__name__}(value={self.value!r})"
+
+    def __repr__(self) -> str:
+        return f"({' & '.join(repr(child) for child in self.value)})"
+
+    @property
+    def value(self) -> tuple[EnumAndT, ...]:
+        return self.__val
+
+    @overload
+    def __or__(self, other: EnumT) -> EnumOr[EnumAndT | EnumT]: ...
+    @overload
+    def __or__(self, other: EnumOr[EnumT]) -> EnumOr[Self | EnumOr[EnumT]]: ...
+    @overload
+    def __or__(self, other: EnumAnd[EnumT]) -> EnumOr[Self | EnumAnd[EnumT]]: ...
+    def __or__(
+        self, other: EnumT | EnumOr[EnumT] | EnumAnd[EnumT]
+    ) -> (
+        EnumOr[EnumAndT | EnumT]
+        | EnumOr[Self | EnumOr[EnumT]]
+        | EnumOr[Self | EnumAnd[EnumT]]
+    ):
+        if isinstance(other, Enum):
+            return EnumOr(*self.value, other)
+        else:
+            return EnumOr(self, other)
+
+    @overload
+    def __and__(self, other: EnumT) -> EnumAnd[EnumAndT | EnumT]: ...
+    @overload
+    def __and__(self, other: EnumOr[EnumT]) -> EnumAnd[Self | EnumOr[EnumT]]: ...
+    @overload
+    def __and__(self, other: EnumAnd[EnumT]) -> EnumAnd[Self | EnumAnd[EnumT]]: ...
+    def __and__(
+        self, other: EnumT | EnumOr[EnumT] | EnumAnd[EnumT]
+    ) -> (
+        EnumAnd[EnumAndT | EnumT]
+        | EnumAnd[Self | EnumOr[EnumT]]
+        | EnumAnd[Self | EnumAnd[EnumT]]
+    ):
+        if isinstance(other, Enum):
+            return EnumAnd(*self.value, other)
+        else:
+            return EnumAnd(self, other)
+
+
+class EnumOr(Generic[EnumOrT]):
+    def __init__(self, *vals: EnumOrT) -> None:
+        self.__val: tuple[EnumOrT, ...] = vals
+
+    # def __repr__(self) -> str:
+    #     return f"{self.__class__.__name__}(value={self.value!r})"
+
+    def __repr__(self) -> str:
+        return f"({' | '.join(repr(child) for child in self.value)})"
+
+    @property
+    def value(self) -> tuple[EnumOrT, ...]:
+        return self.__val
+
+    @overload
+    def __or__(self, other: EnumT) -> EnumOr[EnumOrT | EnumT]: ...
+    @overload
+    def __or__(self, other: EnumOr[EnumT]) -> EnumOr[Self | EnumOr[EnumT]]: ...
+    @overload
+    def __or__(self, other: EnumAnd[EnumT]) -> EnumOr[Self | EnumAnd[EnumT]]: ...
+    def __or__(
+        self, other: EnumT | EnumOr[EnumT] | EnumAnd[EnumT]
+    ) -> (
+        EnumOr[EnumOrT | EnumT]
+        | EnumOr[Self | EnumOr[EnumT]]
+        | EnumOr[Self | EnumAnd[EnumT]]
+    ):
+        if isinstance(other, Enum):
+            return EnumOr(*self.value, other)
+        else:
+            return EnumOr(self, other)
+
+    @overload
+    def __and__(self, other: EnumT) -> EnumAnd[EnumOrT | EnumT]: ...
+    @overload
+    def __and__(self, other: EnumOr[EnumT]) -> EnumAnd[Self | EnumOr[EnumT]]: ...
+    @overload
+    def __and__(self, other: EnumAnd[EnumT]) -> EnumAnd[Self | EnumAnd[EnumT]]: ...
+    def __and__(
+        self, other: EnumT | EnumOr[EnumT] | EnumAnd[EnumT]
+    ) -> (
+        EnumAnd[EnumOrT | EnumT]
+        | EnumAnd[Self | EnumOr[EnumT]]
+        | EnumAnd[Self | EnumAnd[EnumT]]
+    ):
+        if isinstance(other, Enum):
+            return EnumAnd(*self.value, other)
+        else:
+            return EnumAnd(self, other)
 
 
 class ParamType(Enum):
@@ -182,3 +306,8 @@ def spec_name_from_str(name: str) -> SpecName:
         return spec
 
     raise ValueError(f"Unknown spec name {name!r}")
+
+
+class SequenceConst(Enum):
+    any = "any"
+    none = "none"
