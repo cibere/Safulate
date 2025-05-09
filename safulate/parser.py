@@ -106,7 +106,7 @@ reg_stmt = _reg_deco_maker("stmt")
 class Parser:
     def __init__(self) -> None:
         self.current = 0
-        self.cases: list[RegisteredCase] = [
+        self.cases: list[RegisteredCase] =  [
             getattr(func, SAFULATE_CASE_INFO_ATTR)
             for _name, func in inspect.getmembers(
                 self, lambda obj: hasattr(obj, SAFULATE_CASE_INFO_ATTR)
