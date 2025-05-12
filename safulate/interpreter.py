@@ -86,10 +86,10 @@ if TYPE_CHECKING:
 
     from .libs.regex import SafPattern as _SafPattern
 
-__all__ = ("TreeWalker",)
+__all__ = ("Interpreter",)
 
 
-class TreeWalker(ASTVisitor):
+class Interpreter(ASTVisitor):
     __slots__ = ("env", "import_cache")
 
     def __init__(

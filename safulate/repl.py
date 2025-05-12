@@ -7,7 +7,7 @@ from .cli import Options
 from .enums import TokenType
 from .environment import Environment
 from .errors import SafulateError
-from .interpreter import TreeWalker
+from .interpreter import Interpreter
 from .lexer import Lexer
 from .objects import SafBaseObject, SafNull
 from .parser import Parser
@@ -44,11 +44,11 @@ def run_code(
     source: str,
     *,
     opts: Options | None = None,
-    interpreter: TreeWalker | None = None,
+    interpreter: Interpreter | None = None,
     filename: str | None = None,
 ) -> SafBaseObject:
     try:
-        return code_to_ast(source, opts=opts).visit(interpreter or TreeWalker())
+        return code_to_ast(source, opts=opts).visit(interpreter or Interpreter())
     except SafulateError as error:
         error.print_report(source, filename=filename)
         raise
@@ -63,7 +63,7 @@ def start_repl_session(opts: Options) -> None:
     print(REPL_GREETING)
 
     env = Environment().add_builtins()
-    interpreter = TreeWalker(env=env)
+    interpreter = Interpreter(env=env)
 
     try:
         while True:

@@ -20,14 +20,14 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from .environment import Environment
-    from .interpreter import TreeWalker
+    from .interpreter import Interpreter
     from .tokens import Token
 
 __all__ = ("NativeContext",)
 
 
 class NativeContext:
-    def __init__(self, interpreter: TreeWalker, token: Token) -> None:
+    def __init__(self, interpreter: Interpreter, token: Token) -> None:
         self.interpreter = interpreter
         self.token = token
 
