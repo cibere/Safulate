@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import ClassVar
+import inspect
+from collections.abc import Callable
+from typing import Any, ClassVar, TypeAlias, TypeVar, cast, overload
 
 from .enums import TokenType
 from .errors import ErrorManager, SafulateSyntaxError
@@ -8,18 +10,21 @@ from .tokens import Token
 
 __all__ = ("Lexer",)
 
+T = TypeVar("T")
+CASE_INFO_ATTR = "__safulate_case_info__"
 _querty = "qwertyuiopasdfghjklzxcvbnm"
 id_first_char_characters = f"_{_querty}{_querty.upper()}"
 id_other_char_characters = f"1234567890{id_first_char_characters}"
 
+LexerCase: TypeAlias = tuple[
+    tuple[str, ...],
+    Callable[["Lexer", str], Any | None] | None,
+    Callable[["Lexer"], None] | Callable[["Lexer", Any], None],
+]
+
 
 class Lexer:
-    __slots__ = (
-        "current",
-        "source",
-        "start",
-        "tokens",
-    )
+    __slots__ = ("cases", "current", "source", "start", "tokens")
     symbol_tokens: ClassVar[dict[str, TokenType]] = {
         sym.value: sym
         for sym in (
@@ -93,6 +98,18 @@ class Lexer:
         self.start = 0
         self.current = 0
         self.source = source
+        self.cases: list[LexerCase] = [
+            (
+                *cast(
+                    "tuple[tuple[str, ...], Callable[[Lexer, str], Any | None] | None]",
+                    getattr(func, CASE_INFO_ATTR),
+                ),
+                func,
+            )
+            for _, func in inspect.getmembers(
+                self, lambda x: hasattr(x, CASE_INFO_ATTR)
+            )
+        ]
 
     @property
     def char(self) -> str:
@@ -121,13 +138,80 @@ class Lexer:
             Token(type, self.source[self.start : self.current], self.start)
         )
 
+    @overload
+    @staticmethod
+    def _(
+        *chars: str,
+    ) -> Callable[
+        [Callable[[Lexer], None]],
+        Callable[[Lexer], None],
+    ]: ...
+    @overload
+    @staticmethod
+    def _(
+        *chars: str, condition: Callable[[Lexer, str], T | None]
+    ) -> Callable[
+        [Callable[[Lexer, T], None]],
+        Callable[[Lexer, T], None],
+    ]: ...
+    @staticmethod
+    def _(
+        *chars: str, condition: Callable[[Lexer, str], T | None] | None = None
+    ) -> Any:
+        def deco(
+            func: Callable[[Lexer, T], None] | Callable[[Lexer], None],
+        ) -> Callable[[Lexer, T], None] | Callable[[Lexer], None]:
+            setattr(func, CASE_INFO_ATTR, (chars, condition))
+            return func
+
+        return deco
+
+    def poll_char(self) -> None:
+        self.start = self.current
+        if self.is_eof():
+            return self.add_token(TokenType.EOF)
+
+        for chars, condition, func in self.cases:
+            args: list[Any] = []
+
+            if chars and self.snippit_next not in chars:
+                continue
+            if condition:
+                val = condition(self, self.snippit_next)
+                if val is None:
+                    continue
+                args.append(val)
+            return func(*args)
+
+        raise SafulateSyntaxError(f"Unknown character {self.source[self.start]!r}")
+
+    def tokenize(self) -> list[Token]:
+        with ErrorManager(start=lambda: self.start):
+            while (not self.tokens) or (self.tokens[-1].type is not TokenType.EOF):
+                self.poll_char()
+
+        return self.tokens
+
+    # region cases
+
+    @staticmethod
+    def _mod_str_cond(lexer: Lexer, _: str) -> str | None:
+        if (idx := lexer.current + 1) < len(lexer.source) and (
+            enclosing_char := lexer.source[idx]
+        ) in "\"'`":
+            return enclosing_char
+        return None
+
+    @_(" ", "\t", "\n")
     def handle_whitespace(self) -> None:
         self.current += 1
 
+    @_("#")
     def handle_comment(self) -> None:
         while self.not_eof() and self.char != "\n":
             self.current += 1
 
+    @_("f", "F", condition=_mod_str_cond)
     def handle_fstring(self, enclosing_char: str) -> None:
         self.current += 2
         start_token_added = False
@@ -171,6 +255,7 @@ class Lexer:
         self.add_token(token_type)
         self.current += 1
 
+    @_("r", "R", condition=_mod_str_cond)
     def handle_rstring(self, enclosing_char: str) -> None:
         self.current += 2
         while self.not_eof() and self.char != enclosing_char:
@@ -182,9 +267,16 @@ class Lexer:
         self.current += 1
         self.add_token(TokenType.RSTRING)
 
-    def handle_str(self, enclosing_char: str) -> None:
+    @_(
+        '"',
+        "'",
+        "`",
+    )
+    def handle_str(self) -> None:
+        enclosing_char = self.snippit_next
         self.current += 1
         self.start += 1
+
         while self.not_eof() and self.char != enclosing_char:
             self.current += 1
 
@@ -194,10 +286,24 @@ class Lexer:
         self.add_token(TokenType.STR)
         self.current += 1
 
+    @staticmethod
+    def _sym_cond(lex: Lexer, txt: str) -> TokenType | None:
+        return (
+            lex.trisymbol_tokens.get(lex.source[lex.start : lex.current + 3])
+            or lex.bisymbol_tokens.get(lex.source[lex.start : lex.current + 2])
+            or lex.symbol_tokens.get(txt)
+        )
+
+    @_(condition=_sym_cond)
     def handle_token_symbols(self, tok: TokenType) -> None:
         self.current += len(tok.value)
         self.add_token(tok)
 
+    @_(
+        condition=lambda _lex, txt: txt
+        if txt in id_first_char_characters or txt == "$"
+        else None
+    )
     def handle_id(self, char: str) -> None:
         if char == "$":
             self.current = self.current + 1
@@ -221,6 +327,7 @@ class Lexer:
 
         self.add_token(self.hard_keywords.get(self.snippit, token_type))
 
+    @_(condition=lambda _lex, txt: txt if txt.isdigit() else None)
     def handle_num(self, char: str) -> None:
         dot_found = False
         while self.not_eof() and (
@@ -234,49 +341,3 @@ class Lexer:
         if not char[-1].isdigit():
             self.current -= 1
         self.add_token(TokenType.NUM)
-
-    def poll_char(self) -> None:
-        self.start = self.current
-        if self.is_eof():
-            return self.add_token(TokenType.EOF)
-
-        match self.snippit_next:
-            case " " | "\t" | "\n":
-                return self.handle_whitespace()
-            case "#":
-                return self.handle_comment()
-            case "f" | "F" if (idx := self.current + 1) < len(self.source) and (
-                enclosing_char := self.source[idx]
-            ) in "\"'`":
-                return self.handle_fstring(enclosing_char)
-            case "r" | "R" if (idx := self.current + 1) < len(self.source) and (
-                enclosing_char := self.source[idx]
-            ) in "\"'`":
-                return self.handle_rstring(enclosing_char)
-            case '"' | "'" | "`" as enclosing_char:
-                return self.handle_str(enclosing_char)
-            case _ as x if tok := self.trisymbol_tokens.get(
-                self.source[self.start : self.current + 3]
-            ):
-                return self.handle_token_symbols(tok)
-            case _ as x if tok := self.bisymbol_tokens.get(
-                self.source[self.start : self.current + 2]
-            ):
-                return self.handle_token_symbols(tok)
-            case _ as x if tok := self.symbol_tokens.get(x):
-                return self.handle_token_symbols(tok)
-            case _ as x if x in id_first_char_characters or x == "$":
-                return self.handle_id(x)
-            case _ as x if x.isdigit():
-                return self.handle_num(x)
-            case _:
-                raise SafulateSyntaxError(
-                    f"Unknown character {self.source[self.start]!r}"
-                )
-
-    def tokenize(self) -> list[Token]:
-        with ErrorManager(start=lambda: self.start):
-            while (not self.tokens) or (self.tokens[-1].type is not TokenType.EOF):
-                self.poll_char()
-
-        return self.tokens
