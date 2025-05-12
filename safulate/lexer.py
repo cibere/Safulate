@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import inspect
 from collections.abc import Callable
-from typing import Any, ClassVar, TypeAlias, TypeVar, cast, overload
+from typing import Any, ClassVar, TypeAlias, TypeVar, overload
 
 from .enums import TokenType
 from .errors import ErrorManager, SafulateSyntaxError
@@ -21,10 +20,11 @@ LexerCase: TypeAlias = tuple[
     Callable[["Lexer", str], Any | None] | None,
     Callable[["Lexer"], None] | Callable[["Lexer", Any], None],
 ]
+_cases: list[LexerCase] = []
 
 
 class Lexer:
-    __slots__ = ("cases", "current", "source", "start", "tokens")
+    __slots__ = ("current", "source", "start", "tokens")
     symbol_tokens: ClassVar[dict[str, TokenType]] = {
         sym.value: sym
         for sym in (
@@ -98,18 +98,6 @@ class Lexer:
         self.start = 0
         self.current = 0
         self.source = source
-        self.cases: list[LexerCase] = [
-            (
-                *cast(
-                    "tuple[tuple[str, ...], Callable[[Lexer, str], Any | None] | None]",
-                    getattr(func, CASE_INFO_ATTR),
-                ),
-                func,
-            )
-            for _, func in inspect.getmembers(
-                self, lambda x: hasattr(x, CASE_INFO_ATTR)
-            )
-        ]
 
     @property
     def char(self) -> str:
@@ -161,7 +149,7 @@ class Lexer:
         def deco(
             func: Callable[[Lexer, T], None] | Callable[[Lexer], None],
         ) -> Callable[[Lexer, T], None] | Callable[[Lexer], None]:
-            setattr(func, CASE_INFO_ATTR, (chars, condition))
+            _cases.append((chars, condition, func))
             return func
 
         return deco
@@ -171,8 +159,8 @@ class Lexer:
         if self.is_eof():
             return self.add_token(TokenType.EOF)
 
-        for chars, condition, func in self.cases:
-            args: list[Any] = []
+        for chars, condition, func in _cases:
+            args: list[Any] = [self]
 
             if chars and self.snippit_next not in chars:
                 continue

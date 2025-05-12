@@ -5,7 +5,6 @@ import msgspec
 from .asts import ASTNode
 from .cli import Options
 from .enums import TokenType
-from .environment import Environment
 from .errors import SafulateError
 from .interpreter import Interpreter
 from .lexer import Lexer
@@ -43,27 +42,24 @@ def code_to_ast(
 def run_code(
     source: str,
     *,
+    interpreter: Interpreter,
     opts: Options | None = None,
-    interpreter: Interpreter | None = None,
-    filename: str | None = None,
 ) -> SafBaseObject:
     try:
-        return code_to_ast(source, opts=opts).visit(interpreter or Interpreter())
+        return code_to_ast(source, opts=opts).visit(interpreter)
     except SafulateError as error:
-        error.print_report(source, filename=filename)
+        error.print_report(source, filename=interpreter.module_obj.name)
         raise
 
 
 def run_file(path: Path, *, opts: Options | None = None) -> None:
     source = path.read_text()
-    run_code(source, opts=opts, filename=path.absolute().as_posix())
+    run_code(source, opts=opts, interpreter=Interpreter(path.absolute().as_posix()))
 
 
 def start_repl_session(opts: Options) -> None:
     print(REPL_GREETING)
-
-    env = Environment().add_builtins()
-    interpreter = Interpreter(env=env)
+    interpreter = Interpreter("<repl session>")
 
     try:
         while True:

@@ -62,6 +62,7 @@ __all__ = (
     "SafFunc",
     "SafIterator",
     "SafList",
+    "SafModule",
     "SafNull",
     "SafNum",
     "SafObject",
@@ -487,6 +488,18 @@ class SafObject(SafBaseObject):
     @spec_meth(FormatSpec.repr)
     def repr(self, ctx: NativeContext) -> SafStr:
         return SafStr(f"<{self.type.name}>")
+
+
+class SafModule(SafObject):
+    def __init__(
+        self, name: str, attrs: dict[str, SafBaseObject] | None = None
+    ) -> None:
+        super().__init__("module", attrs)
+        self.name = name
+
+    @spec_meth(FormatSpec.repr)
+    def repr(self, ctx: NativeContext) -> SafStr:
+        return SafStr(f"<module {self.name}>")
 
 
 # region Atoms

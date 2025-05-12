@@ -12,6 +12,7 @@ from safulate import (
     SafDict,
     SafIterator,
     SafList,
+    SafModule,
     SafNull,
     SafNum,
     SafObject,
@@ -27,12 +28,8 @@ from safulate import (
 )
 
 types_code = """
-struct RegexTypes(){
-    pub pattern = type(r"");
-    pub match = type(r".*".match("hi"));
-};
-
-pub types = RegexTypes();
+pub pattern = type(r"");
+pub match = type(r".*".match("hi"));
 """
 
 
@@ -277,12 +274,12 @@ class SafMatch(SafObject):
                 )
 
 
-class RegexModule(SafObject):
+class RegexModule(SafModule):
     def __init__(self, ctx: NativeContext) -> None:
         super().__init__(
             "regex",
             attrs={
-                "types": ctx.eval(types_code, name="<builtin module regex>")["types"]
+                "types": ctx.eval(types_code, name="<builtin module regex>").module_obj
             },
         )
 
@@ -295,5 +292,5 @@ class RegexModule(SafObject):
         return SafStr(re.escape(string.str_spec(ctx)))
 
 
-def load(ctx: NativeContext) -> SafObject:
+def load(ctx: NativeContext) -> SafModule:
     return RegexModule(ctx)

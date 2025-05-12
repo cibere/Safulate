@@ -1,16 +1,17 @@
 from __future__ import annotations
 
-from typing import Any, Self
+from typing import Any
 
 from .errors import SafulateAttributeError, SafulateNameError, SafulateScopeError
 from .objects import SafBaseObject, SafFunc, null
+from .properties import cached_property
 from .tokens import Token
 
 __all__ = ("Environment",)
 
 
 class Environment:
-    __slots__ = "parent", "scope", "values"
+    __slots__ = "__cs_builtins__", "parent", "scope", "values"
 
     def __init__(
         self, parent: Environment | None = None, scope: SafBaseObject | None = None
@@ -22,11 +23,11 @@ class Environment:
         if scope:
             self.values = scope.public_attrs
 
-    def add_builtins(self) -> Self:
+    @cached_property("__cs_builtins__")
+    def _builtins(self) -> dict[str, SafBaseObject]:
         from .libs.builtins import Builtins
 
-        self.values.update(Builtins().public_attrs)
-        return self
+        return Builtins().public_attrs
 
     def __getitem__(self, token: Token) -> SafBaseObject:
         name = token.lexeme
@@ -35,6 +36,8 @@ class Environment:
             return self.values[name]
         if self.parent:
             return self.parent[token]
+        if name in self._builtins:
+            return self._builtins[name]
 
         raise SafulateNameError(f"Name {name!r} is not defined", token)
 
@@ -47,6 +50,8 @@ class Environment:
             self.parent[token] = value
         elif isinstance(token, str):
             self.values[name] = value
+        elif name in self._builtins:
+            self._builtins[name] = value
         else:
             raise SafulateNameError(f"Name {name!r} is not defined", token)
         self._set_parent(value)

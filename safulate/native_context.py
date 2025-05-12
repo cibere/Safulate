@@ -133,15 +133,13 @@ class NativeContext:
                     f"Unable to convert {x.repr_spec(self)} to value"
                 )
 
-    def eval(
-        self, code: str, *, name: str | None, env: Environment | None = None
-    ) -> dict[str, SafBaseObject]:
+    def eval(self, code: str, *, name: str) -> Interpreter:
         from .repl import code_to_ast
 
         try:
-            visitor = self.interpreter.__class__(env=env)
+            visitor = self.interpreter.__class__(name)
             code_to_ast(code).visit(visitor)
-            return visitor.env.values
+            return visitor
         except SafulateError as e:
             for token in e.tokens:
                 token.update_if_empty(source=code, filename=name)

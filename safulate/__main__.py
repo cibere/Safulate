@@ -3,6 +3,7 @@ from pathlib import Path
 
 from .cli import parse_cli_args
 from .errors import SafulateError
+from .interpreter import Interpreter
 from .repl import run_code, run_file, start_repl_session
 
 
@@ -14,7 +15,7 @@ def main() -> None:
             case Path():
                 run_file(src, opts=opts)
             case str():
-                run_code(src, opts=opts)
+                run_code(src, opts=opts, interpreter=Interpreter("<cli session>"))
             case _:
                 start_repl_session(opts)
     except SafulateError:

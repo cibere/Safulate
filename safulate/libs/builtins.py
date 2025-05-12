@@ -7,8 +7,8 @@ from safulate import (
     SafBaseObject,
     SafDict,
     SafList,
+    SafModule,
     SafNum,
-    SafObject,
     SafStr,
     SafTuple,
     SafType,
@@ -20,7 +20,7 @@ from safulate import (
 )
 
 
-class Builtins(SafObject):
+class Builtins(SafModule):
     def __init__(self) -> None:
         super().__init__(
             "builtins",
@@ -80,5 +80,5 @@ class Builtins(SafObject):
         return SafList([SafStr(attr) for attr in attrs])
 
 
-def load(ctx: NativeContext) -> SafObject:
+def load(ctx: NativeContext) -> SafModule:
     return Builtins()

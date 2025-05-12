@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from msgspec import Struct
 
 TYPE_CHECKING = False
 if TYPE_CHECKING:
@@ -9,8 +9,7 @@ if TYPE_CHECKING:
 __all__ = ("Token",)
 
 
-@dataclass
-class Token:
+class Token(Struct):
     type: TokenType
     lexeme: str
     start: int

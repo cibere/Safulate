@@ -3,29 +3,24 @@ from __future__ import annotations
 from typing import Literal
 
 from msgspec import DecodeError, json, toml, yaml
-
 from safulate import (
     NativeContext,
     SafBaseObject,
     SafFunc,
+    SafModule,
     SafNum,
-    SafObject,
     SafStr,
     SafulateError,
     public_method,
 )
 
 types_code = """
-struct TypeModule(){{
-    pub {decode_error} = type(object("{decode_error}"));
-    pub {encode_error} = type(object("{encode_error}"));
-}};
-
-pub types = TypeModule();
+pub {decode_error} = type(object("{decode_error}"));
+pub {encode_error} = type(object("{encode_error}"));
 """
 
 
-class MsgspecWrapper(SafObject):
+class MsgspecWrapper(SafModule):
     def __init__(
         self,
         module_name: Literal["json", "toml", "yaml"],
@@ -49,7 +44,7 @@ class MsgspecWrapper(SafObject):
                         encode_error=encode_error.__new__(encode_error).name,
                     ),
                     name=f"<builtin module {module_name}>",
-                )["types"],
+                ).module_obj,
             },
         )
 

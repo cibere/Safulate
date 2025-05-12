@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import inspect
 import re
 from typing import TYPE_CHECKING, Literal, NamedTuple, TypeVar
 
@@ -64,7 +63,6 @@ require_version_pattern = re.compile(
     r"v(?P<major>[0-9]+)\.(?P<minor>[0-9]+|x)(?:\.(?P<micro>[0-9]+))?"
 )
 ANY = "any"
-SAFULATE_CASE_INFO_ATTR = "__safulate_case_info__"
 
 
 class RegisteredCase(NamedTuple):
@@ -87,11 +85,7 @@ def _reg_deco_maker(type_: Literal["expr", "stmt"], /) -> RegDecoFact:
                 return parser.check_sequence(*sequence)
 
         def deco(func: CaseCallbackT) -> CaseCallbackT:
-            setattr(
-                func,
-                SAFULATE_CASE_INFO_ATTR,
-                RegisteredCase(callback=func, type=type_, check=check),
-            )
+            _cases.append(RegisteredCase(callback=func, type=type_, check=check))
             return func
 
         return deco
@@ -101,25 +95,20 @@ def _reg_deco_maker(type_: Literal["expr", "stmt"], /) -> RegDecoFact:
 
 reg_expr = _reg_deco_maker("expr")
 reg_stmt = _reg_deco_maker("stmt")
+_cases: list[RegisteredCase] = []
 
 
 class Parser:
     def __init__(self) -> None:
         self.current = 0
-        self.cases: list[RegisteredCase] = [
-            getattr(func, SAFULATE_CASE_INFO_ATTR)
-            for _name, func in inspect.getmembers(
-                self, lambda obj: hasattr(obj, SAFULATE_CASE_INFO_ATTR)
-            )
-        ]
 
     @cached_property
     def expr_cases(self) -> list[RegisteredCase]:
-        return [case for case in self.cases if case.type == "expr"]
+        return [case for case in _cases if case.type == "expr"]
 
     @cached_property
     def stmt_cases(self) -> list[RegisteredCase]:
-        return [case for case in self.cases if case.type == "stmt"]
+        return [case for case in _cases if case.type == "stmt"]
 
     def _execute_case(self, case: RegisteredCase) -> ASTNode | None:
         return case.callback(self) if case.check(self) else None
@@ -800,7 +789,7 @@ class Parser:
 
     def expr(self) -> ASTNode:
         if expr := self._execute_cases(self.expr_cases):
-            return expr
+            return self.consume_binary_op(self.consume_calls(expr))
 
         raise SafulateSyntaxError("Expected Expression", self.peek())
 
@@ -954,7 +943,7 @@ class Parser:
         )
     )
     def atom(self) -> ASTNode:
-        return self.consume_binary_op(self.consume_calls(ASTAtom(self.advance())))
+        return ASTAtom(self.advance())
 
     def consume_calls(self, callee: ASTNode) -> ASTNode:
         while token := self.match(

@@ -69,8 +69,8 @@ from .objects import (
     SafEllipsis,
     SafFunc,
     SafList,
+    SafModule,
     SafNum,
-    SafObject,
     SafProperty,
     SafStr,
     SafType,
@@ -90,20 +90,17 @@ __all__ = ("Interpreter",)
 
 
 class Interpreter(ASTVisitor):
-    __slots__ = ("env", "import_cache")
+    __slots__ = ("env", "libs", "module_obj", "version")
 
-    def __init__(
-        self, *, env: Environment | None = None, lib_manager: LibManager | None = None
-    ) -> None:
+    def __init__(self, name: str, *, lib_manager: LibManager | None = None) -> None:
         self.version = _PackagingVersion(__version__)
-        self.import_cache: dict[str, SafObject] = {}
-
         self.libs = lib_manager or LibManager()
+        self.module_obj = SafModule(name)
+        self.env = Environment(scope=self.module_obj)
 
-        if env:
-            self.env = env
-        else:
-            self.env = Environment().add_builtins()
+    @property
+    def name(self) -> str:
+        return self.module_obj.name
 
     @cached_property
     def regex_pattern_cls(self) -> type[_SafPattern]:
@@ -425,26 +422,21 @@ class Interpreter(ASTVisitor):
 
     def visit_import_req(self, node: ASTImportReq) -> SafBaseObject:
         with ErrorManager(token=node.source):
-            value = self.import_cache.get(node.source.lexeme)
+            value = self.libs[node.source.lexeme]
 
             if value is None:
                 match node.source.type:
                     case TokenType.ID:
-                        value = self.libs.get_or_load(
+                        value = self.libs.load_builtin_lib(
                             node.source.lexeme, ctx=self.ctx(node.source)
                         )
                     case TokenType.STR:
                         raise SafulateImportError("Url imports are not allowed yet")
                     case other:
                         raise RuntimeError(f"Unknown import source: {other.name!r}")
-            if value is None:
-                raise SafulateImportError(
-                    f"{node.source.lexeme!r} could not be located"
-                )
 
             self.env.declare(node.name)
             self.env[node.name] = value
-            self.import_cache[node.source.lexeme] = value
             return value
 
     def visit_raise(self, node: ASTRaise) -> SafBaseObject:
