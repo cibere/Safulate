@@ -16,19 +16,7 @@ from typing import (
     final,
 )
 
-from .asts import ASTBlock, ASTFuncDecl_Param, ASTNode, ASTVisitor
-from .enums import (
-    AttrSpec,
-    BinarySpec,
-    CallSpec,
-    FormatSpec,
-    ParamType,
-    SpecName,
-    TokenType,
-    UnarySpec,
-    spec_name_from_str,
-)
-from .errors import (
+from ..errors import (
     SafulateAttributeError,
     SafulateBreakoutError,
     SafulateIndexError,
@@ -37,9 +25,20 @@ from .errors import (
     SafulateTypeError,
     SafulateValueError,
 )
-from .properties import cached_property
-from .tokens import Token
-from .utils import FallbackDict
+from ..lexer import Token
+from ..parser import ASTBlock, ASTFuncDecl_Param, ASTNode, ASTVisitor, ParamType
+from ..properties import cached_property
+from ..utils import FallbackDict
+from .enums import (
+    AttrSpec,
+    BinarySpec,
+    CallSpec,
+    FormatSpec,
+    SpecName,
+    TokenType,
+    UnarySpec,
+    spec_name_from_str,
+)
 
 if TYPE_CHECKING:
     from .native_context import NativeContext

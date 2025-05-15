@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from .errors import SafulateAttributeError, SafulateNameError, SafulateScopeError
+from ..errors import SafulateAttributeError, SafulateNameError, SafulateScopeError
+from ..lexer import Token
+from ..properties import cached_property
 from .objects import SafBaseObject, SafFunc, null
-from .properties import cached_property
-from .tokens import Token
 
 __all__ = ("Environment",)
 

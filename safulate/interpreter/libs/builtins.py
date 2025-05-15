@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Never
 
-from safulate import (
+from safulate import SafulateAssertionError
+from safulate.interpreter import (
     NativeContext,
     SafBaseObject,
     SafDict,
@@ -12,7 +13,6 @@ from safulate import (
     SafStr,
     SafTuple,
     SafType,
-    SafulateAssertionError,
     false,
     null,
     public_method,

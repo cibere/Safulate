@@ -2,15 +2,12 @@ from pathlib import Path
 
 import msgspec
 
-from .asts import ASTNode
-from .cli import Options
-from .enums import TokenType
-from .errors import SafulateError
+from ..cli import Options
+from ..errors import SafulateError
+from ..lexer import Lexer, Token, TokenType
+from ..parser import ASTNode, Parser
 from .interpreter import Interpreter
-from .lexer import Lexer
 from .objects import SafBaseObject, SafNull
-from .parser import Parser
-from .tokens import Token
 
 REPL_GREETING = "\033[34;1mTest v0.0.0\033[0m"
 

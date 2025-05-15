@@ -2,7 +2,7 @@ from __future__ import annotations
 
 TYPE_CHECKING = False
 if TYPE_CHECKING:
-    from safulate import NativeContext, SafModule
+    from safulate.interpreter import NativeContext, SafModule
 
 code = """
 pub AssertionError = type(object("AssertionError"));

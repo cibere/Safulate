@@ -6,6 +6,10 @@ import sys
 from safulate import (
     CallSpec,
     FormatSpec,
+    SafulateTypeError,
+    UnarySpec,
+)
+from safulate.interpreter import (
     NativeContext,
     SafBaseObject,
     SafBool,
@@ -17,8 +21,6 @@ from safulate import (
     SafNum,
     SafObject,
     SafStr,
-    SafulateTypeError,
-    UnarySpec,
     false,
     null,
     public_method,

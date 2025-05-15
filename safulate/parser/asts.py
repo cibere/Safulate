@@ -4,13 +4,13 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .enums import ParamType, TokenType
+from ..lexer import Token, TokenType
+from .enums import ParamType
 
 if TYPE_CHECKING:
     from packaging.version import Version as _PackagingVersion
 
-    from .objects import SafBaseObject
-    from .tokens import Token
+    from ..interpreter import SafBaseObject
 
 __all__ = (
     "ASTAssign",
@@ -42,6 +42,7 @@ __all__ = (
     "ASTUnary",
     "ASTVarDecl",
     "ASTVersionReq",
+    "ASTVisitor",
     "ASTWhile",
     "ParamType",
 )

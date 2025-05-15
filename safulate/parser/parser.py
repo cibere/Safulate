@@ -6,6 +6,9 @@ from typing import TYPE_CHECKING, Literal, NamedTuple, TypeVar
 from packaging.version import InvalidVersion
 from packaging.version import Version as _PackagingVersion
 
+from ..errors import SafulateSyntaxError
+from ..lexer import SoftKeyword, Token, TokenType
+from ..properties import cached_property
 from .asts import (
     ASTAssign,
     ASTAtom,
@@ -38,10 +41,7 @@ from .asts import (
     ASTVersionReq,
     ASTWhile,
 )
-from .enums import ParamType, SoftKeyword, TokenType
-from .errors import SafulateSyntaxError
-from .properties import cached_property
-from .tokens import Token
+from .enums import ParamType
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -57,6 +57,8 @@ if TYPE_CHECKING:
             check: Callable[[Parser], bool] | None = None,
         ) -> Callable[[CaseCallbackT], CaseCallbackT]: ...
 
+
+__all__ = ("Parser",)
 
 CaseCallbackT = TypeVar("CaseCallbackT", bound="Callable[[Parser], ASTNode]")
 require_version_pattern = re.compile(

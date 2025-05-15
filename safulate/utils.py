@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import Enum as _Enum
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 if TYPE_CHECKING:
@@ -8,7 +9,7 @@ if TYPE_CHECKING:
 KeyT = TypeVar("KeyT")
 ValueT = TypeVar("ValueT")
 
-__all__ = ("FallbackDict",)
+__all__ = ("Enum", "FallbackDict")
 
 
 class FallbackDict(dict[KeyT, ValueT], Generic[KeyT, ValueT]):
@@ -27,3 +28,8 @@ class FallbackDict(dict[KeyT, ValueT], Generic[KeyT, ValueT]):
             return super().__getitem__(key)
         except KeyError:
             return self.fallback(key)
+
+
+class Enum(_Enum):
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}.{self.name}"

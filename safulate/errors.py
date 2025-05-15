@@ -2,16 +2,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, TypeVar
 
-from .enums import TokenType
+from .lexer import Token, TokenType
 from .properties import cached_property
-from .tokens import Token
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from types import TracebackType
     from typing import Literal
 
-    from .objects import SafBaseObject, SafPythonError
+    from .interpreter import SafBaseObject, SafPythonError
 
 T = TypeVar("T")
 
@@ -110,7 +109,7 @@ class SafulateError(BaseException):
 
     @cached_property
     def saf_value(self) -> SafPythonError:
-        from .objects import SafPythonError, null
+        from .interpreter.objects import SafPythonError, null
 
         return SafPythonError(error=self.name, msg=self.msg, obj=self.obj or null)
 

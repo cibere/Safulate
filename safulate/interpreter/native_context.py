@@ -3,8 +3,8 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, cast
 
+from ..errors import ErrorManager, SafulateError, SafulateTypeError
 from .enums import CallSpec, SpecName
-from .errors import ErrorManager, SafulateError, SafulateTypeError
 from .objects import (
     SafBaseObject,
     SafDict,
@@ -19,9 +19,9 @@ from .objects import (
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+    from ..lexer import Token
     from .environment import Environment
     from .interpreter import Interpreter
-    from .tokens import Token
 
 __all__ = ("NativeContext",)
 

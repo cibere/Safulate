@@ -3,8 +3,8 @@ from pathlib import Path
 
 from .cli import parse_cli_args
 from .errors import SafulateError
-from .interpreter import Interpreter
-from .repl import run_code, run_file, start_repl_session
+from .interpreter.interpreter import Interpreter
+from .interpreter.repl import run_code, run_file, start_repl_session
 
 
 def main() -> None:

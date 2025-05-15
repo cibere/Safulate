@@ -1,18 +1,20 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from msgspec import DecodeError, json, toml, yaml
-from safulate import (
+from safulate.interpreter import (
     NativeContext,
     SafBaseObject,
     SafFunc,
     SafModule,
     SafNum,
     SafStr,
-    SafulateError,
     public_method,
 )
+
+if TYPE_CHECKING:
+    from safulate import SafulateError
 
 types_code = """
 pub {decode_error} = type(object("{decode_error}"));

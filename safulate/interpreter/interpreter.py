@@ -6,8 +6,21 @@ from typing import TYPE_CHECKING
 
 from packaging.version import Version as _PackagingVersion
 
-from ._version import __version__
-from .asts import (
+from .._version import __version__
+from ..errors import (
+    ErrorManager,
+    SafulateBreakoutError,
+    SafulateError,
+    SafulateImportError,
+    SafulateInvalidContinue,
+    SafulateInvalidReturn,
+    SafulateScopeError,
+    SafulateTypeError,
+    SafulateValueError,
+    SafulateVersionConflict,
+)
+from ..lexer import SoftKeyword, Token
+from ..parser import (
     ASTAssign,
     ASTAtom,
     ASTBinary,
@@ -37,30 +50,18 @@ from .asts import (
     ASTVersionReq,
     ASTVisitor,
     ASTWhile,
+    ParamType,
 )
+from ..properties import cached_property
 from .enums import (
     BinarySpec,
     CallSpec,
     FormatSpec,
-    ParamType,
-    SoftKeyword,
     TokenType,
     UnarySpec,
     spec_name_from_str,
 )
 from .environment import Environment
-from .errors import (
-    ErrorManager,
-    SafulateBreakoutError,
-    SafulateError,
-    SafulateImportError,
-    SafulateInvalidContinue,
-    SafulateInvalidReturn,
-    SafulateScopeError,
-    SafulateTypeError,
-    SafulateValueError,
-    SafulateVersionConflict,
-)
 from .lib_manager import LibManager
 from .native_context import NativeContext
 from .objects import (
@@ -78,8 +79,6 @@ from .objects import (
     null,
     true,
 )
-from .properties import cached_property
-from .tokens import Token
 
 if TYPE_CHECKING:
     from collections.abc import Iterator

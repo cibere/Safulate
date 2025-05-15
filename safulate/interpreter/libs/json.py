@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-from safulate import NativeContext, SafModule, SafulateError
-from safulate.libs._msgspec_wrapper import MsgspecWrapper
+from safulate import SafulateError
+from safulate.interpreter.libs._msgspec_wrapper import MsgspecWrapper
+
+TYPE_CHECKING = False
+if TYPE_CHECKING:
+    from safulate.interpreter import NativeContext, SafModule
 
 
 class SafulateJsonDecodeError(SafulateError): ...

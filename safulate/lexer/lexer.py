@@ -3,8 +3,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, ClassVar, TypeAlias, TypeVar, overload
 
+from ..errors import ErrorManager, SafulateSyntaxError
 from .enums import TokenType
-from .errors import ErrorManager, SafulateSyntaxError
 from .tokens import Token
 
 __all__ = ("Lexer",)

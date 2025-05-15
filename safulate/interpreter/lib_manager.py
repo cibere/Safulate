@@ -5,7 +5,7 @@ from inspect import isfunction
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .errors import SafulateImportError
+from ..errors import SafulateImportError
 from .objects import SafModule
 
 if TYPE_CHECKING:
