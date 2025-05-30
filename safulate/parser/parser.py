@@ -104,8 +104,9 @@ _cases: list[RegisteredCase] = []
 
 
 class Parser:
-    def __init__(self) -> None:
+    def __init__(self, tokens: list[Token]) -> None:
         self.current = 0
+        self.tokens = tokens
 
     @cached_property
     def expr_cases(self) -> list[RegisteredCase]:
@@ -122,10 +123,6 @@ class Parser:
         for case in cases:
             if res := self._execute_case(case):
                 return res
-
-    def parse(self, tokens: list[Token]) -> ASTNode:
-        self.tokens = tokens
-        return self.program()
 
     def advance(self) -> Token:
         t = self.tokens[self.current]

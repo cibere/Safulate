@@ -21,18 +21,18 @@ def code_to_ast(
     *,
     opts: Options | None = None,
 ) -> ASTNode:
-    lexer = Lexer(source)
-    parser = Parser()
     opts = opts or Options.default()
 
-    tokens = lexer.tokenize()
+    tokens = Lexer(source).tokenize()
     if opts.lex:
         print(msgspec.json.format(encoder.encode(tokens)).decode())
         quit(1)
-    ast = parser.parse(tokens)
+
+    ast = Parser(tokens).program()
     if opts.ast:
         print(ast)
         quit(1)
+
     return ast
 
 
