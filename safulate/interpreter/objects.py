@@ -172,7 +172,7 @@ class SafBaseObject(ABC):
 
     @cached_property
     def _attrs(self) -> _RawAttrs:
-        data: _RawAttrs = defaultdict(dict)  # pyright: ignore[reportAssignmentType]
+        data: _RawAttrs = defaultdict(dict)  # pyright: ignore[reportAssignmentType, reportUnknownVariableType]
         for name, _ in inspect.getmembers(
             self.__class__, lambda attr: hasattr(attr, "__safulate_native_method__")
         ):
@@ -398,27 +398,67 @@ class SafBaseObject(ABC):
         except SafulateBreakoutError as e:
             e.check()
 
+    @property
+    def parent(self) -> SafBaseObject | None:
+        if AttrSpec.parent in self.specs:
+            return self.specs[AttrSpec.parent]
+
+    def set_parent(self, parent: SafBaseObject | None) -> None:
+        if parent:
+            self.specs[AttrSpec.parent] = parent
+        else:
+            self.specs.pop(AttrSpec.parent, None)
+
 
 class SafType(SafBaseObject):
-    def __init__(self, name: str, *, struct: SafBaseObject | None = None) -> None:
+    def __init__(
+        self,
+        name: str,
+        *,
+        init: SafBaseObject | None = None,
+        arity: tuple[int, int] | int = 0,
+    ) -> None:
         self.name = name
-        self.struct = struct
+        self.init_obj = init
+        self.arity: tuple[int, int] = (
+            (arity, arity) if isinstance(arity, int) else arity
+        )
+
+    @spec_meth(CallSpec.altcall)
+    def altcall(
+        self, ctx: NativeContext, *args: SafBaseObject, **kwargs: SafBaseObject
+    ) -> SafBaseObject:
+        if kwargs:
+            raise SafulateValueError("Type params does not accept kwargs")
+        if self.arity[0] <= len(args) <= self.arity[1]:
+            msg = (
+                f"Expected between {self.arity[0]} and {self.arity[1]} params"
+                if self.arity[0] != self.arity[1]
+                else f"Expected {self.arity[0]} params"
+            )
+            raise SafulateValueError(f"{msg} but received {len(args)} instead")
+        if any(not isinstance(child, SafType) for child in args):
+            raise SafulateTypeError("Type params must be types")
+
+        obj = SafType(self.name, init=self.init_obj, arity=self.arity)
+        obj.public_attrs["args"] = SafTuple(args)
+        return obj
 
     @classmethod
     def base_type(cls) -> Self:
-        def struct(
-            ctx: NativeContext, inp: SafBaseObject, *, constructor: SafBaseObject = null
+        def _init(
+            ctx: NativeContext, inp: SafBaseObject, *, init: SafBaseObject = null
         ) -> SafType:
-            if constructor is null:
+            if init is null:
                 return cast("SafType", inp.specs[AttrSpec.type])
-            return cls(inp.str_spec(ctx), struct=constructor)
+            return cls(inp.str_spec(ctx), init=init)
 
-        self = cls("type", struct=SafFunc.from_native("type", struct))
+        self = cls("type", init=SafFunc.from_native("type", _init))
         return self
 
     @classmethod
     def object_type(cls) -> Self:
-        def struct(ctx: NativeContext, name: SafBaseObject = null) -> SafObject:
+        def _init(ctx: NativeContext, name: SafBaseObject = null) -> SafObject:
             return SafObject(
                 name=f"Custom Object @ {ctx.token.start}"
                 if name is null
@@ -426,10 +466,12 @@ class SafType(SafBaseObject):
                 attrs={},
             )
 
-        return cls("object", struct=SafFunc.from_native("object", struct))
+        return cls("object", init=SafFunc.from_native("object", _init))
 
     def _attrs_hook(self, attrs: _RawAttrs) -> None:
         attrs["spec"][AttrSpec.type] = self.base_type()
+        if self.init_obj:
+            attrs["spec"][CallSpec.init] = self.init_obj
 
     @spec_meth(FormatSpec.repr)
     def repr(self, ctx: NativeContext) -> SafStr:
@@ -437,6 +479,9 @@ class SafType(SafBaseObject):
 
     @public_method("check")
     def check(self, ctx: NativeContext, obj: SafBaseObject) -> SafBool:
+        print(
+            f"Default check called on {self.repr_spec(ctx)} with {obj.repr_spec(ctx)}"
+        )
         obj_type = obj.specs[AttrSpec.type]
         return (
             true
@@ -444,14 +489,41 @@ class SafType(SafBaseObject):
             else false
         )
 
+    @spec_meth(CallSpec.new)
+    def new_spec(
+        self,
+        ctx: NativeContext,
+        *args: SafBaseObject,
+        **kwargs: SafBaseObject,
+    ) -> SafBaseObject:
+        obj = SafObject(self.name)
+        obj.set_parent(self)
+
+        init = self.specs[CallSpec.init]
+        assert isinstance(init, SafFunc)
+
+        original_get_scope = init.get_scope
+        init.get_scope = lambda ctx: obj
+
+        ctx.invoke(init, *args, **kwargs)
+
+        init.get_scope = original_get_scope
+        return obj
+
+    @spec_meth(CallSpec.init)
+    def init_spec(
+        self,
+        ctx: NativeContext,
+        *args: SafBaseObject,
+        **kwargs: SafBaseObject,
+    ) -> SafBaseObject:
+        raise SafulateTypeError(f"The {self.name!r} type can not be initialized")
+
     @spec_meth(CallSpec.call)
     def call(
         self, ctx: NativeContext, *args: SafBaseObject, **kwargs: SafBaseObject
     ) -> SafBaseObject:
-        if self.struct is None:
-            raise SafulateTypeError(f"The {self.name!r} type can not be initialized")
-
-        return ctx.invoke(self.struct, *args, **kwargs)
+        return ctx.invoke_spec(self, CallSpec.new, *args, **kwargs)
 
 
 class SafObject(SafBaseObject):
@@ -470,13 +542,13 @@ class SafObject(SafBaseObject):
 
         match self.init:
             case None:
-                struct = None
+                init = None
             case SafFunc():
-                struct = self.init
+                init = self.init
             case _:
-                struct = SafFunc.from_native("init", self.init)  # pyright: ignore[reportArgumentType]
+                init = SafFunc.from_native("init", self.init)  # pyright: ignore[reportArgumentType]
 
-        attrs["spec"][AttrSpec.type] = SafType(self.__saf_typename__, struct=struct)
+        attrs["spec"][AttrSpec.type] = SafType(self.__saf_typename__, init=init)
 
     @property
     def type(self) -> SafType:
@@ -595,19 +667,9 @@ class SafNum(SafObject):
 
     @spec_meth(BinarySpec.eq)
     def eq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
-        if not isinstance(other, SafNum):
-            raise SafulateValueError("Equality is not defined for number and this type")
-
-        return true if (self.value == other.value) else false
-
-    @spec_meth(BinarySpec.neq)
-    def neq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
-        if not isinstance(other, SafNum):
-            raise SafulateValueError(
-                "Non-equality is not defined for number and this type"
-            )
-
-        return true if (self.value != other.value) else false
+        return (
+            true if isinstance(other, SafNum) and (self.value == other.value) else false
+        )
 
     @spec_meth(BinarySpec.less)
     def less(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
@@ -1078,7 +1140,6 @@ class SafFunc(SafObject):
         params: list[ASTFuncDecl_Param],
         body: ASTBlock | Callable[Concatenate[NativeContext, ...], SafBaseObject],
         parent: SafBaseObject | None = None,
-        extra_vars: dict[str, SafBaseObject] | None = None,
         partial_args: tuple[SafBaseObject, ...] | None = None,
         partial_kwargs: dict[str, SafBaseObject] | None = None,
     ) -> None:
@@ -1090,16 +1151,16 @@ class SafFunc(SafObject):
             case None:
                 name_value = null
 
-        super().__init__("func", {"parent": parent or null, "name": name_value})
+        super().__init__("func", {"name": name_value})
 
         self.params = params
         self.body = body
-        self.extra_vars = extra_vars or {}
         self.partial_args = partial_args or ()
         self.partial_kwargs = partial_kwargs or {}
+        self.__parent__ = parent
 
+    @staticmethod
     def _resolve_default(
-        self,
         default: ASTNode | None | SafBaseObject,
         visitor: ASTVisitor,
         error_msg_callback: Callable[[], str],
@@ -1109,10 +1170,19 @@ class SafFunc(SafObject):
 
         return default if isinstance(default, SafBaseObject) else default.visit(visitor)
 
-    def _validate_params(
+    def validate_params(
         self, ctx: NativeContext, *init_args: SafBaseObject, **kwargs: SafBaseObject
     ) -> dict[str, SafBaseObject]:
-        params = self.params.copy()
+        return self._validate_params(ctx, self.params, init_args, kwargs)
+
+    @classmethod
+    def _validate_params(
+        cls,
+        ctx: NativeContext,
+        params: list[ASTFuncDecl_Param],
+        init_args: tuple[SafBaseObject, ...],
+        kwargs: dict[str, SafBaseObject],
+    ) -> dict[str, SafBaseObject]:
         args = list(init_args)
         passable_params: dict[str, SafBaseObject] = {}
 
@@ -1132,14 +1202,14 @@ class SafFunc(SafObject):
                 passable_params[param.name.lexeme] = arg
             elif kwargs:
                 if not param.is_kwarg:
-                    passable_params[param.name.lexeme] = self._resolve_default(
+                    passable_params[param.name.lexeme] = cls._resolve_default(
                         param.default,
                         ctx.interpreter,
                         lambda: f"Required positional argument was not passed: {param.name.lexeme!r}",
                     )
                 else:
                     if param.name.lexeme not in kwargs:
-                        passable_params[param.name.lexeme] = self._resolve_default(
+                        passable_params[param.name.lexeme] = cls._resolve_default(
                             param.default,
                             ctx.interpreter,
                             lambda: f"Required {param.type.to_arg_type_str()}argument was not passed: {param.name.lexeme!r}",
@@ -1149,7 +1219,7 @@ class SafFunc(SafObject):
                             param.name.lexeme
                         )
             else:
-                passable_params[param.name.lexeme] = self._resolve_default(
+                passable_params[param.name.lexeme] = cls._resolve_default(
                     param.default,
                     ctx.interpreter,
                     lambda: f"Required {param.type.to_arg_type_str()}argument was not passed: {param.name.lexeme!r}",
@@ -1173,7 +1243,6 @@ class SafFunc(SafObject):
             params=self.params,
             body=self.body,
             parent=self.public_attrs["parent"],
-            extra_vars=self.extra_vars,
             partial_args=args,
             partial_kwargs=kwargs,
         )
@@ -1186,7 +1255,6 @@ class SafFunc(SafObject):
                     self.__class__,
                     self.params,
                     self.body,
-                    self.extra_vars,
                     self.partial_args,
                     self.partial_kwargs,
                 )
@@ -1201,11 +1269,16 @@ class SafFunc(SafObject):
             (*self.partial_args, *args), self.partial_kwargs | kwargs
         )
 
+    def get_scope(self, ctx: NativeContext) -> SafObject:
+        scope = SafObject(f"function scope @ {self.repr_spec(ctx)}")
+        scope.set_parent(self.__parent__)
+        return scope
+
     @spec_meth(CallSpec.call)
     def call(
         self, ctx: NativeContext, *args: SafBaseObject, **kwargs: SafBaseObject
     ) -> SafBaseObject:
-        params = self._validate_params(
+        params = self.validate_params(
             ctx,
             *self.partial_args,
             *args,
@@ -1217,11 +1290,8 @@ class SafFunc(SafObject):
             return self.body(ctx, *args, **kwargs)
 
         ret_value = null
-        parent = self.public_attrs["parent"]
-        with ctx.interpreter.scope(source=None if parent is null else parent):
-            ctx.interpreter.env["par"] = parent
-
-            for param, value in [*params.items(), *self.extra_vars.items()]:
+        with ctx.interpreter.scope(self.get_scope(ctx)):
+            for param, value in params.items():
                 ctx.interpreter.env.declare(param)
                 ctx.interpreter.env[param] = value
 

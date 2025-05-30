@@ -54,6 +54,10 @@ class Builtins(SafModule):
     def get_locals(self, ctx: NativeContext) -> SafBaseObject:
         return SafDict.from_data(ctx, dict(next(ctx.walk_envs()).values.items()))
 
+    @public_method("id")
+    def get_id(self, ctx: NativeContext, obj: SafBaseObject) -> SafBaseObject:
+        return SafNum(id(obj))
+
     @public_method("rollback_scope")
     def rollback_scope(self, ctx: NativeContext) -> SafBaseObject:
         if ctx.env.parent:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Literal, NamedTuple, TypeVar
+from typing import TYPE_CHECKING, Literal, NamedTuple, TypeVar, cast
 
 from packaging.version import InvalidVersion
 from packaging.version import Version as _PackagingVersion
@@ -24,10 +24,12 @@ from .asts import (
     ASTFormat,
     ASTFuncDecl,
     ASTFuncDecl_Param,
+    ASTGetPriv,
     ASTIf,
     ASTImportReq,
     ASTList,
     ASTNode,
+    ASTPar,
     ASTProgram,
     ASTProperty,
     ASTRaise,
@@ -36,6 +38,7 @@ from .asts import (
     ASTSwitchCase,
     ASTTryCatch,
     ASTTryCatch_CatchBranch,
+    ASTTypeDecl,
     ASTUnary,
     ASTVarDecl,
     ASTVersionReq,
@@ -250,12 +253,7 @@ class Parser:
 
         self.consume(end, None)
 
-    def _func_decl(
-        self, *, scope_token: Token, kw_token: Token, name: Token | None
-    ) -> ASTNode:
-        paren_token = self.consume(TokenType.LPAR, "Expected '('")
-
-        params: list[ASTFuncDecl_Param] = []
+    def _func_params(self) -> Iterator[ASTFuncDecl_Param]:
         defaulted = False
         vararg_reached = varkwarg_reached = False
 
@@ -281,9 +279,11 @@ class Parser:
                     "Non-default arg following a default arg", self.peek()
                 )
 
-            params.append(
-                ASTFuncDecl_Param(name=param_name, default=default, type=param_type)
-            )
+            yield ASTFuncDecl_Param(name=param_name, default=default, type=param_type)
+
+    def _func_decl(self, *, kw_token: Token, name: Token | None) -> ASTNode:
+        paren_token = self.consume(TokenType.LPAR, "Expected '('")
+        params = list(self._func_params())
 
         decos: list[tuple[Token, ASTNode]] = (
             [
@@ -297,83 +297,13 @@ class Parser:
         if self.check(TokenType.COLON):
             self.annotation()
 
-        body = self.block()
-
-        try:
-            decl_kw = SoftKeyword(kw_token.lexeme)
-        except ValueError:
-            decl_kw = kw_token.type
-
-        match decl_kw:
-            case SoftKeyword.STRUCT:
-                if name is None:
-                    raise SafulateSyntaxError("structs must have a name")
-                func = self._type_creation(
-                    kw_token=kw_token,
-                    name_token=name,
-                    constructor=ASTFuncDecl(
-                        name=name,
-                        params=params,
-                        scope_token=scope_token,
-                        kw_token=kw_token,
-                        paren_token=paren_token,
-                        body=ASTBlock(
-                            [
-                                ASTReturn(
-                                    keyword=kw_token.with_type(TokenType.RETURN),
-                                    expr=ASTEditObject(
-                                        obj=ASTCall(
-                                            callee=ASTAtom(
-                                                kw_token.with_type(
-                                                    TokenType.ID, lexme="object"
-                                                )
-                                            ),
-                                            paren=kw_token.with_type(TokenType.LPAR),
-                                            params=[
-                                                (
-                                                    ParamType.arg,
-                                                    None,
-                                                    ASTAtom(
-                                                        name.with_type(
-                                                            TokenType.STR,
-                                                            lexme=name.lexeme,
-                                                        )
-                                                    ),
-                                                )
-                                            ]
-                                            if name
-                                            else [],
-                                        ),
-                                        block=body,
-                                    ),
-                                ),
-                            ]
-                        ),
-                    ),
-                )
-
-                if self.match(TokenType.TILDE):
-                    func = ASTEditObject(func, self.block())
-            case SoftKeyword.PROP:
-                if params:
-                    raise SafulateSyntaxError("Properties can't take arguments")
-                if decos:
-                    raise SafulateSyntaxError("Properties can't take decorators")
-                if name is None:
-                    raise SafulateSyntaxError("Properties must have a name")
-                return ASTProperty(body=body, name=name)
-            case TokenType.PRIV | SoftKeyword.SPEC | TokenType.PUB:
-                func = ASTFuncDecl(
-                    name=name,
-                    params=params,
-                    body=body,
-                    scope_token=scope_token,
-                    kw_token=kw_token,
-                    paren_token=paren_token,
-                )
-            case _:
-                raise RuntimeError(f"Unknown keyword for func declaration: {decl_kw!r}")
-
+        func = ASTFuncDecl(
+            name=name,
+            params=params,
+            body=self.block(),
+            kw_token=kw_token,
+            paren_token=paren_token,
+        )
         if not decos:
             return func
 
@@ -434,24 +364,6 @@ class Parser:
 
         return func
 
-    def _type_creation(
-        self, *, kw_token: Token, name_token: Token, constructor: ASTNode | None
-    ) -> ASTNode:
-        params: list[tuple[ParamType, str | None, ASTNode]] = [
-            (
-                ParamType.arg,
-                None,
-                ASTAtom(Token(TokenType.STR, name_token.lexeme, name_token.start)),
-            )
-        ]
-        if constructor is not None:
-            params.append((ParamType.kwarg, "constructor", constructor))
-        return ASTCall(
-            callee=ASTAtom(kw_token.with_type(TokenType.TYPE)),
-            paren=kw_token.with_type(TokenType.LPAR),
-            params=params,
-        )
-
     def annotation(self) -> ASTNode:
         self.consume(TokenType.COLON, "Expected ':' to start annotation")
         return self.expr()
@@ -490,7 +402,6 @@ class Parser:
         (TokenType.PRIV, TokenType.PUB, None),
         TokenType.TYPE,
         TokenType.ID,
-        TokenType.LBRC,
     )
     def type_decl(self) -> ASTNode:
         scope_token = self.match(TokenType.PUB, TokenType.PRIV)
@@ -499,65 +410,80 @@ class Parser:
             "Expected 'type' keyword to start a type declaration statement",
         )
         name_token = self.consume(TokenType.ID, "Expected name for new type")
-        body = self.block()
+
+        if not scope_token:
+            scope_token = kw_token.with_type(TokenType.PUB)
+
+        compare_func = body = init = None
+        arity = 0
+
+        if self.check(TokenType.LPAR):
+            compare_func = self._func_decl(
+                kw_token=scope_token,
+                name=name_token,
+            )
+
+        if (
+            self.match(TokenType.TILDE)
+            if compare_func
+            else self.check(TokenType.LSQB, TokenType.LBRC)
+        ):
+            if self.match(TokenType.LSQB):
+                arity = len(list(self.walk_split_tokens(end=TokenType.RPAR)))
+            body = self.block()
+
+        if self.check_sequence(TokenType.MINUS, TokenType.GRTR):
+            self.consume(TokenType.MINUS)
+            self.consume(TokenType.GRTR)
+
+            init = self._func_decl(
+                kw_token=scope_token,
+                name=name_token,
+            )
 
         self.consume(TokenType.SEMI, "Expected ';'")
         return ASTVarDecl(
             name_token,
-            value=ASTEditObject(
-                obj=self._type_creation(
-                    kw_token=kw_token, name_token=name_token, constructor=None
-                ),
-                block=body,
+            value=ASTTypeDecl(
+                body=body,
+                compare_func=compare_func,
+                init=cast("ASTFuncDecl", init),
+                arity=arity,
+                name=name_token,
             ),
-            keyword=scope_token or kw_token.with_type(TokenType.PUB),
+            keyword=scope_token,
         )
 
-    @staticmethod
-    def func_decl_stmt_checker(parser: Parser) -> bool:
-        return parser.check_sequence(
-            (
-                TokenType.PUB,
-                TokenType.PRIV,
-                SoftKeyword.SPEC,
-                SoftKeyword.STRUCT,
-                SoftKeyword.PROP,
-                TokenType.TYPE,
-            ),
-            TokenType.ID,
-            TokenType.LPAR,
-        ) or parser.check_sequence(
-            (
-                TokenType.PUB,
-                TokenType.PRIV,
-            ),
-            (SoftKeyword.STRUCT, SoftKeyword.PROP, TokenType.TYPE),
-            TokenType.ID,
-            TokenType.LPAR,
-        )
+    @reg_stmt(SoftKeyword.PROP, TokenType.ID, TokenType.LBRC)
+    def prop_decl(self) -> ASTNode:
+        kw_token = self.advance()
+        name = self.advance()
 
-    @reg_stmt(check=func_decl_stmt_checker)
+        if self.check(TokenType.COLON):
+            self.annotation()
+
+        body = self.block()
+
+        self.consume(TokenType.SEMI, "Expected ';'")
+        return ASTProperty(body=body, name=name, kw_token=kw_token)
+
+    @reg_stmt(
+        (
+            TokenType.PUB,
+            TokenType.PRIV,
+            SoftKeyword.SPEC,
+        ),
+        TokenType.ID,
+        TokenType.LPAR,
+    )
     def func_decl_stmt(self) -> ASTNode:
-        scope_token = self.match(TokenType.PUB, TokenType.PRIV, SoftKeyword.SPEC)
-        kw_token = self.match(SoftKeyword.STRUCT, SoftKeyword.PROP, TokenType.TYPE)
-
-        match (scope_token, kw_token):
-            case (None, None):
-                raise SafulateSyntaxError(
-                    "Scope keyword and declaration keyword both missing"
-                )
-            case (Token(), None):
-                kw_token = scope_token
-            case (None, Token()):
-                scope_token = Token(TokenType.PUB, "pub", kw_token.start)
-            case (Token(), Token()):
-                pass
+        kw_token = self.advance()
 
         name = self.consume(TokenType.ID, "Expected function name")
-        func = self._func_decl(scope_token=scope_token, kw_token=kw_token, name=name)
+        func = self._func_decl(kw_token=kw_token, name=name)
         self.consume(TokenType.SEMI, "Expected ';'")
 
-        return ASTVarDecl(name=name, value=func, keyword=scope_token)
+        return ASTVarDecl(name=name, value=func, keyword=kw_token)
 
     @reg_stmt(TokenType.WHILE)
     def while_stmt(self) -> ASTNode:
@@ -801,7 +727,7 @@ class Parser:
             TokenType.PUB,
             "Expected 'pub' keyword for func declaration as an expression",
         )
-        return self._func_decl(scope_token=kw_token, kw_token=kw_token, name=None)
+        return self._func_decl(kw_token=kw_token, name=None)
 
     @reg_expr((TokenType.PUB, TokenType.PRIV))
     def var_decl(self) -> ASTNode:
@@ -934,12 +860,29 @@ class Parser:
     def unary_ops(self) -> ASTNode:
         return ASTUnary(op=self.advance(), right=self.expr())
 
+    @reg_expr(TokenType.PAR)
+    def par_atom(self) -> ASTPar:
+        levels: list[Token] = []
+        while self.check(TokenType.PAR):
+            levels.append(self.advance())
+
+        return ASTPar(levels)
+
+    @reg_expr(TokenType.GET_PRIV)
+    def get_priv(self) -> ASTNode:
+        levels: list[Token] = []
+        while self.check(TokenType.GET_PRIV):
+            levels.append(self.advance())
+
+        return ASTGetPriv(
+            levels, self.consume(TokenType.ID, "Expected name of private var")
+        )
+
     @reg_expr(
         (
             TokenType.NUM,
             TokenType.STR,
             TokenType.ID,
-            TokenType.PRIV_ID,
             TokenType.TYPE,
             TokenType.ELLIPSIS,
         )
@@ -1007,6 +950,9 @@ class Parser:
                 return token, self.expr()
 
     def consume_binary_op(self, left: ASTNode) -> ASTNode:
+        if self.match(TokenType.TILDE):
+            return ASTEditObject(left, self.block())
+
         res = self._handle_comparison(
             TokenType.EQEQ,
             TokenType.NEQ,
@@ -1016,6 +962,7 @@ class Parser:
             TokenType.STAR,
             TokenType.SLASH,
             TokenType.STARSTAR,
+            TokenType.TILDE,
         )
         if res:
             return ASTBinary(left=left, op=res[0], right=res[1])

@@ -13,8 +13,8 @@ class TokenType(Enum):
     EOF = "EOF"
     STR = "STR"
     ID = "ID"
-    PRIV_ID = "PRIV_ID"
     NUM = "NUM"
+    GET_PRIV = "\\"
     FSTR_START = "FSTR_START"
     FSTR_MIDDLE = "FSTR_MIDDLE"
     FSTR_END = "FSTR_END"
@@ -62,6 +62,7 @@ class TokenType(Enum):
     AMP = "&"
     AT = "@"
     COLON = ":"
+    PAR = "$"
 
     # hard keywords
 
@@ -88,6 +89,5 @@ class SoftKeyword(Enum):
     AS = "as"
     CASE = "case"
     SPEC = "spec"
-    STRUCT = "struct"
     PROP = "prop"
     IN = "in"

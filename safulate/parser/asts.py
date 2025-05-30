@@ -27,10 +27,12 @@ __all__ = (
     "ASTFormat",
     "ASTFuncDecl",
     "ASTFuncDecl_Param",
+    "ASTGetPriv",
     "ASTIf",
     "ASTImportReq",
     "ASTList",
     "ASTNode",
+    "ASTPar",
     "ASTProgram",
     "ASTProperty",
     "ASTRaise",
@@ -39,6 +41,7 @@ __all__ = (
     "ASTSwitchCase",
     "ASTTryCatch",
     "ASTTryCatch_CatchBranch",
+    "ASTTypeDecl",
     "ASTUnary",
     "ASTVarDecl",
     "ASTVersionReq",
@@ -92,7 +95,6 @@ class ASTFuncDecl(ASTNode):
     params: list[ASTFuncDecl_Param]
     body: ASTBlock
 
-    scope_token: Token | None
     kw_token: Token
     paren_token: Token
 
@@ -336,6 +338,7 @@ class ASTFormat(ASTNode):
 class ASTProperty(ASTNode):
     body: ASTBlock
     name: Token
+    kw_token: Token
 
     def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_property(self)
@@ -347,6 +350,35 @@ class ASTRegex(ASTNode):
 
     def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_regex(self)
+
+
+@dataclass
+class ASTTypeDecl(ASTNode):
+    name: Token
+    body: ASTBlock | None
+    init: ASTFuncDecl | None
+    compare_func: ASTNode | None
+    arity: int
+
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
+        return visitor.visit_type_decl(self)
+
+
+@dataclass
+class ASTPar(ASTNode):
+    levels: list[Token]
+
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
+        return visitor.visit_get_par(self)
+
+
+@dataclass
+class ASTGetPriv(ASTNode):
+    levels: list[Token]
+    name: Token
+
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
+        return visitor.visit_get_priv(self)
 
 
 class ASTVisitor(ABC):
@@ -406,3 +438,9 @@ class ASTVisitor(ABC):
     def visit_property(self, node: ASTProperty) -> SafBaseObject: ...
     @abstractmethod
     def visit_regex(self, node: ASTRegex) -> SafBaseObject: ...
+    @abstractmethod
+    def visit_type_decl(self, node: ASTTypeDecl) -> SafBaseObject: ...
+    @abstractmethod
+    def visit_get_par(self, node: ASTPar) -> SafBaseObject: ...
+    @abstractmethod
+    def visit_get_priv(self, node: ASTGetPriv) -> SafBaseObject: ...

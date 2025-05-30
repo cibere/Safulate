@@ -47,6 +47,8 @@ class CallSpec(Enum):
     next = 1
     format = 2
     get = 3
+    init = 4
+    new = 5
 
 
 class FormatSpec(Enum):
@@ -57,6 +59,7 @@ class FormatSpec(Enum):
 
 class AttrSpec(Enum):
     type = 4
+    parent = 5
 
 
 SpecName = BinarySpec | UnarySpec | CallSpec | FormatSpec | AttrSpec

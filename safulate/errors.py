@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, TypeVar
 
-from .lexer import Token, TokenType
 from .properties import cached_property
 
 if TYPE_CHECKING:
@@ -10,7 +9,12 @@ if TYPE_CHECKING:
     from types import TracebackType
     from typing import Literal
 
+    from . import lexer as l
     from .interpreter import SafBaseObject, SafPythonError
+else:
+    from .utils import LazyImport
+
+    l = LazyImport("safulate", "lexer")  # noqa: E741
 
 T = TypeVar("T")
 
@@ -38,7 +42,7 @@ class ErrorManager:
         self,
         *,
         start: Callable[[], int] | int | None = None,
-        token: Token | None | Callable[[], Token] = None,
+        token: l.Token | None | Callable[[], l.Token] = None,
     ) -> None:
         self.start = start
         self.token = token
@@ -58,10 +62,10 @@ class ErrorManager:
             return False
 
         if self.token:
-            token = self.token if isinstance(self.token, Token) else self.token()
+            token = self.token if isinstance(self.token, l.Token) else self.token()
         elif self.start:
-            token = Token(
-                TokenType.ERR,
+            token = l.Token(
+                l.TokenType.ERR,
                 "",
                 self.start if isinstance(self.start, int) else self.start(),
             )
@@ -75,7 +79,7 @@ class ErrorManager:
 
 class TokenEntry:
     def __init__(
-        self, token: Token, *, source: str | None = None, filename: str | None = None
+        self, token: l.Token, *, source: str | None = None, filename: str | None = None
     ) -> None:
         self.token = token
         self.source = source
@@ -92,7 +96,7 @@ class TokenEntry:
 
 class SafulateError(BaseException):
     def __init__(
-        self, msg: str, token: Token | None = None, obj: SafBaseObject | None = None
+        self, msg: str, token: l.Token | None = None, obj: SafBaseObject | None = None
     ) -> None:
         super().__init__(msg)
 
@@ -183,14 +187,14 @@ class SafulateTypeError(SafulateError):
 
 
 class SafulateInvalidReturn(SafulateError):
-    def __init__(self, value: SafBaseObject, token: Token) -> None:
+    def __init__(self, value: SafBaseObject, token: l.Token) -> None:
         self.value = value
 
         super().__init__("Return used outside of function", token)
 
 
 class SafulateInvalidContinue(SafulateError):
-    def __init__(self, amount: int, token: Token) -> None:
+    def __init__(self, amount: int, token: l.Token) -> None:
         self.amount = amount
 
         super().__init__("Continue used in a context where it isn't allowed", token)
@@ -211,7 +215,7 @@ class SafulateInvalidContinue(SafulateError):
 
 
 class SafulateBreakoutError(SafulateError):
-    def __init__(self, amount: int, token: Token) -> None:
+    def __init__(self, amount: int, token: l.Token) -> None:
         self.amount = amount
 
         super().__init__("No more loops to break out of", token)

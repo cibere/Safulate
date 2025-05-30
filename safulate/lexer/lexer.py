@@ -53,6 +53,8 @@ class Lexer:
             TokenType.AMP,
             TokenType.PIPE,
             TokenType.BOOL,
+            TokenType.PAR,
+            TokenType.GET_PRIV,
         )
     }
     bisymbol_tokens: ClassVar[dict[str, TokenType]] = {
@@ -287,22 +289,9 @@ class Lexer:
         self.current += len(tok.value)
         self.add_token(tok)
 
-    @_(
-        condition=lambda _lex, txt: txt
-        if txt in id_first_char_characters or txt == "$"
-        else None
-    )
+    @_(condition=lambda _lex, txt: txt if txt in id_first_char_characters else None)
     def handle_id(self, char: str) -> None:
-        if char == "$":
-            self.current = self.current + 1
-            last_char = self.char
-            self.start += 1
-            token_type = TokenType.PRIV_ID
-            if last_char not in id_other_char_characters:
-                raise SafulateSyntaxError("Expected ID after '$'")
-        else:
-            last_char = char
-            token_type = TokenType.ID
+        last_char = char
 
         while self.not_eof() and last_char in id_other_char_characters:
             char = self.snippit_next
@@ -313,7 +302,7 @@ class Lexer:
         if not char.isalnum():
             self.current -= 1
 
-        self.add_token(self.hard_keywords.get(self.snippit, token_type))
+        self.add_token(self.hard_keywords.get(self.snippit, TokenType.ID))
 
     @_(condition=lambda _lex, txt: txt if txt.isdigit() else None)
     def handle_num(self, char: str) -> None:

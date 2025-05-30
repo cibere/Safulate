@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..errors import SafulateAttributeError, SafulateNameError, SafulateScopeError
+from ..errors import SafulateNameError
 from ..lexer import Token
 from ..properties import cached_property
-from .objects import SafBaseObject, SafFunc, null
+from .objects import SafBaseObject, null
 
 __all__ = ("Environment",)
 
@@ -14,13 +14,16 @@ class Environment:
     __slots__ = "__cs_builtins__", "parent", "scope", "values"
 
     def __init__(
-        self, parent: Environment | None = None, scope: SafBaseObject | None = None
+        self,
+        parent: Environment | None = None,
+        scope: SafBaseObject | None = None,
+        isolated_public_vars: bool = False,
     ) -> None:
         self.values: dict[str, SafBaseObject] = {}
         self.parent: Environment | None = parent
         self.scope: SafBaseObject | None = scope
 
-        if scope:
+        if not isolated_public_vars and scope:
             self.values = scope.public_attrs
 
     @cached_property("__cs_builtins__")
@@ -54,34 +57,6 @@ class Environment:
             self._builtins[name] = value
         else:
             raise SafulateNameError(f"Name {name!r} is not defined", token)
-        self._set_parent(value)
 
     def declare(self, token: Token | str) -> None:
         self.values[token.lexeme if isinstance(token, Token) else token] = null
-
-    def set_priv(self, name: Token, value: Any) -> None:
-        if self.scope is None:
-            raise SafulateScopeError(
-                "private vars can only be set in an edit object statement", token=name
-            )
-
-        self.scope.private_attrs[name.lexeme] = value
-        self._set_parent(value)
-
-    def get_priv(self, name: Token) -> SafBaseObject:
-        if self.scope is None:
-            raise SafulateScopeError(
-                "no private vars are being exposed in the current scope", name
-            )
-
-        val = self.scope.private_attrs.get(name.lexeme)
-        if val is None:
-            raise SafulateAttributeError(
-                f"Private Var Not Found: {name.lexeme!r}", name
-            )
-
-        return val
-
-    def _set_parent(self, val: SafBaseObject) -> None:
-        if isinstance(val, SafFunc):
-            val.public_attrs["parent"] = self.scope or null
