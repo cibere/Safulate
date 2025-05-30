@@ -11,11 +11,11 @@ __all__ = ("Token",)
 
 class Token(Struct):
     type: TokenType
-    lexeme: str
+    lexme: str
     start: int
 
     def __repr__(self) -> str:
-        return f"Token(type={self.type!r}, lexeme={self.lexeme!r}, start={self.start})"
+        return f"Token(type={self.type!r}, lexme={self.lexme!r}, start={self.start})"
 
     @classmethod
     def mock(
@@ -28,7 +28,7 @@ class Token(Struct):
     ) -> Token:
         return Token(
             type=token_type,
-            lexeme=token_type.value if lexme is None else lexme,
+            lexme=token_type.value if lexme is None else lexme,
             start=-1 if start is None else start,
         )
 
@@ -41,6 +41,6 @@ class Token(Struct):
     ) -> Token:
         return Token(
             token_type,
-            lexeme=token_type.value if lexme is None else lexme,
+            lexme=token_type.value if lexme is None else lexme,
             start=self.start,
         )

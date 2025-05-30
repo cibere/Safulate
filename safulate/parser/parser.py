@@ -139,7 +139,7 @@ class Parser:
         if isinstance(type, TokenType):
             return token.type is type
         else:
-            return token.type is TokenType.ID and token.lexeme == type.value
+            return token.type is TokenType.ID and token.lexme == type.value
 
     def check(self, *types: TokenType | SoftKeyword) -> bool:
         return any(self.compare(self.peek(), type) for type in types)
@@ -315,15 +315,15 @@ class Parser:
                             expr=deco,
                             attr=Token(
                                 type=TokenType.ID,
-                                lexeme="without_partials",
+                                lexme="without_partials",
                                 start=token.start,
                             ),
                             dot=Token.mock(TokenType.DOT, start=token.start),
                         ),
-                        paren=Token(type=TokenType.LPAR, lexeme="(", start=token.start),
+                        paren=Token(type=TokenType.LPAR, lexme="(", start=token.start),
                         params=[],
                     ),
-                    paren=Token(type=TokenType.LSQB, lexeme="[", start=token.start),
+                    paren=Token(type=TokenType.LSQB, lexme="[", start=token.start),
                     params=[
                         (
                             ParamType.arg,
@@ -337,7 +337,7 @@ class Parser:
                                 expr=deco,
                                 attr=Token(
                                     type=TokenType.ID,
-                                    lexeme="partial_args",
+                                    lexme="partial_args",
                                     start=token.start,
                                 ),
                                 dot=Token.mock(TokenType.DOT, start=token.start),
@@ -350,7 +350,7 @@ class Parser:
                                 expr=deco,
                                 attr=Token(
                                     type=TokenType.ID,
-                                    lexeme="partial_kwargs",
+                                    lexme="partial_kwargs",
                                     start=token.start,
                                 ),
                                 dot=Token.mock(TokenType.DOT, start=token.start),
@@ -572,7 +572,7 @@ class Parser:
 
             name_token = Token(
                 TokenType.ID,
-                f"##SAFULATE-SPECIFIC-REQ-BLOCK##:{source.lexeme}",
+                f"##SAFULATE-SPECIFIC-REQ-BLOCK##:{source.lexme}",
                 kwd.start,
             )
             return ASTBlock(
@@ -629,7 +629,7 @@ class Parser:
         minor = self.consume((TokenType.NUM, TokenType.STAR), "Expected minor value")
         try:
             return _PackagingVersion(
-                f"{major.lexeme.removeprefix('v')}{'' if minor.type is TokenType.STAR else ('.' + minor.lexeme)}"
+                f"{major.lexme.removeprefix('v')}{'' if minor.type is TokenType.STAR else ('.' + minor.lexme)}"
             )
         except InvalidVersion:
             raise SafulateSyntaxError("Invalid Verson", major) from None
@@ -780,23 +780,23 @@ class Parser:
         match op.type:
             case TokenType.PLUSEQ:
                 value = ASTBinary(
-                    ASTAtom(name), Token(TokenType.PLUS, op.lexeme, op.start), value
+                    ASTAtom(name), Token(TokenType.PLUS, op.lexme, op.start), value
                 )
             case TokenType.MINUSEQ:
                 value = ASTBinary(
-                    ASTAtom(name), Token(TokenType.MINUS, op.lexeme, op.start), value
+                    ASTAtom(name), Token(TokenType.MINUS, op.lexme, op.start), value
                 )
             case TokenType.STAREQ:
                 value = ASTBinary(
-                    ASTAtom(name), Token(TokenType.STAR, op.lexeme, op.start), value
+                    ASTAtom(name), Token(TokenType.STAR, op.lexme, op.start), value
                 )
             case TokenType.STARSTAREQ:
                 value = ASTBinary(
-                    ASTAtom(name), Token(TokenType.STARSTAR, op.lexeme, op.start), value
+                    ASTAtom(name), Token(TokenType.STARSTAR, op.lexme, op.start), value
                 )
             case TokenType.SLASHEQ:
                 value = ASTBinary(
-                    ASTAtom(name), Token(TokenType.SLASH, op.lexeme, op.start), value
+                    ASTAtom(name), Token(TokenType.SLASH, op.lexme, op.start), value
                 )
             case _:
                 pass
@@ -914,7 +914,7 @@ class Parser:
                                 if isinstance(expr, ASTAssign):
                                     has_kwargs = True
                                     params.append(
-                                        (ParamType.kwarg, expr.name.lexeme, expr.value)
+                                        (ParamType.kwarg, expr.name.lexme, expr.value)
                                     )
                                 elif has_kwargs:
                                     raise SafulateSyntaxError(

@@ -33,7 +33,7 @@ class Environment:
         return Builtins().public_attrs
 
     def __getitem__(self, token: Token) -> SafBaseObject:
-        name = token.lexeme
+        name = token.lexme
 
         if name in self.values:
             return self.values[name]
@@ -45,7 +45,7 @@ class Environment:
         raise SafulateNameError(f"Name {name!r} is not defined", token)
 
     def __setitem__(self, token: Token | str, value: Any) -> None:
-        name = token.lexeme if isinstance(token, Token) else token
+        name = token.lexme if isinstance(token, Token) else token
 
         if name in self.values:
             self.values[name] = value
@@ -59,4 +59,4 @@ class Environment:
             raise SafulateNameError(f"Name {name!r} is not defined", token)
 
     def declare(self, token: Token | str) -> None:
-        self.values[token.lexeme if isinstance(token, Token) else token] = null
+        self.values[token.lexme if isinstance(token, Token) else token] = null

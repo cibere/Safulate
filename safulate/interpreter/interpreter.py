@@ -268,18 +268,18 @@ class Interpreter(ASTVisitor):
                     raise SafulateScopeError(
                         "Private vars can only be set while scoped", scope
                     )
-                self.env.scope.private_attrs[name.lexeme] = value
-            case Token(lexeme=SoftKeyword.SPEC.value):
+                self.env.scope.private_attrs[name.lexme] = value
+            case Token(lexme=SoftKeyword.SPEC.value):
                 if self.env.scope is None:
                     raise SafulateScopeError(
                         "specs can only be set while scoped", scope
                     )
 
                 try:
-                    spec = spec_name_from_str(name.lexeme)
+                    spec = spec_name_from_str(name.lexme)
                 except ValueError:
                     raise SafulateValueError(
-                        f"there is no spec named {name.lexeme!r}", name
+                        f"there is no spec named {name.lexme!r}", name
                     ) from None
 
                 self.env.scope.specs[spec] = value
@@ -387,9 +387,9 @@ class Interpreter(ASTVisitor):
     def visit_atom(self, node: ASTAtom) -> SafBaseObject:
         match node.token.type:
             case TokenType.NUM:
-                return SafNum(float(node.token.lexeme))
+                return SafNum(float(node.token.lexme))
             case TokenType.STR:
-                return SafStr(node.token.lexeme)
+                return SafStr(node.token.lexme)
             case TokenType.ID:
                 return self.env[node.token]
             case TokenType.TYPE:
@@ -436,13 +436,13 @@ class Interpreter(ASTVisitor):
 
     def visit_import_req(self, node: ASTImportReq) -> SafBaseObject:
         with ErrorManager(token=node.source):
-            value = self.libs[node.source.lexeme]
+            value = self.libs[node.source.lexme]
 
             if value is None:
                 match node.source.type:
                     case TokenType.ID:
                         value = self.libs.load_builtin_lib(
-                            node.source.lexeme, ctx=self.ctx(node.source)
+                            node.source.lexme, ctx=self.ctx(node.source)
                         )
                     case TokenType.STR:
                         raise SafulateImportError("Url imports are not allowed yet")
@@ -458,7 +458,7 @@ class Interpreter(ASTVisitor):
         raise SafulateError(val.repr_spec(self.ctx(node.kw)), token=node.kw, obj=val)
 
     def visit_del(self, node: ASTDel) -> SafBaseObject:
-        del self.env.values[node.var.lexeme]
+        del self.env.values[node.var.lexme]
         return null
 
     def visit_try_catch(self, node: ASTTryCatch) -> SafBaseObject:
@@ -533,9 +533,9 @@ class Interpreter(ASTVisitor):
         args: tuple[SafBaseObject, ...] = ()
 
         try:
-            spec = FormatSpec(node.spec.lexeme)
+            spec = FormatSpec(node.spec.lexme)
         except ValueError:
-            args = (SafStr(node.spec.lexeme),)
+            args = (SafStr(node.spec.lexme),)
             spec = CallSpec.format
 
         return self.ctx(node.spec).invoke_spec(node.obj.visit(self), spec, *args)
@@ -552,11 +552,11 @@ class Interpreter(ASTVisitor):
         )
 
     def visit_regex(self, node: ASTRegex) -> SafBaseObject:
-        return self.regex_pattern_cls(re.compile(node.value.lexeme[2:-1]))
+        return self.regex_pattern_cls(re.compile(node.value.lexme[2:-1]))
 
     def visit_type_decl(self, node: ASTTypeDecl) -> SafBaseObject:
         obj = SafType(
-            node.name.lexeme,
+            node.name.lexme,
             init=node.init.visit(self) if node.init else None,
             arity=node.arity,
         )
@@ -589,11 +589,11 @@ class Interpreter(ASTVisitor):
 
     def visit_get_priv(self, node: ASTGetPriv) -> SafBaseObject:
         scope = self._get_scope_parent(node.levels)
-        val = scope.private_attrs.get(node.name.lexeme)
+        val = scope.private_attrs.get(node.name.lexme)
 
         if val is None:
             raise SafulateAttributeError(
-                f"Private Var Not Found: {node.name.lexeme!r}",
+                f"Private Var Not Found: {node.name.lexme!r}",
                 node.name,
             )
         return val

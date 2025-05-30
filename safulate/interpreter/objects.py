@@ -1147,7 +1147,7 @@ class SafFunc(SafObject):
             case SafBaseObject():
                 name_value = name
             case Token():
-                name_value = SafStr(name.lexeme)
+                name_value = SafStr(name.lexme)
             case None:
                 name_value = null
 
@@ -1188,10 +1188,10 @@ class SafFunc(SafObject):
 
         for param in params:
             if param.type is ParamType.vararg:
-                passable_params[param.name.lexeme] = SafList(args)
+                passable_params[param.name.lexme] = SafList(args)
                 args = []
             elif param.type is ParamType.varkwarg:
-                passable_params[param.name.lexeme] = SafDict.from_data(ctx, kwargs)
+                passable_params[param.name.lexme] = SafDict.from_data(ctx, kwargs)
                 kwargs = {}
             elif args:
                 if not param.is_arg:
@@ -1199,30 +1199,30 @@ class SafFunc(SafObject):
                         f"Extra positional argument was passed: {args[0].repr_spec(ctx)}"
                     )
                 arg = args.pop(0)
-                passable_params[param.name.lexeme] = arg
+                passable_params[param.name.lexme] = arg
             elif kwargs:
                 if not param.is_kwarg:
-                    passable_params[param.name.lexeme] = cls._resolve_default(
+                    passable_params[param.name.lexme] = cls._resolve_default(
                         param.default,
                         ctx.interpreter,
-                        lambda: f"Required positional argument was not passed: {param.name.lexeme!r}",
+                        lambda: f"Required positional argument was not passed: {param.name.lexme!r}",
                     )
                 else:
-                    if param.name.lexeme not in kwargs:
-                        passable_params[param.name.lexeme] = cls._resolve_default(
+                    if param.name.lexme not in kwargs:
+                        passable_params[param.name.lexme] = cls._resolve_default(
                             param.default,
                             ctx.interpreter,
-                            lambda: f"Required {param.type.to_arg_type_str()}argument was not passed: {param.name.lexeme!r}",
+                            lambda: f"Required {param.type.to_arg_type_str()}argument was not passed: {param.name.lexme!r}",
                         )
                     else:
-                        passable_params[param.name.lexeme] = kwargs.pop(
-                            param.name.lexeme
+                        passable_params[param.name.lexme] = kwargs.pop(
+                            param.name.lexme
                         )
             else:
-                passable_params[param.name.lexeme] = cls._resolve_default(
+                passable_params[param.name.lexme] = cls._resolve_default(
                     param.default,
                     ctx.interpreter,
-                    lambda: f"Required {param.type.to_arg_type_str()}argument was not passed: {param.name.lexeme!r}",
+                    lambda: f"Required {param.type.to_arg_type_str()}argument was not passed: {param.name.lexme!r}",
                 )
 
         if args:

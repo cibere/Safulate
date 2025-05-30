@@ -227,7 +227,7 @@ class ASTCall(ASTNode):
                 (
                     ParamType.arg,
                     None,
-                    ASTAtom(attr.with_type(TokenType.STR, lexme=attr.lexeme)),
+                    ASTAtom(attr.with_type(TokenType.STR, lexme=attr.lexme)),
                 )
             ],
         )

@@ -37,7 +37,7 @@ class InspectModule(SafModule):
             + ", ".join(
                 (".." if param.type is ParamType.vararg else "")
                 + ("..." if param.type is ParamType.varkwarg else "")
-                + param.name.lexeme
+                + param.name.lexme
                 + ("" if param.default is None else " = ...")
                 for param in func.params
             )
