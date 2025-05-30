@@ -93,7 +93,7 @@ __all__ = ("Interpreter",)
 
 
 class Interpreter(ASTVisitor):
-    __slots__ = ("env", "libs", "module_obj", "version")
+    __slots__ = ("__cs_regex_pattern_cls__", "env", "libs", "module_obj", "version")
 
     def __init__(self, name: str, *, lib_manager: LibManager | None = None) -> None:
         self.version = _PackagingVersion(__version__)
@@ -105,7 +105,7 @@ class Interpreter(ASTVisitor):
     def name(self) -> str:
         return self.module_obj.name
 
-    @cached_property
+    @cached_property("regex_pattern_cls")
     def regex_pattern_cls(self) -> type[_SafPattern]:
         from .libs.regex import SafPattern
 

@@ -1215,9 +1215,7 @@ class SafFunc(SafObject):
                             lambda: f"Required {param.type.to_arg_type_str()}argument was not passed: {param.name.lexme!r}",
                         )
                     else:
-                        passable_params[param.name.lexme] = kwargs.pop(
-                            param.name.lexme
-                        )
+                        passable_params[param.name.lexme] = kwargs.pop(param.name.lexme)
             else:
                 passable_params[param.name.lexme] = cls._resolve_default(
                     param.default,

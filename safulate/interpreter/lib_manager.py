@@ -15,6 +15,8 @@ __all__ = ("LibManager",)
 
 
 class LibManager:
+    __slots__ = ("cache",)
+
     def __init__(self) -> None:
         self.cache: dict[str, SafModule] = {}
 

@@ -104,15 +104,17 @@ _cases: list[RegisteredCase] = []
 
 
 class Parser:
+    __slots__ = "__cs_expr_cases__", "__cs_stmt_cases__", "current", "tokens"
+
     def __init__(self, tokens: list[Token]) -> None:
         self.current = 0
         self.tokens = tokens
 
-    @cached_property
+    @cached_property("__cs_expr_cases__")
     def expr_cases(self) -> list[RegisteredCase]:
         return [case for case in _cases if case.type == "expr"]
 
-    @cached_property
+    @cached_property("__cs_stmt_cases__")
     def stmt_cases(self) -> list[RegisteredCase]:
         return [case for case in _cases if case.type == "stmt"]
 

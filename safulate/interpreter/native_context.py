@@ -27,6 +27,8 @@ __all__ = ("NativeContext",)
 
 
 class NativeContext:
+    __slots__ = "interpreter", "token"
+
     def __init__(self, interpreter: Interpreter, token: Token) -> None:
         self.interpreter = interpreter
         self.token = token

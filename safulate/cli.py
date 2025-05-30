@@ -5,6 +5,8 @@ from pathlib import Path
 
 
 class Options:
+    __slots__ = "ast", "lex", "python_errors"
+
     def __init__(
         self,
         lex: bool,

@@ -78,6 +78,8 @@ class ErrorManager:
 
 
 class TokenEntry:
+    __slots__ = ("filename", "source", "token")
+
     def __init__(
         self, token: l.Token, *, source: str | None = None, filename: str | None = None
     ) -> None:
@@ -95,6 +97,8 @@ class TokenEntry:
 
 
 class SafulateError(BaseException):
+    __slots__ = "__cs_saf_value__", "msg", "obj", "tokens"
+
     def __init__(
         self, msg: str, token: l.Token | None = None, obj: SafBaseObject | None = None
     ) -> None:
@@ -111,7 +115,7 @@ class SafulateError(BaseException):
     def name(self) -> str:
         return self.__class__.__name__.removeprefix("Safulate")
 
-    @cached_property
+    @cached_property("__cs_saf_value__")
     def saf_value(self) -> SafPythonError:
         from .interpreter.objects import SafPythonError, null
 
@@ -187,6 +191,8 @@ class SafulateTypeError(SafulateError):
 
 
 class SafulateInvalidReturn(SafulateError):
+    __slots__ = ("value",)
+
     def __init__(self, value: SafBaseObject, token: l.Token) -> None:
         self.value = value
 
@@ -194,6 +200,8 @@ class SafulateInvalidReturn(SafulateError):
 
 
 class SafulateInvalidContinue(SafulateError):
+    __slots__ = ("amount",)
+
     def __init__(self, amount: int, token: l.Token) -> None:
         self.amount = amount
 
@@ -215,6 +223,8 @@ class SafulateInvalidContinue(SafulateError):
 
 
 class SafulateBreakoutError(SafulateError):
+    __slots__ = ("amount",)
+
     def __init__(self, amount: int, token: l.Token) -> None:
         self.amount = amount
 
