@@ -240,6 +240,7 @@ class Parser:
         *,
         delimiter: TokenType | SoftKeyword = TokenType.COMMA,
         end: TokenType | SoftKeyword,
+        consume: bool = False,
     ) -> Iterator[Token]:
         first_captured = bool(self.check(end))
 
@@ -248,7 +249,10 @@ class Parser:
                 self.consume(delimiter, None)
             first_captured = True
 
-            yield self.peek()
+            if consume:
+                yield self.advance()
+            else:
+                yield self.peek()
 
         self.consume(end, None)
 
@@ -269,6 +273,10 @@ class Parser:
                 varkwarg_reached = True
 
             param_name = self.consume(TokenType.ID, "Expected name of arg")
+
+            if self.check(TokenType.COLON):
+                self.annotation()
+
             default = None
             if self.match(TokenType.EQ):
                 defaulted = True
@@ -365,7 +373,9 @@ class Parser:
 
     def annotation(self) -> ASTNode:
         self.consume(TokenType.COLON, "Expected ':' to start annotation")
-        return self.expr()
+        expr = self.expr()
+        self.consume(TokenType.SEMI, "Expected ';' to end annotation")
+        return expr
 
     def program(self) -> ASTNode:
         stmts: list[ASTNode] = []
@@ -428,7 +438,9 @@ class Parser:
             else self.check(TokenType.LSQB, TokenType.LBRC)
         ):
             if self.match(TokenType.LSQB):
-                arity = len(list(self.walk_split_tokens(end=TokenType.RPAR)))
+                arity = len(
+                    list(self.walk_split_tokens(end=TokenType.RSQB, consume=True))
+                )
             body = self.block()
 
         if self.check_sequence(TokenType.MINUS, TokenType.GRTR):
@@ -877,6 +889,13 @@ class Parser:
             levels, self.consume(TokenType.ID, "Expected name of private var")
         )
 
+    @reg_expr(TokenType.LESS, TokenType.COLON)
+    def inline_type_decl(self) -> ASTNode:
+        self.consume(TokenType.LESS)
+        val = self.annotation()
+        self.consume(TokenType.GRTR, "Expected '>' to end inline type definition")
+        return val
+
     @reg_expr(
         (
             TokenType.NUM,
@@ -936,7 +955,7 @@ class Parser:
                     )
                 case TokenType.COLON:
                     callee = ASTFormat(
-                        callee, self.consume(TokenType.ID, "Expected spec abbreviation")
+                        callee, self.consume(TokenType.ID, "Expected format input")
                     )
                 case _:
                     raise RuntimeError(f"Unknown call parsing for {self.peek()}")
@@ -962,6 +981,15 @@ class Parser:
             TokenType.SLASH,
             TokenType.STARSTAR,
             TokenType.TILDE,
+            TokenType.PIPE,
+            TokenType.AMP,
+            TokenType.NOT,
+            TokenType.AND,
+            TokenType.OR,
+            TokenType.BOOL,
+            TokenType.HAS,
+            TokenType.LESS,
+            TokenType.GRTR,
         )
         if res:
             return ASTBinary(left=left, op=res[0], right=res[1])

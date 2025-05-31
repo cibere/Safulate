@@ -48,7 +48,6 @@ class CallSpec(Enum):
     format = 2
     get = 3
     init = 4
-    new = 5
 
 
 class FormatSpec(Enum):

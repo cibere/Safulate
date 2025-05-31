@@ -70,6 +70,7 @@ __all__ = (
     "SafStr",
     "SafTuple",
     "SafType",
+    "SafTypeUnion",
     "false",
     "null",
     "private_method",
@@ -161,11 +162,7 @@ class SafBaseObject(ABC):
     __safulate_public_attrs__: dict[str, SafBaseObject] | None = None
     __safulate_private_attrs__: dict[str, SafBaseObject] | None = None
     __safulate_specs__: dict[SpecName, SafBaseObject] | None = None
-    init: (
-        Callable[Concatenate[type[Any], NativeContext, ...], Self]
-        | SafBaseObject
-        | None
-    ) = None
+    init: Callable[Concatenate[NativeContext, ...], Self] | SafBaseObject | None = None
 
     def _attrs_hook(self, attrs: _RawAttrs) -> None:
         return
@@ -415,7 +412,7 @@ class SafType(SafBaseObject):
         self,
         name: str,
         *,
-        init: SafBaseObject | None = None,
+        init: SafBaseObject | type[SafBaseObject] | None = None,
         arity: tuple[int, int] | int = 0,
     ) -> None:
         self.name = name
@@ -430,7 +427,7 @@ class SafType(SafBaseObject):
     ) -> SafBaseObject:
         if kwargs:
             raise SafulateValueError("Type params does not accept kwargs")
-        if self.arity[0] <= len(args) <= self.arity[1]:
+        if self.arity[0] < len(args) < self.arity[1]:
             msg = (
                 f"Expected between {self.arity[0]} and {self.arity[1]} params"
                 if self.arity[0] != self.arity[1]
@@ -441,7 +438,7 @@ class SafType(SafBaseObject):
             raise SafulateTypeError("Type params must be types")
 
         obj = SafType(self.name, init=self.init_obj, arity=self.arity)
-        obj.public_attrs["args"] = SafTuple(args)
+        obj.private_attrs["args"] = SafTuple(args)
         return obj
 
     @classmethod
@@ -470,8 +467,12 @@ class SafType(SafBaseObject):
 
     def _attrs_hook(self, attrs: _RawAttrs) -> None:
         attrs["spec"][AttrSpec.type] = self.base_type()
-        if self.init_obj:
+        if isinstance(self.init_obj, SafBaseObject):
             attrs["spec"][CallSpec.init] = self.init_obj
+        elif self.init_obj and isinstance(self.init_obj.init, Callable):
+            attrs["spec"][CallSpec.call] = SafFunc.from_native(
+                "call", self.init_obj.init
+            )
 
     @spec_meth(FormatSpec.repr)
     def repr(self, ctx: NativeContext) -> SafStr:
@@ -479,9 +480,6 @@ class SafType(SafBaseObject):
 
     @public_method("check")
     def check(self, ctx: NativeContext, obj: SafBaseObject) -> SafBool:
-        print(
-            f"Default check called on {self.repr_spec(ctx)} with {obj.repr_spec(ctx)}"
-        )
         obj_type = obj.specs[AttrSpec.type]
         return (
             true
@@ -489,12 +487,18 @@ class SafType(SafBaseObject):
             else false
         )
 
-    @spec_meth(CallSpec.new)
-    def new_spec(
+    @spec_meth(CallSpec.init)
+    def init_spec(
         self,
         ctx: NativeContext,
         *args: SafBaseObject,
         **kwargs: SafBaseObject,
+    ) -> SafBaseObject:
+        raise SafulateTypeError(f"The {self.name!r} type can not be initialized")
+
+    @spec_meth(CallSpec.call)
+    def call(
+        self, ctx: NativeContext, *args: SafBaseObject, **kwargs: SafBaseObject
     ) -> SafBaseObject:
         obj = SafObject(self.name)
         obj.set_parent(self)
@@ -510,20 +514,36 @@ class SafType(SafBaseObject):
         init.get_scope = original_get_scope
         return obj
 
-    @spec_meth(CallSpec.init)
-    def init_spec(
-        self,
-        ctx: NativeContext,
-        *args: SafBaseObject,
-        **kwargs: SafBaseObject,
-    ) -> SafBaseObject:
-        raise SafulateTypeError(f"The {self.name!r} type can not be initialized")
+    @spec_meth(BinarySpec.pipe)
+    def pipe(self, ctx: NativeContext, other: SafBaseObject) -> SafBaseObject:
+        if not isinstance(other, SafType | SafStr):
+            raise SafulateTypeError(
+                f"Expected type for type union, recieved {other.repr_spec(ctx)} instead"
+            )
 
-    @spec_meth(CallSpec.call)
-    def call(
-        self, ctx: NativeContext, *args: SafBaseObject, **kwargs: SafBaseObject
-    ) -> SafBaseObject:
-        return ctx.invoke_spec(self, CallSpec.new, *args, **kwargs)
+        return SafTypeUnion(self, other)
+
+
+class SafTypeUnion(SafType):
+    def __init__(self, *types: SafType | SafStr) -> None:
+        self.types = types
+
+        super().__init__("union")
+
+    @property
+    def args(self) -> SafTuple:
+        return SafTuple(self.types)
+
+    @spec_meth(BinarySpec.pipe)
+    def pipe(self, ctx: NativeContext, other: SafBaseObject) -> SafBaseObject:
+        if isinstance(other, SafTypeUnion):
+            return SafTypeUnion(*self.types, *other.types)
+        if isinstance(other, SafType | SafStr):
+            return SafTypeUnion(*self.types, other)
+
+        raise SafulateTypeError(
+            f"Expected type for type union, recieved {other.repr_spec(ctx)} instead"
+        )
 
 
 class SafObject(SafBaseObject):
@@ -540,15 +560,9 @@ class SafObject(SafBaseObject):
         if self.__saf_init_attrs__:
             attrs["pub"].update(self.__saf_init_attrs__)
 
-        match self.init:
-            case None:
-                init = None
-            case SafFunc():
-                init = self.init
-            case _:
-                init = SafFunc.from_native("init", self.init)  # pyright: ignore[reportArgumentType]
-
-        attrs["spec"][AttrSpec.type] = SafType(self.__saf_typename__, init=init)
+        attrs["spec"][AttrSpec.type] = SafType(
+            self.__saf_typename__, init=self.__class__
+        )
 
     @property
     def type(self) -> SafType:
@@ -609,11 +623,11 @@ class SafNum(SafObject):
 
         self.value = value
 
-    @classmethod
-    def init(cls, ctx: NativeContext, inp: SafBaseObject) -> Self:
+    @staticmethod
+    def init(ctx: NativeContext, inp: SafBaseObject) -> SafNum:
         string = inp.str_spec(ctx)
         try:
-            return cls(float(string))
+            return SafNum(float(string))
         except ValueError:
             raise SafulateValueError(f"Could not convert {string!r} into a number")
 
@@ -725,9 +739,9 @@ class SafBool(SafNum):
     def __init__(self) -> None:
         raise RuntimeError("SafBool should not be invoked directly")
 
-    @classmethod
-    def init(cls, ctx: NativeContext, inp: SafBaseObject) -> Self:
-        return ctx.invoke_spec(inp, UnarySpec.bool)  # pyright: ignore[reportReturnType]
+    @staticmethod
+    def init(ctx: NativeContext, inp: SafBaseObject) -> SafBool:
+        return cast("SafBool", ctx.invoke_spec(inp, UnarySpec.bool))
 
     @classmethod
     def _create(cls, value: bool) -> SafBool:
@@ -757,10 +771,10 @@ class SafStr(SafObject):
 
         self.value = value.encode("ascii").decode("unicode_escape")
 
-    @classmethod
-    def init(cls, ctx: NativeContext, inp: SafBaseObject) -> Self:
+    @staticmethod
+    def init(ctx: NativeContext, inp: SafBaseObject) -> SafStr:
         try:
-            return cls(inp.str_spec(ctx))
+            return SafStr(inp.str_spec(ctx))
         except UnicodeDecodeError as e:
             raise SafulateValueError(str(e)) from None
 
@@ -1072,9 +1086,9 @@ class SafTuple(_SafIterable):
 
         self.value = value  # pyright: ignore[reportIncompatibleVariableOverride]
 
-    @classmethod
-    def init(cls, ctx: NativeContext, *items: SafBaseObject) -> Self:
-        return cls(items)
+    @staticmethod
+    def init(ctx: NativeContext, *items: SafBaseObject) -> SafTuple:
+        return SafTuple(items)
 
     @spec_meth(FormatSpec.repr)
     def repr(self, ctx: NativeContext) -> SafStr:
@@ -1096,9 +1110,9 @@ class SafList(_SafIterable):
 
         self.value: list[SafBaseObject] = value  # pyright: ignore[reportIncompatibleVariableOverride]
 
-    @classmethod
-    def init(cls, ctx: NativeContext, *items: SafBaseObject) -> Self:
-        return cls(list(items))
+    @staticmethod
+    def init(ctx: NativeContext, *items: SafBaseObject) -> SafList:
+        return SafList(list(items))
 
     @public_method("append")
     def append(self, ctx: NativeContext, item: SafBaseObject) -> SafBaseObject:
@@ -1352,13 +1366,14 @@ class SafProperty(SafObject):
 
         self.func = func
 
-    @classmethod
-    def init(cls, ctx: NativeContext, func: SafBaseObject) -> Self:
+    @staticmethod
+    def init(ctx: NativeContext, func: SafBaseObject) -> SafProperty:
         if not isinstance(func, SafFunc):
             raise SafulateTypeError(
                 f"Expected func, got {func.repr_spec(ctx)} instead."
             )
-        return cls(func)
+
+        return SafProperty(func)
 
     @spec_meth(FormatSpec.hash)
     def hash(self, ctx: NativeContext) -> SafNum:
@@ -1393,9 +1408,9 @@ class SafDict(SafObject):
 
         self.data = {}
 
-    @classmethod
-    def init(cls, ctx: NativeContext, **items: SafBaseObject) -> Self:
-        return cls.from_data(ctx, items)
+    @staticmethod
+    def init(ctx: NativeContext, **items: SafBaseObject) -> SafDict:
+        return SafDict.from_data(ctx, items)
 
     @classmethod
     def from_data(
