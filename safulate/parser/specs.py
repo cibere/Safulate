@@ -13,24 +13,34 @@ __all__ = (
     "SpecName",
     "UnarySpec",
     "spec_name_from_str",
+    "special_cased_binary_specs",
+    "special_cased_unary_specs",
 )
 
 
 class BinarySpec(Enum):
+    eq = TokenType.EQEQ
+    neq = TokenType.NEQ
     add = TokenType.PLUS
     sub = TokenType.MINUS
     mul = TokenType.STAR
-    pow = TokenType.STARSTAR
     div = TokenType.SLASH
-    eq = TokenType.EQEQ
-    neq = TokenType.NEQ
+    pow = TokenType.STARSTAR
+    pipe = TokenType.PIPE
+    amp = TokenType.AMP
+    has_item = TokenType.HAS
     less = TokenType.LESS
     grtr = TokenType.GRTR
     lesseq = TokenType.LESSEQ
     grtreq = TokenType.GRTREQ
-    amp = TokenType.AMP
-    pipe = TokenType.PIPE
-    has_item = TokenType.HAS
+
+
+special_cased_binary_specs = (
+    TokenType.TILDE,
+    TokenType.EQEQEQ,
+    TokenType.AND,
+    TokenType.OR,
+)
 
 
 class UnarySpec(Enum):
@@ -39,13 +49,16 @@ class UnarySpec(Enum):
     bool = TokenType.BOOL
 
 
+special_cased_unary_specs = (TokenType.NOT,)
+
+
 class CallSpec(Enum):
     call = TokenType.LPAR
     altcall = TokenType.LSQB
     get_attr = TokenType.DOT
+    format = TokenType.COLON
     iter = 0
     next = 1
-    format = 2
     get = 3
     init = 4
 

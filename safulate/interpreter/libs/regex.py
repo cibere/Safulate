@@ -7,8 +7,6 @@ from safulate import (
     SafulateTypeError,
 )
 from safulate.interpreter import (
-    CallSpec,
-    FormatSpec,
     NativeContext,
     SafBaseObject,
     SafBool,
@@ -20,7 +18,6 @@ from safulate.interpreter import (
     SafNum,
     SafObject,
     SafStr,
-    UnarySpec,
     false,
     null,
     public_method,
@@ -28,6 +25,7 @@ from safulate.interpreter import (
     spec_meth,
     true,
 )
+from safulate.parser import CallSpec, FormatSpec, UnarySpec
 
 types_code = """
 pub pattern = type(r"");

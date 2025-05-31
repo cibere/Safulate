@@ -25,20 +25,23 @@ from ..errors import (
     SafulateTypeError,
     SafulateValueError,
 )
-from ..lexer import Token
-from ..parser import ASTBlock, ASTFuncDecl_Param, ASTNode, ASTVisitor, ParamType
-from ..properties import cached_property
-from ..utils import FallbackDict
-from .enums import (
+from ..lexer import Token, TokenType
+from ..parser import (
+    ASTBlock,
+    ASTFuncDecl_Param,
+    ASTNode,
+    ASTVisitor,
     AttrSpec,
     BinarySpec,
     CallSpec,
     FormatSpec,
+    ParamType,
     SpecName,
-    TokenType,
     UnarySpec,
     spec_name_from_str,
 )
+from ..properties import cached_property
+from ..utils import FallbackDict
 
 if TYPE_CHECKING:
     from .native_context import NativeContext

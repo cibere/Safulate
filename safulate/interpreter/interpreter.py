@@ -20,7 +20,7 @@ from ..errors import (
     SafulateValueError,
     SafulateVersionConflict,
 )
-from ..lexer import SoftKeyword, Token
+from ..lexer import SoftKeyword, Token, TokenType
 from ..parser import (
     ASTAssign,
     ASTAtom,
@@ -54,17 +54,14 @@ from ..parser import (
     ASTVersionReq,
     ASTVisitor,
     ASTWhile,
-    ParamType,
-)
-from ..properties import cached_property
-from .enums import (
     BinarySpec,
     CallSpec,
     FormatSpec,
-    TokenType,
+    ParamType,
     UnarySpec,
     spec_name_from_str,
 )
+from ..properties import cached_property
 from .environment import Environment
 from .lib_manager import LibManager
 from .native_context import NativeContext

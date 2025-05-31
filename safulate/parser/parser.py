@@ -45,6 +45,13 @@ from .asts import (
     ASTWhile,
 )
 from .enums import ParamType
+from .specs import (
+    BinarySpec,
+    CallSpec,
+    UnarySpec,
+    special_cased_binary_specs,
+    special_cased_unary_specs,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -867,7 +874,7 @@ class Parser:
     def rstring(self) -> ASTNode:
         return ASTRegex(value=self.consume(TokenType.RSTRING))
 
-    @reg_expr((TokenType.PLUS, TokenType.MINUS, TokenType.NOT))
+    @reg_expr((*UnarySpec.all_values(), *special_cased_unary_specs))
     def unary_ops(self) -> ASTNode:
         return ASTUnary(op=self.advance(), right=self.expr())
 
@@ -910,7 +917,7 @@ class Parser:
 
     def consume_calls(self, callee: ASTNode) -> ASTNode:
         while token := self.match(
-            TokenType.LPAR, TokenType.DOT, TokenType.LSQB, TokenType.COLON
+            *(val for val in CallSpec.all_values() if type(val) is TokenType)
         ):
             match token.type:
                 case TokenType.LPAR | TokenType.LSQB as open_paren:
@@ -971,26 +978,8 @@ class Parser:
         if self.match(TokenType.TILDE):
             return ASTEditObject(left, self.block())
 
-        res = self._handle_comparison(
-            TokenType.EQEQ,
-            TokenType.NEQ,
-            TokenType.EQEQEQ,
-            TokenType.PLUS,
-            TokenType.MINUS,
-            TokenType.STAR,
-            TokenType.SLASH,
-            TokenType.STARSTAR,
-            TokenType.TILDE,
-            TokenType.PIPE,
-            TokenType.AMP,
-            TokenType.NOT,
-            TokenType.AND,
-            TokenType.OR,
-            TokenType.BOOL,
-            TokenType.HAS,
-            TokenType.LESS,
-            TokenType.GRTR,
-        )
-        if res:
-            return ASTBinary(left=left, op=res[0], right=res[1])
+        for op in (*BinarySpec.all_values(), *special_cased_binary_specs):
+            if token := self.match(op):
+                return ASTBinary(left=left, op=token, right=self.expr())
+
         return left

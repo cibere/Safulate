@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, cast
 
 from ..errors import ErrorManager, SafulateError, SafulateTypeError
-from .enums import CallSpec, SpecName
+from ..parser import CallSpec, SpecName
 from .objects import (
     SafBaseObject,
     SafDict,

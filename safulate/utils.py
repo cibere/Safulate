@@ -4,10 +4,11 @@ from enum import Enum as _Enum
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterable
 
 KeyT = TypeVar("KeyT")
 ValueT = TypeVar("ValueT")
+EnumValueT = TypeVar("EnumValueT", default=Any)
 
 __all__ = ("Enum", "FallbackDict")
 
@@ -30,9 +31,13 @@ class FallbackDict(dict[KeyT, ValueT], Generic[KeyT, ValueT]):
             return self.fallback(key)
 
 
-class Enum(_Enum):
+class Enum(_Enum, Generic[EnumValueT]):
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}.{self.name}"
+
+    @classmethod
+    def all_values(cls) -> Iterable[EnumValueT]:
+        return cls._value2member_map_.keys()
 
 
 class LazyImport:
