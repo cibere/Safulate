@@ -6,9 +6,14 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
+    from typing_extensions import TypeVar  # noqa: TC004
+
+    EnumValueT = TypeVar("EnumValueT", default=Any)
+else:
+    EnumValueT = TypeVar("EnumValueT")
+
 KeyT = TypeVar("KeyT")
 ValueT = TypeVar("ValueT")
-EnumValueT = TypeVar("EnumValueT", default=Any)
 
 __all__ = ("Enum", "FallbackDict")
 
