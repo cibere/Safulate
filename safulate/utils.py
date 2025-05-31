@@ -6,12 +6,6 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
-    from typing_extensions import TypeVar  # noqa: TC004
-
-    EnumValueT = TypeVar("EnumValueT", default=Any)
-else:
-    EnumValueT = TypeVar("EnumValueT")
-
 KeyT = TypeVar("KeyT")
 ValueT = TypeVar("ValueT")
 
@@ -36,12 +30,12 @@ class FallbackDict(dict[KeyT, ValueT], Generic[KeyT, ValueT]):
             return self.fallback(key)
 
 
-class Enum(_Enum, Generic[EnumValueT]):
+class Enum(_Enum):
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}.{self.name}"
 
     @classmethod
-    def all_values(cls) -> Iterable[EnumValueT]:
+    def all_values(cls) -> Iterable[Any]:
         return cls._value2member_map_.keys()
 
 
