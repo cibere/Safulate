@@ -10,7 +10,6 @@ from .tokens import Token
 __all__ = ("Lexer",)
 
 T = TypeVar("T")
-CASE_INFO_ATTR = "__safulate_case_info__"
 _querty = "qwertyuiopasdfghjklzxcvbnm"
 id_first_char_characters = f"_{_querty}{_querty.upper()}"
 id_other_char_characters = f"1234567890{id_first_char_characters}"

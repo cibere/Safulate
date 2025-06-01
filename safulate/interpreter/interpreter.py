@@ -498,10 +498,19 @@ class Interpreter(ASTVisitor):
         try:
             return body.visit(self)
         except SafulateInvalidContinue as e:
-            next_loop = e.handle_skips(loops)
+            next_loop = None
+
+            while e.amount != 0:
+                try:
+                    next_loop = loops.pop(0)
+                except IndexError:
+                    return null
+                e.amount -= 1
 
             if next_loop is None:
                 return null
+
+            loops.insert(0, next_loop)
             return self._visit_switch_case_entry(next_loop[-1], loops)
 
     def visit_switch_case(self, node: ASTSwitchCase) -> SafBaseObject:

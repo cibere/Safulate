@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING
 
 from .properties import cached_property
 
@@ -15,8 +15,6 @@ else:
     from .utils import LazyImport
 
     l = LazyImport("safulate", "lexer")  # noqa: E741
-
-T = TypeVar("T")
 
 __all__ = (
     "ErrorManager",
@@ -206,20 +204,6 @@ class SafulateInvalidContinue(SafulateError):
         self.amount = amount
 
         super().__init__("Continue used in a context where it isn't allowed", token)
-
-    def handle_skips(self, loops: list[T]) -> T | None:
-        next_loop = None
-
-        while self.amount != 0:
-            try:
-                next_loop = loops.pop(0)
-            except IndexError:
-                return
-            self.amount -= 1
-
-        if next_loop:
-            loops.insert(0, next_loop)
-        return next_loop
 
 
 class SafulateBreakoutError(SafulateError):

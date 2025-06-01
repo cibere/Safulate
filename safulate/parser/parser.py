@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from typing import TYPE_CHECKING, Literal, NamedTuple, TypeVar, cast
 
 from packaging.version import InvalidVersion
@@ -71,9 +70,6 @@ if TYPE_CHECKING:
 __all__ = ("Parser",)
 
 CaseCallbackT = TypeVar("CaseCallbackT", bound="Callable[[Parser], ASTNode]")
-require_version_pattern = re.compile(
-    r"v(?P<major>[0-9]+)\.(?P<minor>[0-9]+|x)(?:\.(?P<micro>[0-9]+))?"
-)
 ANY = "any"
 
 
