@@ -14,17 +14,13 @@ class Environment:
     __slots__ = "__cs_builtins__", "parent", "scope", "values"
 
     def __init__(
-        self,
+        self,*, 
         parent: Environment | None = None,
-        scope: SafBaseObject | None = None,
-        isolated_public_vars: bool = False,
+        scope: SafBaseObject,
     ) -> None:
-        self.values: dict[str, SafBaseObject] = {}
         self.parent: Environment | None = parent
         self.scope: SafBaseObject | None = scope
-
-        if not isolated_public_vars and scope:
-            self.values = scope.public_attrs
+        self.values: dict[str, SafBaseObject] = scope.public_attrs
 
     @cached_property("__cs_builtins__")
     def _builtins(self) -> dict[str, SafBaseObject]:

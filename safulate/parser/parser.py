@@ -589,7 +589,7 @@ class Parser:
                 f"##SAFULATE-SPECIFIC-REQ-BLOCK##:{source.lexme}",
                 kwd.start,
             )
-            return ASTBlock(
+            return ASTProgram(
                 [
                     ASTImportReq(source=source, name=name_token),
                     *[
@@ -606,7 +606,6 @@ class Parser:
                     ],
                     ASTDel(name_token),
                 ],
-                force_unscoped=True,
             )
 
     def require_version_stmt(self, kwd: Token) -> ASTNode | None:

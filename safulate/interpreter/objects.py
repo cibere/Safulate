@@ -1319,7 +1319,7 @@ class SafFunc(SafObject):
                 ctx.interpreter.env[param] = value
 
             try:
-                self.body.visit_unscoped(ctx.interpreter)
+                ctx.interpreter.visit_program(self.body)
             except SafulateInvalidReturn as r:
                 ret_value = r.value
 

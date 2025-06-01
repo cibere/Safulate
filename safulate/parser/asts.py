@@ -105,16 +105,9 @@ class ASTFuncDecl(ASTNode):
 @dataclass
 class ASTBlock(ASTNode):
     stmts: list[ASTNode]
-    force_unscoped: bool = False
 
     def visit(self, visitor: ASTVisitor) -> SafBaseObject:
-        if self.force_unscoped:
-            return self.visit_unscoped(visitor)
         return visitor.visit_block(self)
-
-    def visit_unscoped(self, visistor: ASTVisitor) -> SafBaseObject:
-        return visistor.visit_unscoped_block(self)
-
 
 @dataclass
 class ASTEditObject(ASTNode):
@@ -386,8 +379,6 @@ class ASTVisitor(ABC):
     def visit_program(self, node: ASTProgram) -> SafBaseObject: ...
     @abstractmethod
     def visit_block(self, node: ASTBlock) -> SafBaseObject: ...
-    @abstractmethod
-    def visit_unscoped_block(self, node: ASTBlock) -> SafBaseObject: ...
     @abstractmethod
     def visit_if(self, node: ASTIf) -> SafBaseObject: ...
     @abstractmethod

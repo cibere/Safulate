@@ -78,7 +78,7 @@ from .objects import (
     SafType,
     false,
     null,
-    true,
+    true,SafObject
 )
 
 if TYPE_CHECKING:
@@ -113,16 +113,16 @@ class Interpreter(ASTVisitor):
 
     @contextmanager
     def scope(
-        self, source: SafBaseObject | None = None, isolated_public_vars: bool = False
+        self, source: SafBaseObject | None = None
     ) -> Iterator[Environment]:
         old_env = self.env
         self.env = Environment(
-            self.env, scope=source, isolated_public_vars=isolated_public_vars
+            parent=self.env, scope=source or SafObject("temp scope")
         )
         yield self.env
         self.env = old_env
 
-    def visit_program(self, node: ASTProgram) -> SafBaseObject:
+    def visit_program(self, node: ASTProgram | ASTBlock) -> SafBaseObject:
         if len(node.stmts) <= 0:
             return null
         for stmt in node.stmts[:-1]:
@@ -130,24 +130,14 @@ class Interpreter(ASTVisitor):
 
         return node.stmts[-1].visit(self)
 
-    def visit_unscoped_block(self, node: ASTBlock) -> SafBaseObject:
-        if len(node.stmts) <= 0:
-            return null
-
-        for stmt in node.stmts[:-1]:
-            stmt.visit(self)
-        res = node.stmts[-1].visit(self)
-
-        return res
-
     def visit_block(self, node: ASTBlock) -> SafBaseObject:
         with self.scope():
-            return self.visit_unscoped_block(node)
+            return self.visit_program(node)
 
     def visit_edit_object(self, node: ASTEditObject) -> SafBaseObject:
         src = node.obj.visit(self)
         with self.scope(source=src):
-            self.visit_unscoped_block(node.block)
+            self.visit_program(node.block)
         return src
 
     def visit_if(self, node: ASTIf) -> SafBaseObject:
@@ -484,7 +474,7 @@ class Interpreter(ASTVisitor):
                         env.declare(branch.var)
                         env[branch.var] = e.saf_value
 
-                    return self.visit_unscoped_block(branch.body)
+                    return self.visit_program(branch.body)
             raise e
 
         if node.else_branch is None:
@@ -570,7 +560,7 @@ class Interpreter(ASTVisitor):
 
         with self.scope(obj):
             if node.body:
-                self.visit_unscoped_block(node.body)
+                self.visit_program(node.body)
             if node.compare_func:
                 self.env["check"] = node.compare_func.visit(self)
 
