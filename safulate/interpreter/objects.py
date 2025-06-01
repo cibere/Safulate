@@ -1185,7 +1185,15 @@ class SafFunc(SafObject):
         if default is None:
             raise SafulateValueError(error_msg_callback())
 
-        return default if isinstance(default, SafBaseObject) else default.visit(visitor)
+        if isinstance(default, SafBaseObject):
+            return default
+        if type(default) is ASTBlock:
+            try:
+                return default.visit(visitor)
+            except SafulateInvalidReturn as e:
+                return e.value
+
+        return default.visit(visitor)
 
     def validate_params(
         self, ctx: NativeContext, *init_args: SafBaseObject, **kwargs: SafBaseObject

@@ -283,7 +283,7 @@ class Parser:
             default = None
             if self.match(TokenType.EQ):
                 defaulted = True
-                default = self.expr()
+                default = self.block() if self.check(TokenType.LBRC) else self.expr()
             elif defaulted:
                 raise SafulateSyntaxError(
                     "Non-default arg following a default arg", self.peek()
