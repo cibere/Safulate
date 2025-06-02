@@ -400,10 +400,9 @@ class Parser:
 
     @reg_stmt(TokenType.LBRC)
     def block(self) -> ASTBlock:
-        # Only using consume because rules like `if` and `while` use it directly,
-        # `stmt` rule checks for `{` first
         self.consume(TokenType.LBRC, "Expected '{'")
         stmts: list[ASTNode] = []
+
         while not self.check(TokenType.RBRC):
             stmts.append(self.stmt())
 
