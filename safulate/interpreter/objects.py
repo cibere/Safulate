@@ -145,7 +145,7 @@ class _DefaultSpecs:
 
         def deco(func: DefaultSpecT) -> DefaultSpecT:
             self.raw_specs[name] = func
-            return replacement  # type: ignore[reportReturnType]
+            return replacement  # pyright: ignore[reportReturnType]
 
         return deco
 

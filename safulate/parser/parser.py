@@ -782,7 +782,7 @@ class Parser:
         ),
     )
     def assign(self) -> ASTNode:
-        name = self.advance()  # We know it's the right type b/c of check above
+        name = self.advance()
         op = self.advance()
         value = self.expr()
 

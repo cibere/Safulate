@@ -273,7 +273,7 @@ class Interpreter(ASTVisitor):
     def visit_func_decl(self, node: ASTFuncDecl) -> SafBaseObject:
         return SafFunc(
             name=node.name,
-            params=node.params,  # pyright: ignore[reportArgumentType]
+            params=node.params,
             body=node.body,
             parent=self.env.scope,
         )
