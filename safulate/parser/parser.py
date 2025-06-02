@@ -743,7 +743,7 @@ class Parser:
         keyword = self.consume(
             (TokenType.PUB, TokenType.PRIV), "Expected var decl keyword"
         )
-        name = self.consume(TokenType.ID, "Expected variable name")
+        name = self.consume((TokenType.ID, TokenType.STR), "Expected variable name")
 
         if self.check(TokenType.COLON):
             self.annotation()
