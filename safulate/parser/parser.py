@@ -699,7 +699,6 @@ class Parser:
     def switch_case_stmt(self) -> ASTNode:
         kwd = self.consume(SoftKeyword.SWITCH)
         switch_expr = self.expr()
-        self.consume(TokenType.LBRC, "Expected '{'")
         cases: list[tuple[ASTNode, ASTBlock]] = []
         else_branch = None
 
@@ -719,8 +718,6 @@ class Parser:
         if len(cases) == 0:
             raise SafulateSyntaxError("Switch/Case requires at least 1 case", kwd)
 
-        self.consume(TokenType.SEMI, "Expected ';'")
-        self.consume(TokenType.RBRC, "Expected '}'")
         self.consume(TokenType.SEMI, "Expected ';'")
         return ASTSwitchCase(
             cases=cases, expr=switch_expr, else_branch=else_branch, kw=kwd
