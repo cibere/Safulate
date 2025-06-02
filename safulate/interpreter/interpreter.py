@@ -8,7 +8,6 @@ from packaging.version import Version as _PackagingVersion
 
 from .._version import __version__
 from ..errors import (
-    ErrorManager,
     SafulateAttributeError,
     SafulateBreakoutError,
     SafulateError,
@@ -73,12 +72,13 @@ from .objects import (
     SafList,
     SafModule,
     SafNum,
+    SafObject,
     SafProperty,
     SafStr,
     SafType,
     false,
     null,
-    true,SafObject
+    true,
 )
 
 if TYPE_CHECKING:
@@ -112,13 +112,9 @@ class Interpreter(ASTVisitor):
         return NativeContext(self, token)
 
     @contextmanager
-    def scope(
-        self, source: SafBaseObject | None = None
-    ) -> Iterator[Environment]:
+    def scope(self, source: SafBaseObject | None = None) -> Iterator[Environment]:
         old_env = self.env
-        self.env = Environment(
-            parent=self.env, scope=source or SafObject("temp scope")
-        )
+        self.env = Environment(parent=self.env, scope=source or SafObject("temp scope"))
         yield self.env
         self.env = old_env
 
@@ -201,30 +197,30 @@ class Interpreter(ASTVisitor):
     def _visit_continue_and_break(self, node: ASTBreak | ASTContinue) -> SafBaseObject:
         is_break = isinstance(node, ASTBreak)
 
-        with ErrorManager(token=node.keyword):
-            if node.amount is None:
-                amount = 1
-            else:
-                amount_node = node.amount.visit(self)
-                if not isinstance(amount_node, SafNum):
-                    raise SafulateTypeError(
-                        f"Expected a number for {'break' if is_break else 'continue'} amount, got {amount_node.repr_spec(self.ctx(node.keyword))} instead.",
-                    )
-                amount = int(amount_node.value)
-
-            if amount == 0:
-                return null
-            elif amount < 0:
-                msg = (
-                    "You can't breakout of a negative number of loops"
-                    if is_break
-                    else "You can't skip a negative number of loops"
+        if node.amount is None:
+            amount = 1
+        else:
+            amount_node = node.amount.visit(self)
+            if not isinstance(amount_node, SafNum):
+                raise SafulateTypeError(
+                    f"Expected a number for {'break' if is_break else 'continue'} amount, got {amount_node.repr_spec(self.ctx(node.keyword))} instead.",
+                    node.keyword,
                 )
-                raise SafulateValueError(msg)
+            amount = int(amount_node.value)
 
-            if is_break:
-                raise SafulateBreakoutError(amount, node.keyword)
-            raise SafulateInvalidContinue(amount, node.keyword)
+        if amount == 0:
+            return null
+        elif amount < 0:
+            msg = (
+                "You can't breakout of a negative number of loops"
+                if is_break
+                else "You can't skip a negative number of loops"
+            )
+            raise SafulateValueError(msg, node.keyword)
+
+        if is_break:
+            raise SafulateBreakoutError(amount, node.keyword)
+        raise SafulateInvalidContinue(amount, node.keyword)
 
     def visit_break(self, node: ASTBreak) -> SafBaseObject:
         return self._visit_continue_and_break(node)
@@ -313,25 +309,23 @@ class Interpreter(ASTVisitor):
                         f"Invalid token type {node.op.type.name} for binary operator"
                     ) from e
 
-        with ErrorManager(token=node.op):
-            return ctx.invoke_spec(left, spec, right)
+        return ctx.invoke_spec(left, spec, right)
 
     def visit_unary(self, node: ASTUnary) -> SafBaseObject:
         right = node.right.visit(self)
         ctx = self.ctx(node.op)
 
-        with ErrorManager(token=node.op):
-            try:
-                spec = UnarySpec(node.op.type)
-            except ValueError as e:
-                if node.op.type is TokenType.NOT:
-                    return false if right.bool_spec(ctx) else true
-                else:
-                    raise ValueError(
-                        f"Invalid token type {node.op.type.name} for unary operator"
-                    ) from e
+        try:
+            spec = UnarySpec(node.op.type)
+        except ValueError as e:
+            if node.op.type is TokenType.NOT:
+                return false if right.bool_spec(ctx) else true
+            else:
+                raise ValueError(
+                    f"Invalid token type {node.op.type.name} for unary operator"
+                ) from e
 
-            return self.ctx(node.op).invoke_spec(right, spec)
+        return self.ctx(node.op).invoke_spec(right, spec)
 
     def visit_call(self, node: ASTCall) -> SafBaseObject:
         ctx = self.ctx(node.paren)
@@ -387,58 +381,63 @@ class Interpreter(ASTVisitor):
                 raise ValueError(f"Invalid atom type {node.token.type.name}")
 
     def visit_version_req(self, node: ASTVersionReq) -> SafBaseObject:
-        with ErrorManager(token=node.keyword):
-            match (node.left, node.op, node.right):
-                case (_PackagingVersion() as ver, None, None):
-                    left = str(ver)
-                    right = str(self.version)
-                    if len(left) < len(right):
-                        left, right = right, left
-                    if not left.startswith(right):
-                        raise SafulateVersionConflict(
-                            f"Current version (v{self.version}) is not equal to the required version (v{ver})"
-                        )
-                case (_PackagingVersion() as left, Token(type=TokenType.MINUS), None):
-                    if self.version > left:
-                        raise SafulateVersionConflict(
-                            f"Current version (v{self.version}) is above the maximum set version allowed (v{left})"
-                        )
-                case (_PackagingVersion() as left, Token(type=TokenType.PLUS), None):
-                    if self.version < left:
-                        raise SafulateVersionConflict(
-                            f"Current version (v{self.version}) is below the minimum set version allowed (v{left})"
-                        )
-                case (
-                    _PackagingVersion() as left,
-                    Token(TokenType.MINUS),
-                    _PackagingVersion() as right,
-                ):
-                    if not (left < self.version < right):
-                        raise SafulateVersionConflict(
-                            f"Current version (v{self.version}) outside of the allowed range (v{left}-v{right})"
-                        )
-                case _ as x:
-                    raise RuntimeError(f"Unknown version req combination: {x!r}")
-            return null  # pyright: ignore[reportPossiblyUnboundVariable] # pyright is high
+        match (node.left, node.op, node.right):
+            case (_PackagingVersion() as ver, None, None):
+                left = str(ver)
+                right = str(self.version)
+                if len(left) < len(right):
+                    left, right = right, left
+                if not left.startswith(right):
+                    raise SafulateVersionConflict(
+                        f"Current version (v{self.version}) is not equal to the required version (v{ver})",
+                        node.keyword,
+                    )
+            case (_PackagingVersion() as left, Token(type=TokenType.MINUS), None):
+                if self.version > left:
+                    raise SafulateVersionConflict(
+                        f"Current version (v{self.version}) is above the maximum set version allowed (v{left})",
+                        node.keyword,
+                    )
+            case (_PackagingVersion() as left, Token(type=TokenType.PLUS), None):
+                if self.version < left:
+                    raise SafulateVersionConflict(
+                        f"Current version (v{self.version}) is below the minimum set version allowed (v{left})",
+                        node.keyword,
+                    )
+            case (
+                _PackagingVersion() as left,
+                Token(TokenType.MINUS),
+                _PackagingVersion() as right,
+            ):
+                if not (left < self.version < right):
+                    raise SafulateVersionConflict(
+                        f"Current version (v{self.version}) outside of the allowed range (v{left}-v{right})",
+                        node.keyword,
+                    )
+            case _ as x:
+                raise RuntimeError(f"Unknown version req combination: {x!r}")
+
+        return null
 
     def visit_import_req(self, node: ASTImportReq) -> SafBaseObject:
-        with ErrorManager(token=node.source):
-            value = self.libs[node.source.lexme]
+        value = self.libs[node.source.lexme]
 
-            if value is None:
-                match node.source.type:
-                    case TokenType.ID:
-                        value = self.libs.load_builtin_lib(
-                            node.source.lexme, ctx=self.ctx(node.source)
-                        )
-                    case TokenType.STR:
-                        raise SafulateImportError("Url imports are not allowed yet")
-                    case other:
-                        raise RuntimeError(f"Unknown import source: {other.name!r}")
+        if value is None:
+            match node.source.type:
+                case TokenType.ID:
+                    value = self.libs.load_builtin_lib(
+                        node.source.lexme, ctx=self.ctx(node.source)
+                    )
+                case TokenType.STR:
+                    raise SafulateImportError(
+                        "Url imports are not allowed yet", node.source
+                    )
+                case other:
+                    raise RuntimeError(f"Unknown import source: {other.name!r}")
 
-            self.env.declare(node.name)
-            self.env[node.name] = value
-            return value
+        self.env.declare(node.name)
+        self.env[node.name] = value
+        return value
 
     def visit_raise(self, node: ASTRaise) -> SafBaseObject:
         val = node.expr.visit(self)

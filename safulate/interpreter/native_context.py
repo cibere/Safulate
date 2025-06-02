@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, cast
 
-from ..errors import ErrorManager, SafulateError, SafulateTypeError
+from ..errors import SafulateError, SafulateTypeError
 from ..parser import CallSpec, SpecName
 from .objects import (
     SafBaseObject,
@@ -36,9 +36,12 @@ class NativeContext:
     def invoke(
         self, func: SafBaseObject, *args: SafBaseObject, **kwargs: SafBaseObject
     ) -> SafBaseObject:
-        with ErrorManager(token=self.token):
+        try:
             caller = func if isinstance(func, (SafFunc)) else func.specs[CallSpec.call]
             return caller.call(self, *args, **kwargs)  # pyright: ignore[reportArgumentType]
+        except SafulateError as e:
+            e._add_token(self.token)
+            raise
 
     def invoke_spec(
         self,

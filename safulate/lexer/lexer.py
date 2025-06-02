@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, ClassVar, TypeAlias, TypeVar, overload
 
-from ..errors import ErrorManager, SafulateSyntaxError
+from ..errors import SafulateSyntaxError
 from .enums import TokenType
 from .tokens import Token
 
@@ -175,9 +175,12 @@ class Lexer:
         raise SafulateSyntaxError(f"Unknown character {self.source[self.start]!r}")
 
     def tokenize(self) -> list[Token]:
-        with ErrorManager(start=lambda: self.start):
+        try:
             while (not self.tokens) or (self.tokens[-1].type is not TokenType.EOF):
                 self.poll_char()
+        except SafulateSyntaxError as e:
+            e._add_token(Token(TokenType.ERR, "", self.start))
+            raise
 
         return self.tokens
 

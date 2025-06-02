@@ -14,7 +14,8 @@ class Environment:
     __slots__ = "__cs_builtins__", "parent", "scope", "values"
 
     def __init__(
-        self,*, 
+        self,
+        *,
         parent: Environment | None = None,
         scope: SafBaseObject,
     ) -> None:

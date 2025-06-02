@@ -109,6 +109,7 @@ class ASTBlock(ASTNode):
     def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_block(self)
 
+
 @dataclass
 class ASTEditObject(ASTNode):
     obj: ASTNode

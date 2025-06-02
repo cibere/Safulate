@@ -5,10 +5,6 @@ from typing import TYPE_CHECKING
 from .properties import cached_property
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-    from types import TracebackType
-    from typing import Literal
-
     from . import lexer as l
     from .interpreter import SafBaseObject, SafPythonError
 else:
@@ -17,7 +13,6 @@ else:
     l = LazyImport("safulate", "lexer")  # noqa: E741
 
 __all__ = (
-    "ErrorManager",
     "SafulateAssertionError",
     "SafulateBreakoutError",
     "SafulateError",
@@ -31,48 +26,6 @@ __all__ = (
     "SafulateTypeError",
     "SafulateValueError",
 )
-
-
-class ErrorManager:
-    __slots__ = ("start", "token")
-
-    def __init__(
-        self,
-        *,
-        start: Callable[[], int] | int | None = None,
-        token: l.Token | None | Callable[[], l.Token] = None,
-    ) -> None:
-        self.start = start
-        self.token = token
-
-    def __enter__(self) -> None:
-        return
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_value: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> Literal[False]:
-        if (not exc_type and not exc_value and not traceback) or not isinstance(
-            exc_value, SafulateError
-        ):
-            return False
-
-        if self.token:
-            token = self.token if isinstance(self.token, l.Token) else self.token()
-        elif self.start:
-            token = l.Token(
-                l.TokenType.ERR,
-                "",
-                self.start if isinstance(self.start, int) else self.start(),
-            )
-        else:
-            raise RuntimeError("Error manager got no way of getting token")
-
-        exc_value.tokens.insert(0, TokenEntry(token))
-
-        return False
 
 
 class TokenEntry:
@@ -158,6 +111,11 @@ class SafulateError(BaseException):
 
     def print_report(self, source: str, *, filename: str | None = None) -> None:
         print(self.make_report(source, filename=filename))
+
+    def _add_token(
+        self, token: l.Token, *, source: str | None = None, filename: str | None = None
+    ) -> None:
+        self.tokens.insert(0, TokenEntry(token, source=source, filename=filename))
 
 
 class SafulateNameError(SafulateError):
