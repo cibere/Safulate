@@ -241,7 +241,7 @@ class Lexer:
         if start_token_added:
             token_type = TokenType.FSTR_END
         else:
-            self.start += 1
+            self.start += 2
             token_type = TokenType.STR
 
         self.add_token(token_type)
