@@ -69,12 +69,12 @@ if TYPE_CHECKING:
 
 __all__ = ("Parser",)
 
-CaseCallbackT = TypeVar("CaseCallbackT", bound="Callable[[Parser], ASTNode]")
+CaseCallbackT = TypeVar("CaseCallbackT", bound="Callable[[Parser], ASTNode | None]")
 ANY = "any"
 
 
 class RegisteredCase(NamedTuple):
-    callback: Callable[[Parser], ASTNode]
+    callback: Callable[[Parser], ASTNode | None]
     check: Callable[[Parser], bool]
     type: Literal["expr", "stmt"]
 
@@ -122,7 +122,15 @@ class Parser:
         return [case for case in _cases if case.type == "stmt"]
 
     def _execute_case(self, case: RegisteredCase) -> ASTNode | None:
-        return case.callback(self) if case.check(self) else None
+        before = self.current
+
+        cond = case.check(self)
+        if cond:
+            res = case.callback(self)
+            if res:
+                return res
+
+        self.current = before
 
     def _execute_cases(self, cases: list[RegisteredCase]) -> ASTNode | None:
         for case in cases:
@@ -291,7 +299,7 @@ class Parser:
 
             yield ASTFuncDecl_Param(name=param_name, default=default, type=param_type)
 
-    def _func_decl(self, *, kw_token: Token, name: Token | None) -> ASTNode:
+    def _func_decl(self, *, kw_token: Token, name: Token | ASTNode | None) -> ASTNode:
         paren_token = self.consume(TokenType.LPAR, "Expected '('")
         params = list(self._func_params())
 
@@ -412,7 +420,7 @@ class Parser:
     @reg_stmt(
         (TokenType.PRIV, TokenType.PUB, None),
         TokenType.TYPE,
-        TokenType.ID,
+        (TokenType.ID, TokenType.LBRC),
     )
     def type_decl(self) -> ASTNode:
         scope_token = self.match(TokenType.PUB, TokenType.PRIV)
@@ -420,7 +428,20 @@ class Parser:
             TokenType.TYPE,
             "Expected 'type' keyword to start a type declaration statement",
         )
-        name_token = self.consume(TokenType.ID, "Expected name for new type")
+
+        name_token: Token
+        name: Token | ASTNode
+        var_name: Token | ASTNode | None = None
+        if self.check(TokenType.LBRC):
+            name_token = self.peek()
+            name = self.block()
+        else:
+            name = name_token = self.consume(TokenType.ID, "Expected name for new type")
+
+        if self.match(TokenType.AT):
+            var_name = self.consume(
+                TokenType.ID, "Expected ID for var type declaration"
+            )
 
         if not scope_token:
             scope_token = kw_token.with_type(TokenType.PUB)
@@ -431,7 +452,7 @@ class Parser:
         if self.check(TokenType.LPAR):
             compare_func = self._func_decl(
                 kw_token=scope_token,
-                name=name_token,
+                name=name,
             )
 
         if (
@@ -451,23 +472,26 @@ class Parser:
 
             init = self._func_decl(
                 kw_token=scope_token,
-                name=name_token,
+                name=name,
             )
 
         self.consume(TokenType.SEMI, "Expected ';'")
         return ASTVarDecl(
-            name_token,
+            name=var_name or name,
             value=ASTTypeDecl(
                 body=body,
                 compare_func=compare_func,
                 init=cast("ASTFuncDecl", init),
                 arity=arity,
-                name=name_token,
+                name=name,
+                kw_token=kw_token,
             ),
             keyword=scope_token,
+            name_token=name_token,
         )
 
     @reg_stmt(SoftKeyword.PROP, TokenType.ID, TokenType.LBRC)
+    # @reg_stmt(SoftKeyword.PROP, TokenType.LBRC)
     def prop_decl(self) -> ASTNode:
         kw_token = self.advance()
         name = self.advance()
@@ -489,14 +513,32 @@ class Parser:
         TokenType.ID,
         TokenType.LPAR,
     )
-    def func_decl_stmt(self) -> ASTNode:
+    @reg_stmt(
+        (
+            TokenType.PUB,
+            TokenType.PRIV,
+            SoftKeyword.SPEC,
+        ),
+        TokenType.LBRC,
+    )
+    def func_decl_stmt(self) -> ASTNode | None:
         kw_token = self.advance()
 
-        name = self.consume(TokenType.ID, "Expected function name")
+        if self.check(TokenType.LBRC):
+            name_token = self.peek()
+            name = self.block()
+        else:
+            name_token = name = self.consume(TokenType.ID, "Expected function name")
+
+        if not self.check(TokenType.LPAR):
+            return
+
         func = self._func_decl(kw_token=kw_token, name=name)
         self.consume(TokenType.SEMI, "Expected ';'")
 
-        return ASTVarDecl(name=name, value=func, keyword=kw_token)
+        return ASTVarDecl(
+            name=name, value=func, keyword=kw_token, name_token=name_token
+        )
 
     @reg_stmt(TokenType.WHILE)
     def while_stmt(self) -> ASTNode:
@@ -600,6 +642,7 @@ class Parser:
                                 attr=name,
                                 dot=Token.mock(TokenType.DOT, start=kwd.start),
                             ),
+                            name_token=name,
                         )
                         for name in names
                     ],
@@ -743,7 +786,14 @@ class Parser:
         keyword = self.consume(
             (TokenType.PUB, TokenType.PRIV), "Expected var decl keyword"
         )
-        name = self.consume((TokenType.ID, TokenType.STR), "Expected variable name")
+
+        name_token: Token
+        name: Token | ASTNode
+        if self.check(TokenType.LBRC):
+            name_token = self.peek()
+            name = self.block()
+        else:
+            name = name_token = self.consume(TokenType.ID, "Expected variable name")
 
         if self.check(TokenType.COLON):
             self.annotation()
@@ -752,6 +802,7 @@ class Parser:
             keyword=keyword,
             name=name,
             value=self.expr() if self.match(TokenType.EQ) else None,
+            name_token=name_token,
         )
 
     @reg_expr(TokenType.IF)
@@ -809,7 +860,7 @@ class Parser:
                 )
             case _:
                 pass
-        return ASTAssign(name, value)
+        return ASTAssign(name=name, value=value)
 
     @reg_expr(TokenType.LSQB)
     def list_syntax(self) -> ASTNode:

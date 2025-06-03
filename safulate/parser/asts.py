@@ -66,9 +66,10 @@ class ASTProgram(ASTNode):
 
 @dataclass
 class ASTVarDecl(ASTNode):
-    name: Token
+    name: Token | ASTNode
     value: ASTNode | None
     keyword: Token
+    name_token: Token
 
     def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_var_decl(self)
@@ -91,7 +92,7 @@ class ASTFuncDecl_Param:
 
 @dataclass
 class ASTFuncDecl(ASTNode):
-    name: Token | None
+    name: Token | ASTNode | None
     params: list[ASTFuncDecl_Param]
     body: ASTBlock
 
@@ -348,11 +349,12 @@ class ASTRegex(ASTNode):
 
 @dataclass
 class ASTTypeDecl(ASTNode):
-    name: Token
+    name: Token | ASTNode
     body: ASTBlock | None
     init: ASTFuncDecl | None
     compare_func: ASTNode | None
     arity: int
+    kw_token: Token
 
     def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_type_decl(self)

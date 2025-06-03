@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ..errors import SafulateNameError
+from ..errors import SafulateNameError, SafulateScopeError
 from ..lexer import Token
 from ..properties import cached_property
 from .objects import SafBaseObject, null
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 __all__ = ("Environment",)
 
@@ -19,7 +22,6 @@ class Environment:
         parent: Environment | None = None,
         scope: SafBaseObject,
     ) -> None:
-        self.parent: Environment | None = parent
         self.scope: SafBaseObject | None = scope
         self.values: dict[str, SafBaseObject] = scope.public_attrs
 
@@ -34,8 +36,10 @@ class Environment:
 
         if name in self.values:
             return self.values[name]
-        if self.parent:
-            return self.parent[token]
+        if self.scope:
+            for scope in self.walk_parents(self.scope, include_self=True):
+                if name in scope.public_attrs:
+                    return scope.public_attrs[name]
         if name in self._builtins:
             return self._builtins[name]
 
@@ -44,12 +48,13 @@ class Environment:
     def __setitem__(self, token: Token | str, value: Any) -> None:
         name = token.lexme if isinstance(token, Token) else token
 
-        if name in self.values:
+        if name in self.values or isinstance(token, str):
             self.values[name] = value
-        elif self.parent:
-            self.parent[token] = value
-        elif isinstance(token, str):
-            self.values[name] = value
+        elif self.scope:
+            for scope in self.walk_parents(self.scope, include_self=True):
+                if name in scope.public_attrs:
+                    scope.public_attrs[name] = value
+                    break
         elif name in self._builtins:
             self._builtins[name] = value
         else:
@@ -57,3 +62,31 @@ class Environment:
 
     def declare(self, token: Token | str) -> None:
         self.values[token.lexme if isinstance(token, Token) else token] = null
+
+    def walk_parents(
+        self, obj: SafBaseObject, *, include_self: bool = False
+    ) -> Iterator[SafBaseObject]:
+        if include_self:
+            yield obj
+
+        scope: SafBaseObject | None = obj
+        while 1:
+            scope = scope.parent
+
+            if scope:
+                yield scope
+            else:
+                break
+
+    def get_scope_parent(self, levels: list[Token]) -> SafBaseObject:
+        _levels = levels.copy()
+        assert self.scope
+
+        for scope in self.walk_parents(self.scope, include_self=True):
+            if _levels:
+                _levels.pop(0)
+
+            if not _levels:
+                return scope
+
+        raise SafulateScopeError("Can't go any futher", levels[-1])

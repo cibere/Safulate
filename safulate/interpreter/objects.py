@@ -466,7 +466,9 @@ class SafType(SafBaseObject):
                 attrs={},
             )
 
-        return cls("object", init=SafFunc.from_native("object", _init))
+        self = cls("object")
+        self.specs[CallSpec.call] = SafFunc.from_native("init", _init)
+        return self
 
     def _attrs_hook(self, attrs: _RawAttrs) -> None:
         attrs["spec"][AttrSpec.type] = self.base_type()
@@ -1153,22 +1155,21 @@ class SafList(_SafIterable):
 class SafFunc(SafObject):
     def __init__(
         self,
-        name: Token | None | SafBaseObject,
+        name: str | None | SafStr,
         params: list[ASTFuncDecl_Param],
         body: ASTBlock | Callable[Concatenate[NativeContext, ...], SafBaseObject],
         parent: SafBaseObject | None = None,
         partial_args: tuple[SafBaseObject, ...] | None = None,
         partial_kwargs: dict[str, SafBaseObject] | None = None,
     ) -> None:
-        match name:
-            case SafBaseObject():
-                name_value = name
-            case Token():
-                name_value = SafStr(name.lexme)
-            case None:
-                name_value = null
-
-        super().__init__("func", {"name": name_value})
+        super().__init__(
+            "func",
+            {
+                "name": null
+                if name is None
+                else (SafStr(name) if isinstance(name, str) else name)
+            },
+        )
 
         self.params = params
         self.body = body
@@ -1262,7 +1263,7 @@ class SafFunc(SafObject):
         self, args: tuple[SafBaseObject, ...], kwargs: dict[str, SafBaseObject]
     ) -> SafFunc:
         return SafFunc(
-            name=self.public_attrs["name"],
+            name=cast("SafStr", self.public_attrs["name"]),
             params=self.params,
             body=self.body,
             parent=self.public_attrs["parent"],
@@ -1352,7 +1353,7 @@ class SafFunc(SafObject):
         raw_params = list(inspect.signature(callback).parameters.values())
 
         return SafFunc(
-            name=Token(TokenType.ID, name, -1),
+            name=name,
             params=[
                 ASTFuncDecl_Param(
                     name=Token(TokenType.ID, param.name, -1),
