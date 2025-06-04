@@ -14,6 +14,7 @@ from ..errors import (
     SafulateImportError,
     SafulateInvalidContinue,
     SafulateInvalidReturn,
+    SafulateNameError,
     SafulateScopeError,
     SafulateTypeError,
     SafulateValueError,
@@ -61,7 +62,6 @@ from ..parser import (
     spec_name_from_str,
 )
 from ..properties import cached_property
-from .environment import Environment
 from .lib_manager import LibManager
 from .native_context import NativeContext
 from .objects import (
@@ -90,13 +90,23 @@ __all__ = ("Interpreter",)
 
 
 class Interpreter(ASTVisitor):
-    __slots__ = ("__cs_regex_pattern_cls__", "env", "libs", "module_obj", "version")
+    __slots__ = (
+        "__cs_builtins__",
+        "__cs_regex_pattern_cls__",
+        "libs",
+        "module_obj",
+        "version","env_stack"
+    )
 
     def __init__(self, name: str, *, lib_manager: LibManager | None = None) -> None:
         self.version = _PackagingVersion(__version__)
         self.libs = lib_manager or LibManager()
         self.module_obj = SafModule(name)
-        self.env = Environment(scope=self.module_obj)
+        self.env_stack: list[SafBaseObject] = [self.module_obj]
+
+    @property
+    def env(self) -> SafBaseObject:
+        return self.env_stack[0]
 
     @property
     def name(self) -> str:
@@ -108,20 +118,24 @@ class Interpreter(ASTVisitor):
 
         return SafPattern
 
+    @cached_property("__cs_builtins__")
+    def _builtins(self) -> dict[str, SafBaseObject]:
+        from .libs.builtins import Builtins
+
+        return Builtins().public_attrs
+
     def ctx(self, token: Token) -> NativeContext:
         return NativeContext(self, token)
 
     @contextmanager
-    def scope(self, source: SafBaseObject | None = None) -> Iterator[Environment]:
-        old_env = self.env
+    def scope(self, new: SafBaseObject | None = None) -> Iterator[SafBaseObject]:
+        if new is None:
+            new = SafObject("temp scope")
+            new.set_parent(self.env)
 
-        if source is None:
-            source = SafObject("temp scope")
-            source.set_parent(old_env.scope)
-
-        self.env = Environment(parent=self.env, scope=source)
-        yield self.env
-        self.env = old_env
+        self.env_stack.insert(0, new)
+        yield new
+        assert self.env_stack.pop(0) == new
 
     def visit_program(self, node: ASTProgram | ASTBlock) -> SafBaseObject:
         if len(node.stmts) <= 0:
@@ -137,7 +151,7 @@ class Interpreter(ASTVisitor):
 
     def visit_edit_object(self, node: ASTEditObject) -> SafBaseObject:
         src = node.obj.visit(self)
-        with self.scope(source=src):
+        with self.scope(src):
             self.visit_program(node.block)
         return src
 
@@ -175,10 +189,8 @@ class Interpreter(ASTVisitor):
                 break
 
             try:
-                with self.scope() as env:
-                    env.declare(node.var_name)
-                    env[node.var_name] = item
-                    val = node.body.visit(self)
+                self._var_decl(node.var_name.lexme, item, scope=None, declare=True)
+                val = node.body.visit(self)
             except SafulateInvalidContinue as e:
                 for _ in range(e.amount):
                     try:
@@ -241,33 +253,37 @@ class Interpreter(ASTVisitor):
         self,
         node: ASTVarDecl,
     ) -> SafBaseObject:
-        value = null if node.value is None else node.value.visit(self)
         return self._var_decl(
             node.name.lexme
             if isinstance(node.name, Token)
             else node.name.visit(self).str_spec(self.ctx(node.name_token)),
-            value,
-            scope=node.keyword,
+            null if node.value is None else node.value.visit(self),
+            scope=node.keyword,declare=True
         )
 
     def _var_decl(
-        self, name: str, value: SafBaseObject, *, scope: Token
+        self,
+        name: str,
+        value: SafBaseObject,
+        *,
+        scope: Token | None,
+        declare: bool = False,
     ) -> SafBaseObject:
         match scope:
-            case Token(type=TokenType.PUB):
-                self.env[name] = value
-            case Token(type=TokenType.PRIV):
-                if self.env.scope is None:
-                    raise SafulateScopeError(
-                        "Private vars can only be set while scoped", scope
-                    )
-                self.env.scope.private_attrs[name] = value
-            case Token(lexme=SoftKeyword.SPEC.value):
-                if self.env.scope is None:
-                    raise SafulateScopeError(
-                        "specs can only be set while scoped", scope
-                    )
+            case Token(type=TokenType.PUB) | None:
+                for env in self.env_stack:
+                    if declare or name in env.public_attrs:
+                        env.public_attrs[name] = value
+                        break
+                else:
+                    if name in self._builtins:
+                        self._builtins[name] = value
+                    else:
+                        raise SafulateNameError(f"Name {name!r} is not defined", scope)
 
+            case Token(type=TokenType.PRIV):
+                self.env.private_attrs[name] = value
+            case Token(lexme=SoftKeyword.SPEC.value):
                 try:
                     spec = spec_name_from_str(name)
                 except ValueError:
@@ -275,7 +291,7 @@ class Interpreter(ASTVisitor):
                         f"there is no spec named {name!r}", scope
                     ) from None
 
-                self.env.scope.specs[spec] = value
+                self.env.specs[spec] = value
             case _:
                 raise RuntimeError(f"Unknown var decl keyword: {scope!r}")
         return value
@@ -291,12 +307,12 @@ class Interpreter(ASTVisitor):
             ),
             params=node.params,
             body=node.body,
-            parent=self.env.scope,
+            parent=self.env,
         )
 
     def visit_assign(self, node: ASTAssign) -> SafBaseObject:
         value = node.value.visit(self)
-        self.env[node.name] = value
+        self._var_decl(node.name.lexme, value, scope=None)
         return value
 
     def visit_binary(self, node: ASTBinary) -> SafBaseObject:
@@ -388,7 +404,14 @@ class Interpreter(ASTVisitor):
             case TokenType.STR:
                 return SafStr(node.token.lexme)
             case TokenType.ID:
-                return self.env[node.token]
+                for env in self.env_stack:
+                    if node.token.lexme in env.public_attrs:
+                        return env.public_attrs[node.token.lexme]
+
+                if node.token.lexme in self._builtins:
+                    return self._builtins[node.token.lexme]
+                else:
+                    raise SafulateNameError(f"Name {node.token.lexme!r} is not defined", node.token)
             case TokenType.TYPE:
                 return SafType.base_type()
             case TokenType.ELLIPSIS:
@@ -451,8 +474,7 @@ class Interpreter(ASTVisitor):
                 case other:
                     raise RuntimeError(f"Unknown import source: {other.name!r}")
 
-        self.env.declare(node.name)
-        self.env[node.name] = value
+        self._var_decl(node.name.lexme, value, scope=None, declare=True)
         return value
 
     def visit_raise(self, node: ASTRaise) -> SafBaseObject:
@@ -460,8 +482,13 @@ class Interpreter(ASTVisitor):
         raise SafulateError(val.repr_spec(self.ctx(node.kw)), token=node.kw, obj=val)
 
     def visit_del(self, node: ASTDel) -> SafBaseObject:
-        del self.env.values[node.var.lexme]
-        return null
+        for parent in self.env.walk_parents(include_self=True):
+            if node.var.lexme in parent.public_attrs:
+                return parent.public_attrs.pop(node.var.lexme)
+        if node.var.lexme in self._builtins:
+            return self._builtins.pop(node.var.lexme)
+
+        raise SafulateNameError(f"Name {node.var.lexme!r} is not defined")
 
     def visit_try_catch(self, node: ASTTryCatch) -> SafBaseObject:
         try:
@@ -484,10 +511,11 @@ class Interpreter(ASTVisitor):
                     ):
                         continue
 
-                with self.scope() as env:
+                with self.scope():
                     if branch.var:
-                        env.declare(branch.var)
-                        env[branch.var] = e.saf_value
+                        self._var_decl(
+                            branch.var.lexme, e.saf_value, scope=None, declare=True
+                        )
 
                     return self.visit_program(branch.body)
             raise e
@@ -559,7 +587,7 @@ class Interpreter(ASTVisitor):
                     name=node.name.lexme,
                     params=[],
                     body=node.body,
-                    parent=self.env.scope,
+                    parent=self.env,
                 )
             ),
             scope=node.kw_token.with_type(TokenType.PUB),
@@ -576,7 +604,7 @@ class Interpreter(ASTVisitor):
             init=node.init.visit(self) if node.init else None,
             arity=node.arity,
         )
-        obj.set_parent(self.env.scope)
+        obj.set_parent(self.env)
 
         with self.scope(obj):
             if node.body:
@@ -586,11 +614,24 @@ class Interpreter(ASTVisitor):
 
         return obj
 
+    def _get_scope_parent(self, levels: list[Token]) -> SafBaseObject:
+        _levels = levels.copy()
+        assert self.env
+
+        for scope in self.env.walk_parents(include_self=True):
+            if _levels:
+                _levels.pop(0)
+
+            if not _levels:
+                return scope
+
+        raise SafulateScopeError("Can't go any futher", levels[-1])
+
     def visit_get_par(self, node: ASTPar) -> SafBaseObject:
-        return self.env.get_scope_parent(node.levels)
+        return self._get_scope_parent(node.levels)
 
     def visit_get_priv(self, node: ASTGetPriv) -> SafBaseObject:
-        scope = self.env.get_scope_parent(node.levels)
+        scope = self._get_scope_parent(node.levels)
         val = scope.private_attrs.get(node.name.lexme)
 
         if val is None:

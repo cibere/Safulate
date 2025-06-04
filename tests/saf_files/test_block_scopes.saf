@@ -1,0 +1,13 @@
+pub module_var = 4;
+
+{
+    pub outer_var = 5;
+
+    {
+        pub inner_var = 6;
+
+        assert(module_var == 4);
+        assert(outer_var == 5);
+        assert(inner_var == 6);
+    }
+}

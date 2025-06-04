@@ -876,7 +876,8 @@ class Parser:
             else:
                 temp.append(self.expr())
 
-        parts.append(ASTBlock(temp))
+        if temp:
+            parts.append(ASTBlock(temp))
         self.consume(TokenType.RSQB, "Expected ']'")
 
         return ASTList(parts)

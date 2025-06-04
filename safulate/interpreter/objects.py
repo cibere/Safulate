@@ -409,6 +409,19 @@ class SafBaseObject(ABC):
         else:
             self.specs.pop(AttrSpec.parent, None)
 
+    def walk_parents(self, *, include_self: bool = False) -> Iterator[SafBaseObject]:
+        if include_self:
+            yield self
+
+        scope: SafBaseObject | None = self
+        while 1:
+            scope = scope.parent
+
+            if scope:
+                yield scope
+            else:
+                break
+
 
 class SafType(SafBaseObject):
     def __init__(
@@ -1316,8 +1329,7 @@ class SafFunc(SafObject):
         ret_value = null
         with ctx.interpreter.scope(self.get_scope(ctx)):
             for param, value in params.items():
-                ctx.interpreter.env.declare(param)
-                ctx.interpreter.env[param] = value
+                ctx.interpreter._var_decl(param, value, scope=None, declare=True)
 
             try:
                 ctx.interpreter.visit_program(self.body)

@@ -48,21 +48,13 @@ class Builtins(SafModule):
 
     @public_method("globals")
     def get_globals(self, ctx: NativeContext) -> SafBaseObject:
-        return SafDict.from_data(ctx, dict(list(ctx.walk_envs())[-1].values.items()))
-
-    @public_method("locals")
-    def get_locals(self, ctx: NativeContext) -> SafBaseObject:
-        return SafDict.from_data(ctx, dict(next(ctx.walk_envs()).values.items()))
+        return SafDict.from_data(
+            ctx, dict(list(ctx.cur_scope.walk_parents())[-1].public_attrs.items())
+        )
 
     @public_method("id")
     def get_id(self, ctx: NativeContext, obj: SafBaseObject) -> SafBaseObject:
         return SafNum(id(obj))
-
-    @public_method("rollback_scope")
-    def rollback_scope(self, ctx: NativeContext) -> SafBaseObject:
-        if ctx.env.parent:
-            ctx.interpreter.env = ctx.env.parent
-        return null
 
     @public_method("assert")
     def assert_(

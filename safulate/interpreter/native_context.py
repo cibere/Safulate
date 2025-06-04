@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, cast
 
 from ..errors import SafulateError, SafulateTypeError
@@ -17,10 +16,7 @@ from .objects import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
-
     from ..lexer import Token
-    from .environment import Environment
     from .interpreter import Interpreter
 
 __all__ = ("NativeContext",)
@@ -53,18 +49,8 @@ class NativeContext:
         return self.invoke(func.specs[spec_name], *args, **kwargs)
 
     @property
-    def env(self) -> Environment:
-        return self.interpreter.env
-
-    def walk_envs(self) -> Iterator[Environment]:
-        env: Environment | None = self.env
-
-        while 1:
-            if env:
-                yield env
-            else:
-                break
-            env = env.parent
+    def cur_scope(self) -> SafBaseObject:
+        return self.interpreter.cur_scope
 
     def python_to_values(self, obj: Any) -> SafBaseObject:
         if obj is None:
