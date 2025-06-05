@@ -388,6 +388,11 @@ class Parser:
         self.consume(TokenType.SEMI, "Expected ';' to end annotation")
         return expr
 
+    def dynamic_id(self, msg: str = "Expected ID") -> tuple[Token, ASTNode | Token]:
+        if self.check(TokenType.LBRC):
+            return self.peek(), self.block()
+        return self.peek(), self.consume(TokenType.ID, msg)
+
     def program(self) -> ASTNode:
         stmts: list[ASTNode] = []
 
@@ -409,17 +414,6 @@ class Parser:
         self.consume(TokenType.SEMI, "Expected ';'")
         return ASTExprStmt(expr)
 
-    @reg_stmt(TokenType.LBRC)
-    def block(self) -> ASTBlock:
-        self.consume(TokenType.LBRC, "Expected '{'")
-        stmts: list[ASTNode] = []
-
-        while not self.check(TokenType.RBRC):
-            stmts.append(self.stmt())
-
-        self.consume(TokenType.RBRC, "Expected '}'")
-        return ASTBlock(stmts)
-
     @reg_stmt(
         (TokenType.PRIV, TokenType.PUB, None),
         TokenType.TYPE,
@@ -432,14 +426,8 @@ class Parser:
             "Expected 'type' keyword to start a type declaration statement",
         )
 
-        name_token: Token
-        name: Token | ASTNode
+        name_token, name = self.dynamic_id("Expected name for new type")
         var_name: Token | ASTNode | None = None
-        if self.check(TokenType.LBRC):
-            name_token = self.peek()
-            name = self.block()
-        else:
-            name = name_token = self.consume(TokenType.ID, "Expected name for new type")
 
         if self.match(TokenType.AT):
             var_name = self.consume(
@@ -526,12 +514,7 @@ class Parser:
     )
     def func_decl_stmt(self) -> ASTNode | None:
         kw_token = self.advance()
-
-        if self.check(TokenType.LBRC):
-            name_token = self.peek()
-            name = self.block()
-        else:
-            name_token = name = self.consume(TokenType.ID, "Expected function name")
+        name_token, name = self.dynamic_id("Expected function name")
 
         if not self.check(TokenType.LPAR):
             return
@@ -775,6 +758,17 @@ class Parser:
             return self.consume_binary_op(self.consume_calls(expr))
 
         raise SafulateSyntaxError("Expected Expression", self.peek())
+
+    @reg_expr(TokenType.LBRC)
+    def block(self) -> ASTBlock:
+        self.consume(TokenType.LBRC, "Expected '{'")
+        stmts: list[ASTNode] = []
+
+        while not self.check(TokenType.RBRC):
+            stmts.append(self.stmt())
+
+        self.consume(TokenType.RBRC, "Expected '}'")
+        return ASTBlock(stmts)
 
     @reg_expr((TokenType.PUB, TokenType.PRIV), TokenType.LPAR)
     def func_decl_expr(self) -> ASTNode:
