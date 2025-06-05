@@ -403,6 +403,9 @@ class Parser:
             return node
 
         expr = self.expr()
+        if self.check(TokenType.RBRC):
+            return expr
+
         self.consume(TokenType.SEMI, "Expected ';'")
         return ASTExprStmt(expr)
 
