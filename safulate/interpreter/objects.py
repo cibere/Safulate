@@ -459,15 +459,7 @@ class SafType(SafBaseObject):
 
     @classmethod
     def base_type(cls) -> Self:
-        def _init(
-            ctx: NativeContext, inp: SafBaseObject, *, init: SafBaseObject = null
-        ) -> SafType:
-            if init is null:
-                return cast("SafType", inp.specs[AttrSpec.type])
-            return cls(inp.str_spec(ctx), init=init)
-
-        self = cls("type", init=SafFunc.from_native("type", _init))
-        return self
+        return cls("type")
 
     @classmethod
     def object_type(cls) -> Self:
@@ -484,13 +476,25 @@ class SafType(SafBaseObject):
         return self
 
     def _attrs_hook(self, attrs: _RawAttrs) -> None:
-        attrs["spec"][AttrSpec.type] = self.base_type()
-        if isinstance(self.init_obj, SafBaseObject):
-            attrs["spec"][CallSpec.init] = self.init_obj
-        elif self.init_obj and isinstance(self.init_obj.init, Callable):
-            attrs["spec"][CallSpec.call] = SafFunc.from_native(
-                "call", self.init_obj.init
-            )
+        if self.name == "type":
+
+            def init(
+                ctx: NativeContext, inp: SafBaseObject, *, init: SafBaseObject = null
+            ) -> SafType:
+                if init is null:
+                    return cast("SafType", inp.specs[AttrSpec.type])
+                return SafType(inp.str_spec(ctx), init=init)
+
+            attrs["spec"][AttrSpec.type] = self
+            attrs["spec"][CallSpec.call] = SafFunc.from_native("init", init)
+        else:
+            attrs["spec"][AttrSpec.type] = self.base_type()
+            if isinstance(self.init_obj, SafBaseObject):
+                attrs["spec"][CallSpec.init] = self.init_obj
+            elif self.init_obj and isinstance(self.init_obj.init, Callable):
+                attrs["spec"][CallSpec.call] = SafFunc.from_native(
+                    "call", self.init_obj.init
+                )
 
     @spec_meth(FormatSpec.repr)
     def repr(self, ctx: NativeContext) -> SafStr:
@@ -1279,7 +1283,7 @@ class SafFunc(SafObject):
             name=cast("SafStr", self.public_attrs["name"]),
             params=self.params,
             body=self.body,
-            parent=self.public_attrs["parent"],
+            parent=self.parent,
             partial_args=args,
             partial_kwargs=kwargs,
         )
@@ -1324,7 +1328,13 @@ class SafFunc(SafObject):
         )
 
         if isinstance(self.body, Callable):
-            return self.body(ctx, *args, **kwargs)
+            return self.body(
+                ctx,
+                *self.partial_args,
+                *args,
+                **self.partial_kwargs,
+                **kwargs,
+            )
 
         ret_value = null
         with ctx.interpreter.scope(self.get_scope(ctx)):
@@ -1410,10 +1420,6 @@ class SafProperty(SafObject):
     @spec_meth(CallSpec.get)
     def get_spec(self, ctx: NativeContext) -> SafBaseObject:
         return ctx.invoke(self.func)
-
-    @public_property("func")
-    def func_prop(self, ctx: NativeContext) -> SafBaseObject:
-        return self.func
 
 
 MISSING: Any = object()
