@@ -27,7 +27,7 @@ from .asts import (
     ASTGetPriv,
     ASTIf,
     ASTImportReq,
-    ASTList,
+    ASTIterable,
     ASTNode,
     ASTPar,
     ASTProgram,
@@ -42,8 +42,9 @@ from .asts import (
     ASTVarDecl,
     ASTVersionReq,
     ASTWhile,
+    Unpackable,
 )
-from .enums import ParamType
+from .enums import IterableType, ParamType
 from .specs import (
     BinarySpec,
     CallSpec,
@@ -390,6 +391,21 @@ class Parser:
         self.consume(TokenType.SEMI, "Expected ';' to end annotation")
         return expr
 
+    def unpackable(self) -> Unpackable:
+        self.consume(TokenType.LPAR)
+        args: list[Token | Unpackable] = []
+
+        for _ in self.walk_split_tokens(delimiter=TokenType.COMMA, end=TokenType.RPAR):
+            if self.check(TokenType.LPAR):
+                args.append(self.unpackable())
+            else:
+                args.append(self.consume(TokenType.ID))
+
+                if self.check(TokenType.COLON):
+                    self.annotation()
+
+        return tuple(args)
+
     def program(self) -> ASTNode:
         stmts: list[ASTNode] = []
 
@@ -521,14 +537,20 @@ class Parser:
 
     @reg_stmt(TokenType.FOR)
     def for_stmt(self) -> ASTNode:
-        self.consume(TokenType.FOR)
-        var = self.consume(TokenType.ID, "Expected name of variable for loop iteration")
+        kw_token = self.consume(TokenType.FOR)
+        vars = (
+            self.unpackable()
+            if self.check(TokenType.LPAR)
+            else self.consume(
+                TokenType.ID, "Expected name of variable for loop iteration"
+            )
+        )
         self.consume(SoftKeyword.IN)
         src = self.expr()
         body = self.block()
 
         self.consume(TokenType.SEMI, "Expected ';'")
-        return ASTForLoop(var_name=var, source=src, body=body)
+        return ASTForLoop(vars=vars, source=src, body=body, kw_token=kw_token)
 
     @reg_stmt(TokenType.RETURN)
     def return_stmt(self) -> ASTNode:
@@ -850,13 +872,13 @@ class Parser:
                 pass
         return ASTAssign(name=name, value=value)
 
-    @reg_expr(TokenType.LSQB)
-    def list_syntax(self) -> ASTNode:
-        self.consume(TokenType.LSQB)
+    def _iterable_body(
+        self, iterable_type: IterableType, *, end: TokenType
+    ) -> ASTIterable:
         parts: list[ASTBlock] = []
         temp: list[ASTNode] = []
 
-        while not self.check(TokenType.RSQB):
+        while not self.check(end):
             if self.check(TokenType.COMMA):
                 parts.append(ASTBlock(temp))
                 temp = []
@@ -866,9 +888,20 @@ class Parser:
 
         if temp:
             parts.append(ASTBlock(temp))
-        self.consume(TokenType.RSQB, "Expected ']'")
+        self.consume(end)
 
-        return ASTList(parts)
+        return ASTIterable(parts, iterable_type)
+
+    @reg_expr(TokenType.LSQB)
+    def list_syntax(self) -> ASTNode:
+        self.consume(TokenType.LSQB)
+        return self._iterable_body(IterableType.list, end=TokenType.RSQB)
+
+    @reg_expr(TokenType.LPAR, TokenType.COMMA)
+    def tuple_syntax(self) -> ASTNode:
+        self.consume(TokenType.LPAR)
+        self.consume(TokenType.COMMA)
+        return self._iterable_body(IterableType.tuple, end=TokenType.RPAR)
 
     @reg_expr(TokenType.LPAR)
     def expr_group_syntax(self) -> ASTNode:

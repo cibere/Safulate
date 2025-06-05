@@ -39,7 +39,7 @@ from ..parser import (
     ASTGetPriv,
     ASTIf,
     ASTImportReq,
-    ASTList,
+    ASTIterable,
     ASTNode,
     ASTPar,
     ASTProgram,
@@ -59,6 +59,7 @@ from ..parser import (
     FormatSpec,
     ParamType,
     UnarySpec,
+    Unpackable,
     spec_name_from_str,
 )
 from ..properties import cached_property
@@ -177,7 +178,7 @@ class Interpreter(ASTVisitor):
         return val
 
     def visit_for_loop(self, node: ASTForLoop) -> SafBaseObject:
-        ctx = self.ctx(node.var_name)
+        ctx = self.ctx(node.kw_token)
         src = ctx.invoke_spec(node.source.visit(self), CallSpec.iter)
 
         val = null
@@ -189,7 +190,9 @@ class Interpreter(ASTVisitor):
                 break
 
             try:
-                self._var_decl(node.var_name.lexme, item, scope=None, declare=True)
+                self.env.public_attrs.update(
+                    self.unpack(node.vars, item, node.kw_token)
+                )
                 val = node.body.visit(self)
             except SafulateInvalidContinue as e:
                 for _ in range(e.amount):
@@ -261,6 +264,24 @@ class Interpreter(ASTVisitor):
             scope=node.keyword,
             declare=True,
         )
+
+    def unpack(
+        self, vars: Unpackable | Token, value: SafBaseObject, token: Token
+    ) -> dict[str, SafBaseObject]:
+        final: dict[str, SafBaseObject] = {}
+
+        if isinstance(vars, Token):
+            return {vars.lexme: value}
+
+        for var, val in zip(vars, value.iter_spec(self.ctx(token))):
+            if isinstance(var, tuple):
+                final.update(self.unpack(var, val, token))
+            elif isinstance(var, Token):
+                final[var.lexme] = val
+            else:
+                final[var.resolve(self)] = val
+
+        return final
 
     def _var_decl(
         self,
@@ -569,7 +590,7 @@ class Interpreter(ASTVisitor):
             node.else_branch.visit(self)
         return null
 
-    def visit_list(self, node: ASTList) -> SafList:
+    def visit_list(self, node: ASTIterable) -> SafList:
         return SafList([child.visit(self) for child in node.children])
 
     def visit_format(self, node: ASTFormat) -> SafBaseObject:

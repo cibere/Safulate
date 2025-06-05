@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ..utils import Enum
 
-__all__ = ("ParamType",)
+__all__ = ("IterableType", "ParamType")
 
 
 class ParamType(Enum):
@@ -17,3 +17,9 @@ class ParamType(Enum):
             ParamType.kwarg: "keyword ",
             ParamType.arg: "positional ",
         }.get(self, "")
+
+
+class IterableType(Enum):
+    list = "["
+    tuple = "("
+    gen = ""

@@ -2,15 +2,17 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeAlias
 
 from ..lexer import Token, TokenType
-from .enums import ParamType
+from .enums import IterableType, ParamType
 
 if TYPE_CHECKING:
     from packaging.version import Version as _PackagingVersion
 
     from ..interpreter import SafBaseObject
+
+Unpackable: TypeAlias = tuple["Token | ASTDynamicID | Unpackable", ...]
 
 __all__ = (
     "ASTAssign",
@@ -31,7 +33,7 @@ __all__ = (
     "ASTGetPriv",
     "ASTIf",
     "ASTImportReq",
-    "ASTList",
+    "ASTIterable",
     "ASTNode",
     "ASTPar",
     "ASTProgram",
@@ -48,6 +50,7 @@ __all__ = (
     "ASTVisitor",
     "ASTWhile",
     "ParamType",
+    "Unpackable",
 )
 
 
@@ -279,9 +282,10 @@ class ASTRaise(ASTNode):
 
 @dataclass
 class ASTForLoop(ASTNode):
-    var_name: Token
+    vars: Unpackable | Token
     source: ASTNode
     body: ASTNode
+    kw_token: Token
 
     def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_for_loop(self)
@@ -324,8 +328,9 @@ class ASTSwitchCase(ASTNode):
 
 
 @dataclass
-class ASTList(ASTNode):
+class ASTIterable(ASTNode):
     children: list[ASTBlock]
+    type: IterableType
 
     def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_list(self)
@@ -426,7 +431,7 @@ class ASTVisitor(ABC):
     @abstractmethod
     def visit_continue(self, node: ASTContinue) -> SafBaseObject: ...
     @abstractmethod
-    def visit_list(self, node: ASTList) -> SafBaseObject: ...
+    def visit_list(self, node: ASTIterable) -> SafBaseObject: ...
     @abstractmethod
     def visit_format(self, node: ASTFormat) -> SafBaseObject: ...
     @abstractmethod
