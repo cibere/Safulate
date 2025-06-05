@@ -49,8 +49,8 @@ class NativeContext:
         return self.invoke(func.specs[spec_name], *args, **kwargs)
 
     @property
-    def cur_scope(self) -> SafBaseObject:
-        return self.interpreter.cur_scope
+    def env(self) -> SafBaseObject:
+        return self.interpreter.env
 
     def python_to_values(self, obj: Any) -> SafBaseObject:
         if obj is None:

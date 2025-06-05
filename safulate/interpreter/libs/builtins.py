@@ -49,7 +49,7 @@ class Builtins(SafModule):
     @public_method("globals")
     def get_globals(self, ctx: NativeContext) -> SafBaseObject:
         return SafDict.from_data(
-            ctx, dict(list(ctx.cur_scope.walk_parents())[-1].public_attrs.items())
+            ctx, dict(list(ctx.env.walk_parents())[-1].public_attrs.items())
         )
 
     @public_method("id")
