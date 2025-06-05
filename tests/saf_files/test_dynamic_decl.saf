@@ -1,0 +1,29 @@
+pub x = "test";
+
+### Func
+{
+    pub {f"func_{x}"}(){
+        return 6;
+    };
+    assert(func_test() == 6);
+
+    priv {f"func_{x}"}(){
+        return 6;
+    };
+    assert(\func_test() == 6);
+};
+
+### Var
+{
+    pub {f"var_{x}"} = 5;
+    assert(var_test == 5);
+
+    priv {f"var_{x}"} = 5;
+    assert(\var_test == 5);
+};
+
+### Type
+{
+    type {f"type_{x}"} @ NewType {};
+    assert(NewType:r == "<type 'type_test'>");
+};
