@@ -783,14 +783,7 @@ class Parser:
         keyword = self.consume(
             (TokenType.PUB, TokenType.PRIV), "Expected var decl keyword"
         )
-
-        name_token: Token
-        name: Token | ASTNode
-        if self.check(TokenType.LBRC):
-            name_token = self.peek()
-            name = self.block()
-        else:
-            name = name_token = self.consume(TokenType.ID, "Expected variable name")
+        name_token, name = self.dynamic_id("Expected variable name")
 
         if self.check(TokenType.COLON):
             self.annotation()
@@ -896,8 +889,8 @@ class Parser:
             if self.check(TokenType.FSTR_START, TokenType.FSTR_MIDDLE) or (
                 end_reached := self.check(TokenType.FSTR_END)
             ):
-                self.tokens[self.current].type = TokenType.STR
-                parts.append(self.atom())
+                token = self.advance()
+                parts.append(ASTAtom(token.mock(TokenType.STR, lexme=token.lexme)))
             else:
                 parts.append(self.expr())
             if end_reached:
