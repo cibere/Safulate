@@ -1,13 +1,19 @@
 pub x = "test";
 
+### Inline
+{
+    pub inline_test = 2;
+    assert({:f"inline_{x}"} == 2);
+};
+
 ### Func
 {
-    pub {f"func_{x}"}(){
+    pub {:f"func_{x}"}(){
         return 6;
     };
     assert(func_test() == 6);
 
-    priv {f"func_{x}"}(){
+    priv {:f"func_{x}"}(){
         return 6;
     };
     assert(\func_test() == 6);
@@ -15,15 +21,15 @@ pub x = "test";
 
 ### Var
 {
-    pub {f"var_{x}"} = 5;
+    pub {:f"var_{x}"} = 5;
     assert(var_test == 5);
 
-    priv {f"var_{x}"} = 5;
+    priv {:f"var_{x}"} = 5;
     assert(\var_test == 5);
 };
 
 ### Type
 {
-    type {f"type_{x}"} @ NewType {};
+    type {:f"type_{x}"} @ NewType {};
     assert(NewType:r == "<type 'type_test'>");
 };

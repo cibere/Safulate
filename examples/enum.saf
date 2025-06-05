@@ -1,19 +1,19 @@
-pub Enum(name, ...kwargs) {
-    type {name;} @ NewEnum {
+pub Enum(enum_name, ...kwargs) {
+    type {:enum_name} @ NewEnum {
         pub members = [];
-        priv name = name;
+        priv name = enum_name;
 
         for kwarg in kwargs.items() {
             pub value = $$(kwarg[0], kwarg[1]);
             members.append(value);
 
             $$ ~ {
-                pub {value.name;} = value;
+                pub {:value.name} = value;
             };
         };
     } -> (name, value) {
-        pub name = name;
-        pub value = value;
+        pub name =;
+        pub value =;
 
         spec repr(){
             return f"{\\\name}.{$$.name}";

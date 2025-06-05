@@ -1,0 +1,15 @@
+### Test with static var
+{
+    type Test {} -> (boo) {
+        pub boo =;
+    };
+    assert(Test(5).boo == 5);
+};
+
+### Test with dynamic var
+{
+    type Test {} -> (boo) {
+        pub {:"boo"} =;
+    };
+    assert(Test(4).boo == 4, Test(4).boo);
+};

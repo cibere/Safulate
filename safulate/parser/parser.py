@@ -17,6 +17,7 @@ from .asts import (
     ASTCall,
     ASTContinue,
     ASTDel,
+    ASTDynamicID,
     ASTEditObject,
     ASTExprStmt,
     ASTForLoop,
@@ -299,7 +300,9 @@ class Parser:
 
             yield ASTFuncDecl_Param(name=param_name, default=default, type=param_type)
 
-    def _func_decl(self, *, kw_token: Token, name: Token | ASTNode | None) -> ASTNode:
+    def _func_decl(
+        self, *, kw_token: Token, name: Token | ASTDynamicID | None
+    ) -> ASTNode:
         paren_token = self.consume(TokenType.LPAR, "Expected '('")
         params = list(self._func_params())
 
@@ -388,11 +391,6 @@ class Parser:
         self.consume(TokenType.SEMI, "Expected ';' to end annotation")
         return expr
 
-    def dynamic_id(self, msg: str = "Expected ID") -> tuple[Token, ASTNode | Token]:
-        if self.check(TokenType.LBRC):
-            return self.peek(), self.block()
-        return self.peek(), self.consume(TokenType.ID, msg)
-
     def program(self) -> ASTNode:
         stmts: list[ASTNode] = []
 
@@ -426,7 +424,7 @@ class Parser:
             "Expected 'type' keyword to start a type declaration statement",
         )
 
-        name_token, name = self.dynamic_id("Expected name for new type")
+        dyn_name = self.dynamic_id("Expected name for new type")
         var_name: Token | ASTNode | None = None
 
         if self.match(TokenType.AT):
@@ -443,7 +441,7 @@ class Parser:
         if self.check(TokenType.LPAR):
             compare_func = self._func_decl(
                 kw_token=scope_token,
-                name=name,
+                name=dyn_name.token.with_type(TokenType.ID, lexme="check"),
             )
 
         if (
@@ -463,22 +461,21 @@ class Parser:
 
             init = self._func_decl(
                 kw_token=scope_token,
-                name=name,
+                name=dyn_name.token.with_type(TokenType.ID, lexme="init"),
             )
 
         self.consume(TokenType.SEMI, "Expected ';'")
         return ASTVarDecl(
-            name=var_name or name,
+            name=var_name or dyn_name,
             value=ASTTypeDecl(
                 body=body,
                 compare_func=compare_func,
                 init=cast("ASTFuncDecl", init),
                 arity=arity,
-                name=name,
+                name=dyn_name,
                 kw_token=kw_token,
             ),
             keyword=scope_token,
-            name_token=name_token,
         )
 
     @reg_stmt(SoftKeyword.PROP, TokenType.ID, TokenType.LBRC)
@@ -514,17 +511,19 @@ class Parser:
     )
     def func_decl_stmt(self) -> ASTNode | None:
         kw_token = self.advance()
-        name_token, name = self.dynamic_id("Expected function name")
+        dyn_name = self.dynamic_id("Expected function name")
+
+        var_name: Token | ASTDynamicID = dyn_name
+        if self.check(TokenType.AT):
+            var_name = self.consume(TokenType.ID, "Expected name for var declaration")
 
         if not self.check(TokenType.LPAR):
             return
 
-        func = self._func_decl(kw_token=kw_token, name=name)
+        func = self._func_decl(kw_token=kw_token, name=dyn_name)
         self.consume(TokenType.SEMI, "Expected ';'")
 
-        return ASTVarDecl(
-            name=name, value=func, keyword=kw_token, name_token=name_token
-        )
+        return ASTVarDecl(name=var_name, value=func, keyword=kw_token)
 
     @reg_stmt(TokenType.WHILE)
     def while_stmt(self) -> ASTNode:
@@ -628,7 +627,6 @@ class Parser:
                                 attr=name,
                                 dot=Token.mock(TokenType.DOT, start=kwd.start),
                             ),
-                            name_token=name,
                         )
                         for name in names
                     ],
@@ -759,15 +757,29 @@ class Parser:
 
         raise SafulateSyntaxError("Expected Expression", self.peek())
 
+    @reg_expr(TokenType.LBRC, TokenType.COLON)
+    def dynamic_id(self, msg: str = "Expected ID") -> ASTDynamicID:
+        if self.check_sequence(TokenType.LBRC, TokenType.COLON):
+            self.advance()  # eat '{'
+            token = self.advance()  # eat ':'
+            expr = self.block(eat_braces=False)
+            self.advance()  # eat '}'
+
+            return ASTDynamicID(token=token, expr=expr)
+        return ASTDynamicID(token=self.consume(TokenType.ID, msg), expr=None)
+
     @reg_expr(TokenType.LBRC)
-    def block(self) -> ASTBlock:
-        self.consume(TokenType.LBRC, "Expected '{'")
+    def block(self, *, eat_braces: bool = True) -> ASTBlock:
+        if eat_braces:
+            self.consume(TokenType.LBRC, "Expected '{'")
+
         stmts: list[ASTNode] = []
 
         while not self.check(TokenType.RBRC):
             stmts.append(self.stmt())
 
-        self.consume(TokenType.RBRC, "Expected '}'")
+        if eat_braces:
+            self.consume(TokenType.RBRC, "Expected '}'")
         return ASTBlock(stmts)
 
     @reg_expr((TokenType.PUB, TokenType.PRIV), TokenType.LPAR)
@@ -783,16 +795,17 @@ class Parser:
         keyword = self.consume(
             (TokenType.PUB, TokenType.PRIV), "Expected var decl keyword"
         )
-        name_token, name = self.dynamic_id("Expected variable name")
+        dyn_name = self.dynamic_id("Expected variable name")
 
         if self.check(TokenType.COLON):
             self.annotation()
 
         return ASTVarDecl(
             keyword=keyword,
-            name=name,
-            value=self.expr() if self.match(TokenType.EQ) else None,
-            name_token=name_token,
+            name=dyn_name,
+            value=((dyn_name) if self.check(TokenType.SEMI) else self.expr())
+            if self.match(TokenType.EQ)
+            else None,
         )
 
     @reg_expr(TokenType.IF)

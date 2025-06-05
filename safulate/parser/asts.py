@@ -21,6 +21,7 @@ __all__ = (
     "ASTCall",
     "ASTContinue",
     "ASTDel",
+    "ASTDynamicID",
     "ASTEditObject",
     "ASTExprStmt",
     "ASTForLoop",
@@ -65,11 +66,22 @@ class ASTProgram(ASTNode):
 
 
 @dataclass
+class ASTDynamicID(ASTNode):
+    token: Token
+    expr: ASTNode | None
+
+    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
+        return visitor.visit_dynamic_id(self)
+
+    def resolve(self, visitor: ASTVisitor) -> str:
+        return visitor.resolve_dynamic_id(self)
+
+
+@dataclass
 class ASTVarDecl(ASTNode):
-    name: Token | ASTNode
+    name: ASTDynamicID | Token
     value: ASTNode | None
     keyword: Token
-    name_token: Token
 
     def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_var_decl(self)
@@ -92,7 +104,7 @@ class ASTFuncDecl_Param:
 
 @dataclass
 class ASTFuncDecl(ASTNode):
-    name: Token | ASTNode | None
+    name: Token | ASTDynamicID | None
     params: list[ASTFuncDecl_Param]
     body: ASTBlock
 
@@ -349,7 +361,7 @@ class ASTRegex(ASTNode):
 
 @dataclass
 class ASTTypeDecl(ASTNode):
-    name: Token | ASTNode
+    name: Token | ASTDynamicID
     body: ASTBlock | None
     init: ASTFuncDecl | None
     compare_func: ASTNode | None
@@ -438,3 +450,7 @@ class ASTVisitor(ABC):
     def visit_get_par(self, node: ASTPar) -> SafBaseObject: ...
     @abstractmethod
     def visit_get_priv(self, node: ASTGetPriv) -> SafBaseObject: ...
+    @abstractmethod
+    def visit_dynamic_id(self, node: ASTDynamicID) -> SafBaseObject: ...
+    @abstractmethod
+    def resolve_dynamic_id(self, node: ASTDynamicID) -> str: ...

@@ -30,6 +30,7 @@ from ..parser import (
     ASTCall,
     ASTContinue,
     ASTDel,
+    ASTDynamicID,
     ASTEditObject,
     ASTExprStmt,
     ASTForLoop,
@@ -257,7 +258,7 @@ class Interpreter(ASTVisitor):
         return self._var_decl(
             node.name.lexme
             if isinstance(node.name, Token)
-            else node.name.visit(self).str_spec(self.ctx(node.name_token)),
+            else node.name.resolve(self),
             null if node.value is None else node.value.visit(self),
             scope=node.keyword,
             declare=True,
@@ -305,7 +306,7 @@ class Interpreter(ASTVisitor):
             else (
                 node.name.lexme
                 if isinstance(node.name, Token)
-                else node.name.visit(self).str_spec(self.ctx(node.kw_token))
+                else node.name.resolve(self)
             ),
             params=node.params,
             body=node.body,
@@ -399,6 +400,16 @@ class Interpreter(ASTVisitor):
             **kwargs,
         )
 
+    def _get_var(self, name: str, token: Token) -> SafBaseObject:
+        for env in self.env_stack:
+            if name in env.public_attrs:
+                return env.public_attrs[name]
+
+        if name in self._builtins:
+            return self._builtins[name]
+        else:
+            raise SafulateNameError(f"Name {name!r} is not defined", token)
+
     def visit_atom(self, node: ASTAtom) -> SafBaseObject:
         match node.token.type:
             case TokenType.NUM:
@@ -406,16 +417,7 @@ class Interpreter(ASTVisitor):
             case TokenType.STR:
                 return SafStr(node.token.lexme)
             case TokenType.ID:
-                for env in self.env_stack:
-                    if node.token.lexme in env.public_attrs:
-                        return env.public_attrs[node.token.lexme]
-
-                if node.token.lexme in self._builtins:
-                    return self._builtins[node.token.lexme]
-                else:
-                    raise SafulateNameError(
-                        f"Name {node.token.lexme!r} is not defined", node.token
-                    )
+                return self._get_var(node.token.lexme, node.token)
             case TokenType.TYPE:
                 return SafType.base_type()
             case TokenType.ELLIPSIS:
@@ -604,7 +606,7 @@ class Interpreter(ASTVisitor):
         obj = SafType(
             node.name.lexme
             if isinstance(node.name, Token)
-            else node.name.visit(self).str_spec(self.ctx(node.kw_token)),
+            else node.name.resolve(self),
             init=node.init.visit(self) if node.init else None,
             arity=node.arity,
         )
@@ -644,3 +646,13 @@ class Interpreter(ASTVisitor):
                 node.name,
             )
         return val
+
+    def visit_dynamic_id(self, node: ASTDynamicID) -> SafBaseObject:
+        return self._get_var(node.resolve(self), node.token)
+
+    def resolve_dynamic_id(self, node: ASTDynamicID) -> str:
+        return (
+            node.token.lexme
+            if node.expr is None
+            else node.expr.visit(self).str_spec(self.ctx(node.token))
+        )
