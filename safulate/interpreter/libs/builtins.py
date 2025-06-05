@@ -1,15 +1,17 @@
 from __future__ import annotations
 
-from typing import Never
+from typing import Any, Never
 
-from safulate import SafulateAssertionError
+from safulate import SafulateAssertionError, SafulateTypeError
 from safulate.interpreter import (
     NativeContext,
     SafBaseObject,
     SafDict,
+    SafFunc,
     SafList,
     SafModule,
     SafNum,
+    SafProperty,
     SafStr,
     SafTuple,
     SafType,
@@ -18,6 +20,8 @@ from safulate.interpreter import (
     public_method,
     true,
 )
+
+_MOCK_ANY: Any = 0
 
 
 class Builtins(SafModule):
@@ -74,6 +78,15 @@ class Builtins(SafModule):
             attrs.update({f"%{key}": val for key, val in obj.specs.items()})
 
         return SafList([SafStr(attr) for attr in attrs])
+
+    @public_method("property")
+    def property(self, ctx: NativeContext, func: SafBaseObject) -> SafBaseObject:
+        if not isinstance(func, SafFunc):
+            raise SafulateTypeError(
+                f"Expected func, received {func.repr_spec(ctx)} instead"
+            )
+
+        return SafProperty(func)
 
 
 def load(ctx: NativeContext) -> SafModule:

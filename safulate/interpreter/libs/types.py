@@ -15,6 +15,7 @@ pub SyntaxError = type(object("SyntaxError"));
 pub TypeError = type(object("TypeError"));
 pub ValueError = type(object("ValueError"));
 pub IndexError = type(object("IndexError"));
+pub property = type(property(pub(){}));
 """
 
 

@@ -43,7 +43,6 @@ from ..parser import (
     ASTNode,
     ASTPar,
     ASTProgram,
-    ASTProperty,
     ASTRaise,
     ASTRegex,
     ASTReturn,
@@ -74,7 +73,6 @@ from .objects import (
     SafModule,
     SafNum,
     SafObject,
-    SafProperty,
     SafStr,
     SafType,
     false,
@@ -584,20 +582,6 @@ class Interpreter(ASTVisitor):
             spec = CallSpec.format
 
         return self.ctx(node.spec).invoke_spec(node.obj.visit(self), spec, *args)
-
-    def visit_property(self, node: ASTProperty) -> SafBaseObject:
-        return self._var_decl(
-            name=node.name.lexme,
-            value=SafProperty(
-                SafFunc(
-                    name=node.name.lexme,
-                    params=[],
-                    body=node.body,
-                    parent=self.env,
-                )
-            ),
-            scope=node.kw_token.with_type(TokenType.PUB),
-        )
 
     def visit_regex(self, node: ASTRegex) -> SafBaseObject:
         return self.regex_pattern_cls(re.compile(node.value.lexme[2:-1]))

@@ -31,7 +31,6 @@ from .asts import (
     ASTNode,
     ASTPar,
     ASTProgram,
-    ASTProperty,
     ASTRaise,
     ASTRegex,
     ASTReturn,
@@ -477,20 +476,6 @@ class Parser:
             ),
             keyword=scope_token,
         )
-
-    @reg_stmt(SoftKeyword.PROP, TokenType.ID, TokenType.LBRC)
-    # @reg_stmt(SoftKeyword.PROP, TokenType.LBRC)
-    def prop_decl(self) -> ASTNode:
-        kw_token = self.advance()
-        name = self.advance()
-
-        if self.check(TokenType.COLON):
-            self.annotation()
-
-        body = self.block()
-
-        self.consume(TokenType.SEMI, "Expected ';'")
-        return ASTProperty(body=body, name=name, kw_token=kw_token)
 
     @reg_stmt(
         (

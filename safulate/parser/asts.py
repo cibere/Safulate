@@ -35,7 +35,6 @@ __all__ = (
     "ASTNode",
     "ASTPar",
     "ASTProgram",
-    "ASTProperty",
     "ASTRaise",
     "ASTRegex",
     "ASTReturn",
@@ -342,16 +341,6 @@ class ASTFormat(ASTNode):
 
 
 @dataclass
-class ASTProperty(ASTNode):
-    body: ASTBlock
-    name: Token
-    kw_token: Token
-
-    def visit(self, visitor: ASTVisitor) -> SafBaseObject:
-        return visitor.visit_property(self)
-
-
-@dataclass
 class ASTRegex(ASTNode):
     value: Token
 
@@ -440,8 +429,6 @@ class ASTVisitor(ABC):
     def visit_list(self, node: ASTList) -> SafBaseObject: ...
     @abstractmethod
     def visit_format(self, node: ASTFormat) -> SafBaseObject: ...
-    @abstractmethod
-    def visit_property(self, node: ASTProperty) -> SafBaseObject: ...
     @abstractmethod
     def visit_regex(self, node: ASTRegex) -> SafBaseObject: ...
     @abstractmethod
