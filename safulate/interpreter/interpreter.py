@@ -93,9 +93,10 @@ class Interpreter(ASTVisitor):
     __slots__ = (
         "__cs_builtins__",
         "__cs_regex_pattern_cls__",
+        "env_stack",
         "libs",
         "module_obj",
-        "version","env_stack"
+        "version",
     )
 
     def __init__(self, name: str, *, lib_manager: LibManager | None = None) -> None:
@@ -258,7 +259,8 @@ class Interpreter(ASTVisitor):
             if isinstance(node.name, Token)
             else node.name.visit(self).str_spec(self.ctx(node.name_token)),
             null if node.value is None else node.value.visit(self),
-            scope=node.keyword,declare=True
+            scope=node.keyword,
+            declare=True,
         )
 
     def _var_decl(
@@ -411,7 +413,9 @@ class Interpreter(ASTVisitor):
                 if node.token.lexme in self._builtins:
                     return self._builtins[node.token.lexme]
                 else:
-                    raise SafulateNameError(f"Name {node.token.lexme!r} is not defined", node.token)
+                    raise SafulateNameError(
+                        f"Name {node.token.lexme!r} is not defined", node.token
+                    )
             case TokenType.TYPE:
                 return SafType.base_type()
             case TokenType.ELLIPSIS:

@@ -1,0 +1,24 @@
+pub Enum(name, ...kwargs) {
+    type {name;} @ NewEnum {
+        pub members = [];
+        priv name = name;
+
+        for kwarg in kwargs.items() {
+            pub value = $$(kwarg[0], kwarg[1]);
+            members.append(value);
+
+            $$ ~ {
+                pub {value.name;} = value;
+            };
+        };
+    } -> (name, value) {
+        pub name = name;
+        pub value = value;
+
+        spec repr(){
+            return f"{\\\name}.{$$.name}";
+        };
+    };
+
+    return NewEnum;
+};
