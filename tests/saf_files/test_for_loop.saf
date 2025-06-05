@@ -1,0 +1,53 @@
+{
+    pub case = [1, 1, 1, 1, 1, 1, 1, 1];
+    pub idx = 0;
+
+    for item in case {
+        assert(item == 1);
+        idx += 1;
+    };
+
+    assert(idx == 8);
+};
+{
+    pub case = [
+        (, 0, 1, 2),
+        (, 0, 1, 2),
+        (, 0, 1, 2),
+        (, 0, 1, 2),
+        (, 0, 1, 2)
+    ];
+    pub idx = 0;
+
+    for (zero, one, two) in case {
+        assert(zero == 0);
+        assert(one == 1);
+        assert(two == 2);
+        idx += 1;
+    };
+
+    assert(idx == 5);
+};
+{
+    pub case = [
+        (, 0, 1, (, 2, 3, 4), 5),
+        (, 0, 1, (, 2, 3, 4), 5),
+        (, 0, 1, (, 2, 3, 4), 5),
+        (, 0, 1, (, 2, 3, 4), 5),
+        (, 0, 1, (, 2, 3, 4), 5)
+    ];
+    pub idx = 0;
+
+    for (zero, one, (two, three, four), five) in case {
+        assert(zero == 0);
+        assert(one == 1);
+        assert(two == 2);
+        assert(three == 3);
+        assert(four == 4);
+        assert(five == 5);
+
+        idx += 1;
+    };
+
+    assert(idx == 5);
+};
