@@ -1,0 +1,51 @@
+### Partial Funcs
+{
+    pub test(arg1, arg2, arg3){
+        assert(arg1 == 1);
+        assert(arg2 == 2);
+        assert(arg3 == 3);
+    };
+
+    test[1, 2](3);
+    test[1](2, 3);
+    test[1, 2, 3]();
+
+    pub x = test[2, 3];
+    x.without_partials()[1, ..x.partial_args]();
+};
+
+### Decos
+{
+    pub deco(func){
+        return 5;
+    };
+
+    pub func() [deco] {};
+    assert(func == 5);
+};
+
+### Property
+{
+    req types;
+
+    pub func() [property] {};
+    assert(types.property.check(func));
+
+    type TestType {
+        priv val = 0;
+
+        pub inc(){
+            $$ ~ {
+                priv val = \val + 1;
+            };
+        };
+
+        pub val() [property] {
+            return \\val;
+        };
+    };
+
+    assert(TestType.val == 0);
+    TestType.inc();
+    assert(TestType.val == 1);
+};
