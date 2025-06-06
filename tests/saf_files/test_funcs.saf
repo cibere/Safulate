@@ -49,3 +49,58 @@
     TestType.inc();
     assert(TestType.val == 1);
 };
+
+### Params
+{
+    pub test(arg1, arg2, arg3 = 3){
+        assert(arg1 == 1);
+        assert(arg2 == 2);
+        assert(arg3 == 3);
+    };
+    test(1, 2);
+};
+{
+    pub test(arg1, arg2 = 2, arg3 = 5){
+        assert(arg1 == 1);
+        assert(arg2 == 2);
+        assert(arg3 == 3);
+    };
+    test(1, arg3=3);
+};
+{
+    pub test(arg1, arg2, arg3, arg4, arg5){
+        assert(arg1 == 1);
+        assert(arg2 == 2);
+        assert(arg3 == 3);
+        assert(arg4 == 4);
+        assert(arg5 == 5);
+    };
+    test(1, ..[2, 3, 4], 5);
+};
+{
+    pub test(arg1, arg2, arg3, arg4, arg5){
+        assert(arg1 == 1);
+        assert(arg2 == 2);
+        assert(arg3 == 3);
+        assert(arg4 == 4);
+        assert(arg5 == 5);
+    };
+    test(1, ...dict(arg2=2, arg3=3, arg4=4), arg5=5);
+};
+{
+    pub test(arg1, arg2, arg3, arg4, arg5){
+        assert(arg1 == 1);
+        assert(arg2 == 2);
+        assert(arg3 == 3);
+        assert(arg4 == 4);
+        assert(arg5 == 5);
+    };
+    pub x = "arg";
+    test(
+        {:f"{x}1"} = 1,
+        {:f"{x}2"} = 2,
+        {:f"{x}3"} = 3,
+        {:f"{x}4"} = 4,
+        {:f"{x}5"} = 5
+    );
+};
