@@ -60,7 +60,7 @@ from ..parser import (
     ParamType,
     UnarySpec,
     Unpackable,
-    spec_name_from_str,
+    spec_name_from_str,IterableType
 )
 from ..properties import cached_property
 from .lib_manager import LibManager
@@ -78,7 +78,7 @@ from .objects import (
     SafType,
     false,
     null,
-    true,
+    true,SafTuple
 )
 
 if TYPE_CHECKING:
@@ -256,14 +256,19 @@ class Interpreter(ASTVisitor):
         self,
         node: ASTVarDecl,
     ) -> SafBaseObject:
-        return self._var_decl(
-            node.name.lexme
-            if isinstance(node.name, Token)
-            else node.name.resolve(self),
-            null if node.value is None else node.value.visit(self),
-            scope=node.keyword,
-            declare=True,
-        )
+        value = null if node.value is None else node.value.visit(self)
+
+        if isinstance(node.name, tuple):
+            return SafTuple(tuple(self._var_decl(name, value, scope=node.keyword, declare=True) for name, value in self.unpack(node.name, value, node.keyword).items()))
+        else:
+            return self._var_decl(
+                node.name.lexme
+                if isinstance(node.name, Token)
+                else (node.name.resolve(self)),
+                value=value,
+                scope=node.keyword,
+                declare=True,
+            )
 
     def unpack(
         self, vars: Unpackable | Token, value: SafBaseObject, token: Token
@@ -590,8 +595,14 @@ class Interpreter(ASTVisitor):
             node.else_branch.visit(self)
         return null
 
-    def visit_list(self, node: ASTIterable) -> SafList:
-        return SafList([child.visit(self) for child in node.children])
+    def visit_iterable(self, node: ASTIterable) -> SafBaseObject:
+        match node.type:
+            case IterableType.list:
+                return SafList([child.visit(self) for child in node.children])
+            case IterableType.tuple:
+                return SafTuple(tuple(child.visit(self) for child in node.children))
+            case _ as x:
+                raise RuntimeError(f"Unknown iterable {x!r}")
 
     def visit_format(self, node: ASTFormat) -> SafBaseObject:
         args: tuple[SafBaseObject, ...] = ()

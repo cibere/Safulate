@@ -81,7 +81,7 @@ class ASTDynamicID(ASTNode):
 
 @dataclass
 class ASTVarDecl(ASTNode):
-    name: ASTDynamicID | Token
+    name: Unpackable | ASTDynamicID | Token
     value: ASTNode | None
     keyword: Token
 
@@ -329,11 +329,27 @@ class ASTSwitchCase(ASTNode):
 
 @dataclass
 class ASTIterable(ASTNode):
-    children: list[ASTBlock]
+    children: list[ASTNode]
     type: IterableType
 
     def visit(self, visitor: ASTVisitor) -> SafBaseObject:
-        return visitor.visit_list(self)
+        return visitor.visit_iterable(self)
+
+    @classmethod
+    def from_unpackable(cls, before: Unpackable, *, type: IterableType) -> ASTIterable:
+        return ASTIterable(
+            [
+                ASTAtom(item)
+                if isinstance(item, Token)
+                else (
+                    item
+                    if isinstance(item, ASTNode)
+                    else ASTIterable.from_unpackable(item, type=type)
+                )
+                for item in before
+            ],
+            type=type,
+        )
 
 
 @dataclass
@@ -431,7 +447,7 @@ class ASTVisitor(ABC):
     @abstractmethod
     def visit_continue(self, node: ASTContinue) -> SafBaseObject: ...
     @abstractmethod
-    def visit_list(self, node: ASTIterable) -> SafBaseObject: ...
+    def visit_iterable(self, node: ASTIterable) -> SafBaseObject: ...
     @abstractmethod
     def visit_format(self, node: ASTFormat) -> SafBaseObject: ...
     @abstractmethod

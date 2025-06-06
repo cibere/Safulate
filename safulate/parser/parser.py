@@ -802,17 +802,32 @@ class Parser:
         keyword = self.consume(
             (TokenType.PUB, TokenType.PRIV), "Expected var decl keyword"
         )
-        dyn_name = self.dynamic_id("Expected variable name")
+        first = True
+        names: list[ASTDynamicID | Unpackable] = []
 
-        if self.check(TokenType.COLON):
-            self.annotation()
+        while first or self.match(TokenType.COMMA):
+            first = False
+            names.append(self.dynamic_id("Expected variable name"))
+
+            if self.check(TokenType.COLON):
+                self.annotation()
+
+        value: ASTNode | None = None
+        if self.match(TokenType.EQ):
+            if self.check(TokenType.SEMI):
+                if len(names) == 1 and isinstance(names[0], ASTNode):
+                    value = names[0]
+                else:
+                    value = ASTIterable.from_unpackable(
+                        tuple(names), type=IterableType.tuple
+                    )
+            else:
+                value = self.expr()
 
         return ASTVarDecl(
             keyword=keyword,
-            name=dyn_name,
-            value=((dyn_name) if self.check(TokenType.SEMI) else self.expr())
-            if self.match(TokenType.EQ)
-            else None,
+            name=names[0] if len(names) == 1 else tuple(names),
+            value=value,
         )
 
     @reg_expr(TokenType.IF)
@@ -875,7 +890,7 @@ class Parser:
     def _iterable_body(
         self, iterable_type: IterableType, *, end: TokenType
     ) -> ASTIterable:
-        parts: list[ASTBlock] = []
+        parts: list[ASTNode] = []
         temp: list[ASTNode] = []
 
         while not self.check(end):

@@ -1098,6 +1098,10 @@ class _SafIterable(SafObject):
     @spec_meth(BinarySpec.has_item)
     def has_item(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
         return true if other in self.value else false
+    
+    @spec_meth(BinarySpec.eq)
+    def eq(self, ctx: NativeContext, other: SafBaseObject) -> SafBool:
+        return true if (isinstance(other, self.__class__) and len(other.value) == len(self.value) and all(ctx.invoke_spec(child1, BinarySpec.eq, child2).bool_spec(ctx) for child1, child2 in zip(self.value, other.value))) else false
 
 
 class SafTuple(_SafIterable):
