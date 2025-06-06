@@ -57,10 +57,11 @@ from ..parser import (
     BinarySpec,
     CallSpec,
     FormatSpec,
+    IterableType,
     ParamType,
     UnarySpec,
     Unpackable,
-    spec_name_from_str,IterableType
+    spec_name_from_str,
 )
 from ..properties import cached_property
 from .lib_manager import LibManager
@@ -75,10 +76,11 @@ from .objects import (
     SafNum,
     SafObject,
     SafStr,
+    SafTuple,
     SafType,
     false,
     null,
-    true,SafTuple
+    true,
 )
 
 if TYPE_CHECKING:
@@ -259,7 +261,14 @@ class Interpreter(ASTVisitor):
         value = null if node.value is None else node.value.visit(self)
 
         if isinstance(node.name, tuple):
-            return SafTuple(tuple(self._var_decl(name, value, scope=node.keyword, declare=True) for name, value in self.unpack(node.name, value, node.keyword).items()))
+            return SafTuple(
+                tuple(
+                    self._var_decl(name, value, scope=node.keyword, declare=True)
+                    for name, value in self.unpack(
+                        node.name, value, node.keyword
+                    ).items()
+                )
+            )
         else:
             return self._var_decl(
                 node.name.lexme
