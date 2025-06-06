@@ -15,6 +15,7 @@ from .asts import (
     ASTBlock,
     ASTBreak,
     ASTCall,
+    ASTCall_Param,
     ASTContinue,
     ASTDel,
     ASTDynamicID,
@@ -49,6 +50,7 @@ from .specs import (
     BinarySpec,
     CallSpec,
     UnarySpec,
+    assignment_types,
     special_cased_binary_specs,
     special_cased_unary_specs,
 )
@@ -346,14 +348,8 @@ class Parser:
                     ),
                     paren=Token(type=TokenType.LSQB, lexme="[", start=token.start),
                     params=[
-                        (
-                            ParamType.arg,
-                            None,
-                            func,
-                        ),
-                        (
-                            ParamType.vararg,
-                            None,
+                        ASTCall_Param.arg(func),
+                        ASTCall_Param.vararg(
                             ASTCall.get_attr(
                                 expr=deco,
                                 attr=Token(
@@ -364,9 +360,7 @@ class Parser:
                                 dot=Token.mock(TokenType.DOT, start=token.start),
                             ),
                         ),
-                        (
-                            ParamType.varkwarg,
-                            None,
+                        ASTCall_Param.varkwarg(
                             ASTCall.get_attr(
                                 expr=deco,
                                 attr=Token(
@@ -846,47 +840,6 @@ class Parser:
             kw_token=kw_token,
         )
 
-    @reg_expr(
-        TokenType.ID,
-        (
-            TokenType.EQ,
-            TokenType.PLUSEQ,
-            TokenType.MINUSEQ,
-            TokenType.STAREQ,
-            TokenType.STARSTAREQ,
-            TokenType.SLASHEQ,
-        ),
-    )
-    def assign(self) -> ASTNode:
-        name = self.advance()
-        op = self.advance()
-        value = self.expr()
-
-        match op.type:
-            case TokenType.PLUSEQ:
-                value = ASTBinary(
-                    ASTAtom(name), Token(TokenType.PLUS, op.lexme, op.start), value
-                )
-            case TokenType.MINUSEQ:
-                value = ASTBinary(
-                    ASTAtom(name), Token(TokenType.MINUS, op.lexme, op.start), value
-                )
-            case TokenType.STAREQ:
-                value = ASTBinary(
-                    ASTAtom(name), Token(TokenType.STAR, op.lexme, op.start), value
-                )
-            case TokenType.STARSTAREQ:
-                value = ASTBinary(
-                    ASTAtom(name), Token(TokenType.STARSTAR, op.lexme, op.start), value
-                )
-            case TokenType.SLASHEQ:
-                value = ASTBinary(
-                    ASTAtom(name), Token(TokenType.SLASH, op.lexme, op.start), value
-                )
-            case _:
-                pass
-        return ASTAssign(name=name, value=value)
-
     def _iterable_body(
         self, iterable_type: IterableType, *, end: TokenType
     ) -> ASTIterable:
@@ -1000,7 +953,7 @@ class Parser:
         ):
             match token.type:
                 case TokenType.LPAR | TokenType.LSQB as open_paren:
-                    params: list[tuple[ParamType, str | None, ASTNode]] = []
+                    params: list[ASTCall_Param] = []
                     has_kwargs = False
                     close_paren = {
                         TokenType.LPAR: TokenType.RPAR,
@@ -1010,15 +963,15 @@ class Parser:
                     if not self.match(close_paren):
                         while True:
                             if self.match(TokenType.ELLIPSIS):
-                                params.append((ParamType.varkwarg, None, self.expr()))
+                                params.append(ASTCall_Param.varkwarg(self.expr()))
                             elif self.match_sequence(TokenType.DOT, TokenType.DOT):
-                                params.append((ParamType.vararg, None, self.expr()))
+                                params.append(ASTCall_Param.vararg(self.expr()))
                             else:
                                 expr = self.expr()
                                 if isinstance(expr, ASTAssign):
                                     has_kwargs = True
                                     params.append(
-                                        (ParamType.kwarg, expr.name.lexme, expr.value)
+                                        ASTCall_Param.kwarg(expr.name, expr.value)
                                     )
                                 elif has_kwargs:
                                     raise SafulateSyntaxError(
@@ -1026,7 +979,7 @@ class Parser:
                                         self.peek(),
                                     )
                                 else:
-                                    params.append((ParamType.arg, None, expr))
+                                    params.append(ASTCall_Param.arg(expr))
 
                             if self.match(close_paren):
                                 break
@@ -1054,11 +1007,43 @@ class Parser:
                 return token, self.expr()
 
     def consume_binary_op(self, left: ASTNode) -> ASTNode:
-        if self.match(TokenType.TILDE):
-            return ASTEditObject(left, self.block())
-
-        for op in (*BinarySpec.all_values(), *special_cased_binary_specs):
+        for op in (
+            *BinarySpec.all_values(),
+            *special_cased_binary_specs,
+            *assignment_types,
+        ):
             if token := self.match(op):
-                return ASTBinary(left=left, op=token, right=self.expr())
+                match token.type:
+                    case TokenType.TILDE:
+                        return ASTEditObject(left, self.block())
+                    case typ if typ is TokenType.EQ or typ in assignment_types:
+                        if (
+                            isinstance(left, ASTAtom)
+                            and left.token.type is TokenType.ID
+                        ):
+                            left = ASTDynamicID(left.token, expr=None)
+                        elif isinstance(left, ASTDynamicID):
+                            pass
+                        else:
+                            raise SafulateSyntaxError(
+                                "Invalid assignment, name must be an ID or Dynamic ID",
+                                token,
+                            )
+
+                        return ASTAssign(
+                            name=left,
+                            token=token,
+                            value=(
+                                self.expr()
+                                if typ is TokenType.EQ
+                                else ASTBinary(
+                                    left=left,
+                                    op=token.with_type(assignment_types[typ]),
+                                    right=self.expr(),
+                                )
+                            ),
+                        )
+                    case _:
+                        return ASTBinary(left=left, op=token, right=self.expr())
 
         return left

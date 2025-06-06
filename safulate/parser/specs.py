@@ -13,8 +13,6 @@ __all__ = (
     "SpecName",
     "UnarySpec",
     "spec_name_from_str",
-    "special_cased_binary_specs",
-    "special_cased_unary_specs",
 )
 
 
@@ -40,7 +38,16 @@ special_cased_binary_specs = (
     TokenType.EQEQEQ,
     TokenType.AND,
     TokenType.OR,
+    TokenType.EQ,
 )
+
+assignment_types: dict[TokenType, TokenType] = {
+    TokenType.PLUSEQ: TokenType.PLUS,
+    TokenType.MINUSEQ: TokenType.MINUS,
+    TokenType.STAREQ: TokenType.STAR,
+    TokenType.STARSTAREQ: TokenType.STARSTAR,
+    TokenType.SLASHEQ: TokenType.SLASH,
+}
 
 
 class UnarySpec(Enum):

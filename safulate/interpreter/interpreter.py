@@ -348,7 +348,7 @@ class Interpreter(ASTVisitor):
 
     def visit_assign(self, node: ASTAssign) -> SafBaseObject:
         value = node.value.visit(self)
-        self._var_decl(node.name.lexme, value, scope=None)
+        self._var_decl(node.name.resolve(self), value, scope=None)
         return value
 
     def visit_binary(self, node: ASTBinary) -> SafBaseObject:
@@ -400,20 +400,18 @@ class Interpreter(ASTVisitor):
         args: list[SafBaseObject] = []
         kwargs: dict[str, SafBaseObject] = {}
 
-        for param_type, name, value in node.params:
-            match param_type:
+        for param in node.params:
+            match param.type:
                 case ParamType.arg:
-                    args.append(value.visit(self))
-                case ParamType.kwarg if name:
-                    kwargs[name] = value.visit(self)
+                    args.append(param.value.visit(self))
+                case ParamType.kwarg if param.name is not None:
+                    kwargs[param.name.resolve(self)] = param.value.visit(self)
                 case ParamType.kwarg:
-                    raise RuntimeError(
-                        f"Kwarg without name: {param_type}, {name}, {value}"
-                    )
+                    raise RuntimeError(f"Kwarg without name: {param!r}")
                 case ParamType.vararg:
-                    args.extend(value.visit(self).iter_spec(ctx))
+                    args.extend(param.value.visit(self).iter_spec(ctx))
                 case ParamType.varkwarg:
-                    val = value.visit(self)
+                    val = param.value.visit(self)
                     if not isinstance(val, SafDict):
                         raise SafulateValueError(
                             f"Can not unpack, {val.repr_spec(ctx)} is not a dictionary"
@@ -422,9 +420,7 @@ class Interpreter(ASTVisitor):
                         {key.str_spec(ctx): value for key, value in val.data.values()}
                     )
                 case _:
-                    raise RuntimeError(
-                        f"Unhandled param: {param_type}, {name}, {value}"
-                    )
+                    raise RuntimeError(f"Unhandled param: {param!r}")
 
         return self.ctx(node.paren).invoke_spec(
             node.callee.visit(self),

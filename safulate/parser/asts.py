@@ -21,6 +21,7 @@ __all__ = (
     "ASTBlock",
     "ASTBreak",
     "ASTCall",
+    "ASTCall_Param",
     "ASTContinue",
     "ASTDel",
     "ASTDynamicID",
@@ -192,8 +193,9 @@ class ASTExprStmt(ASTNode):
 
 @dataclass
 class ASTAssign(ASTNode):
-    name: Token
+    name: ASTDynamicID
     value: ASTNode
+    token: Token
 
     def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_assign(self)
@@ -219,10 +221,33 @@ class ASTUnary(ASTNode):
 
 
 @dataclass
+class ASTCall_Param:
+    type: ParamType
+    name: ASTDynamicID | None
+    value: ASTNode
+
+    @classmethod
+    def arg(cls, value: ASTNode) -> ASTCall_Param:
+        return cls(type=ParamType.arg, name=None, value=value)
+
+    @classmethod
+    def vararg(cls, value: ASTNode) -> ASTCall_Param:
+        return cls(type=ParamType.vararg, name=None, value=value)
+
+    @classmethod
+    def kwarg(cls, name: ASTDynamicID, value: ASTNode) -> ASTCall_Param:
+        return cls(type=ParamType.kwarg, name=name, value=value)
+
+    @classmethod
+    def varkwarg(cls, value: ASTNode) -> ASTCall_Param:
+        return cls(type=ParamType.varkwarg, name=None, value=value)
+
+
+@dataclass
 class ASTCall(ASTNode):
     callee: ASTNode
     paren: Token
-    params: list[tuple[ParamType, str | None, ASTNode]]
+    params: list[ASTCall_Param]
 
     def visit(self, visitor: ASTVisitor) -> SafBaseObject:
         return visitor.visit_call(self)
@@ -233,10 +258,8 @@ class ASTCall(ASTNode):
             callee=expr,
             paren=dot,
             params=[
-                (
-                    ParamType.arg,
-                    None,
-                    ASTAtom(attr.with_type(TokenType.STR, lexme=attr.lexme)),
+                ASTCall_Param.arg(
+                    ASTAtom(attr.with_type(TokenType.STR, lexme=attr.lexme))
                 )
             ],
         )
