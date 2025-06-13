@@ -1001,11 +1001,6 @@ class Parser:
 
         return callee
 
-    def _handle_comparison(self, *ops: TokenType) -> tuple[Token, ASTNode] | None:
-        for op in ops:
-            if token := self.match(op):
-                return token, self.expr()
-
     def consume_binary_op(self, left: ASTNode) -> ASTNode:
         for op in (
             *BinarySpec.all_values(),
